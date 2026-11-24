@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>idong_ros2</name>
+  <version>0.1.0</version>
+  <description>Rust ROS 2 driver node for the Toltech i-Dong sensor</description>
+  <maintainer email="maintainer@example.org">idong100 project</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cargo</buildtool_depend>
+  <build_type>ament_cargo</build_type>
+
+  <depend>rclrs</depend>
+  <depend>idong_msgs</depend>
+  <exec_depend>ros2launch</exec_depend>
+</package>
