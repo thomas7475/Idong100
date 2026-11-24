@@ -2,8 +2,18 @@
 
 You hit the vendor's platform-dependency gate. Full byte-level analysis
 of the installers (turn 17) found exactly what it checks and three ways
-past it. **Solution B (registry key) is the recommended one** — 2 minutes,
+past it. **Solution A (registry mark) is the recommended one** — 2 minutes,
 reversible, and then the sensor installer runs normally.
+
+> **Turn-18 update — if you imported the turn-17 `platform_mark.reg`
+> on 64-bit Windows and the dialog STILL appeared:** that was a bug in
+> the v1 `.reg`, now fixed. `VersionCheck.dll` (the gate) is **32-bit
+> code**, so on 64-bit Windows it reads `HKLM\SOFTWARE\Wow6432Node\...`,
+> while v1 wrote only the 64-bit view. Compatibility mode (Vista/Win7)
+> cannot fix this — it never changes which registry view a 32-bit
+> process sees. The current `platform_mark.reg` writes BOTH views;
+> re-import it (as admin) and the gate passes. Verify with
+> `check_gate.bat` (pure cmd, no PowerShell).
 
 ## What the dialog actually is
 
@@ -29,33 +39,62 @@ has **no technical need** for the platform — the gate is a marketing
 bundle-order check from 2010. Your dialog title "idong感应器 安装" is
 just the sensor installer's branding.
 
+## The 64-bit registry-view trap (turn 18, root cause of the retry)
+
+`VersionCheck.dll` is PE32 (`machine 0x014c` — 32-bit x86) and opens
+its keys with `RegOpenKeyExA`. Windows-on-WOW64 redirects every
+`HKLM\SOFTWARE\...` access from a 32-bit process into
+`HKLM\SOFTWARE\Wow6432Node\...` **silently**:
+
+| You write | The 32-bit gate reads |
+|---|---|
+| `HKLM\SOFTWARE\TOLTech` (64-bit view) | `HKLM\SOFTWARE\Wow6432Node\TOLTech` — **miss!** |
+| `HKLM\SOFTWARE\Wow6432Node\TOLTech` (32-bit view) | `HKLM\SOFTWARE\Wow6432Node\TOLTech` — hit |
+
+So on a 64-bit VM (Win10 x64 as the kit recommends), the turn-17 v1
+mark landed in the view the gate never reads. The fixed
+`platform_mark.reg` writes both views, plus the `Toltech`-spelled
+engine keys in both views. On real 32-bit Windows the extra
+`Wow6432Node` lines are inert dead keys — no harm, no effect.
+
 ## Solution A (cleanest, recommended): fake the platform registry mark
 
 The gate reads one registry value. Give it what it wants:
 
-1. Save this as `platform_mark.reg` and double-click it (or run
-   `reg import platform_mark.reg` as admin) in the Windows VM:
+1. Import the kit's `platform_mark.reg` in the Windows VM — as admin:
 
-```reg
-Windows Registry Editor Version 5.00
+   ```bat
+   reg import platform_mark.reg
+   ```
 
-[HKEY_LOCAL_MACHINE\SOFTWARE\TOLTech]
-"Location"="C:\\Program Files (x86)\\TOLTech"
+   (or double-click → Merge, confirm the UAC prompt). It writes both
+   registry views:
 
-[HKEY_LOCAL_MACHINE\SOFTWARE\TOLTech\xeyez_engine]
-"RootPath"="C:\\Program Files (x86)\\TOLTech\\xeyez_engine"
-```
+   ```reg
+   [HKEY_LOCAL_MACHINE\SOFTWARE\TOLTech]
+   "Location"="C:\\Program Files (x86)\\TOLTech"
 
-   (On 32-bit Windows drop the ` (x86)` part.) The `TOLTech\xeyez_engine
-   RootPath` value is what the *sensor installer itself* writes later
-   (`SOFTWARE\Toltech\xeyez_engine` — case-insensitive), so setting it up
-   front is also what the install flow expects.
+   [HKEY_LOCAL_MACHINE\SOFTWARE\TOLTech\xeyez_engine]
+   "RootPath"="C:\\Program Files (x86)\\TOLTech\\xeyez_engine"
 
-2. Re-run `xeyez_setup.exe`. The gate passes, it launches the inner
+   ...same under Wow6432Node for the 32-bit gate on 64-bit Windows...
+   ```
+
+   (On real 32-bit Windows drop the ` (x86)` part — noted in the file.)
+   The `TOLTech\xeyez_engine RootPath` value is what the *sensor
+   installer itself* writes later (`SOFTWARE\Toltech\xeyez_engine` —
+   case-insensitive), so setting it up front is also what the install
+   flow expects.
+
+2. Create the folder probe (optional but free — `check_gate.bat`
+   does it for you): `md "%ProgramData%\i-dong"` as admin.
+
+3. Re-run `xeyez_setup.exe`. The gate passes, it launches the inner
    installer (`xeyez_alone.dat` — the "standalone" flavor; the launcher
    offers `xeyez_Lobby.dat` for the full portal), which installs the
    driver + app + firmware.
-3. If the inner installer still refuses (it carries its own copy of
+
+4. If the inner installer still refuses (it carries its own copy of
    `VersionCheck.dll`): run `xeyez_alone.dat` **directly** — rename to
    `xeyez_alone.exe` if Windows refuses a `.dat` extension — the inner
    installer's own platform probe is the same registry check, and it
@@ -67,6 +106,11 @@ The two `.dat` files are full NSIS installers (PE32 executables). The
 launcher adds nothing but the gate. Copy `xeyez_alone.dat` to
 `xeyez_alone.exe` and run it directly. If it self-checks the same
 registry mark, combine with Solution A's `.reg` import first.
+(Note: turn-17 script analysis of `xeyez_alone.dat` shows its own
+`Software\TOLTech\xeyez_engine` references are version/uninstall
+bookkeeping — `2.6.0.6`, `TrayMenu`, `xeyez_engine_version` — so the
+inner installer is primarily gated through its `VersionCheck.dll`
+calls, same mark.)
 
 ## Solution C: install the real platform
 
@@ -81,8 +125,9 @@ the "platform software" the dialog means. Not needed for our capture.
 
 Nothing else changes. Continue with `README_CAPTURE.md` as before:
 attach the sensor, run `scripts/run_capture.bat`, boot the vendor app,
-stop after ~60 s of runtime traffic, `check_capture.ps1` for the
-magic-byte sanity check.
+stop after ~60 s of runtime traffic, `scripts/check_capture.bat` for the
+magic-byte sanity check (pure cmd + cscript; the old PowerShell
+versions are retired — turn 18 user rule: no PowerShell).
 
 One extra note now verified from the payload: the installer writes
 `SOFTWARE\Toltech\xeyez_engine` `RootPath`, launches `xeyezMonitor.exe`
@@ -102,16 +147,18 @@ as CP437/CP1252, so 请您先安装爱动平台软键! displayed as
 run the VM in a Chinese locale or with `locale emulator`-style
 AppLocale settings; not required for the capture though.
 
-## Files in this fix kit
+## Files in this fix kit (all PowerShell-free, turn 18)
 
 | File | Purpose |
 |---|---|
-| `platform_mark.reg` | The registry values the gate reads (Solution A) |
-| `check_gate.ps1` | Verifies the gate's probes in your VM (run as admin) |
+| `platform_mark.reg` | The registry values the gate reads, **both views** (Solution A) |
+| `check_gate.bat` | Verifies the gate's probes in your VM (run as admin; reports both registry views, creates the `i-dong` folder, checks the `xeyez` service) |
 | `SOLVE_DIALOG.md` | This document |
 
-Verify with `check_gate.ps1` after importing the `.reg`; it reports
-which probes pass (registry Location, `\\.\vKeyboard`/`\\.\vMouse` only
-exist after the *virtual HID drivers* are installed — those are NOT
-required for the launcher to pass; the registry mark alone satisfies
-the launcher's `VerifyInstallSystem` "Lobby" path).
+Verify with `check_gate.bat` after importing the `.reg`. Its verdict
+line follows the view that matters for your OS bitness: on 64-bit
+Windows it requires the `Wow6432Node` mark (what the 32-bit gate
+actually reads); on 32-bit Windows the plain view. `\\.\vKeyboard`/
+`\\.\vMouse` only exist after the *virtual HID drivers* are installed —
+those are NOT required for the launcher to pass; the registry mark
+alone satisfies the launcher's `VerifyInstallSystem` "Lobby" path.

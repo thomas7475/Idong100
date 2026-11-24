@@ -29,7 +29,7 @@ device.
 | `software/Wireshark-win64-4.6.10.exe` | GUI + pcapng reader + extcap | `c3bd915305aef0cfaffb29981790623f97b8aa673fb5c790b1c64a3fd85c1e94` |
 | `software/xeyez_setup.exe` | Vendor v2.6.0.6 stack (yours) | `4252597e98bb4242402b89352b9938e6681c9f5dabe0e43d363c9f630f982711` |
 | `scripts/run_capture.bat` | One-shot capture session | — |
-| `scripts/check_capture.ps1` | Magic-byte sanity check (in VM) | — |
+| `scripts/check_capture.bat` | Magic-byte sanity check (in VM; pure cmd + cscript, no PowerShell) | — |
 | `MANIFEST.txt` | Hashes of every kit file | — |
 
 The two `.dat` payloads (`xeyez_Lobby.dat`, `xeyez_alone.dat`) must sit
@@ -147,9 +147,9 @@ spelled out here so the capture can be re-done by hand if needed.
    stream a minute.
 5. Stop the capture (run_capture.bat stops USBPcapCMD; or press the
    key/click the console window's stop). `boot.pcapng` is complete.
-6. Run `scripts/check_capture.ps1` in the VM: it scans the pcapng for
+6. Run `scripts/check_capture.bat` in the VM: it scans the pcapng for
    the PU/OD magics (bytes `50 55 7f 7f` / `4f 44 7f 7f`) and the
-   0471:2600→0471:2500 device-change events; it reports counts so you
+   "Ready to load program!" reply; it reports counts so you
    KNOW the capture is good before copying it out.
 7. Copy the whole `C:\idong_capture\` folder out of the VM (shared
    folder, or `scp`/RDP clipboard) to the analysis host.
@@ -179,7 +179,7 @@ runtime state — that's the vendor design, not an error).
 
 ## 7. After the capture (host side, next turn)
 
-`check_capture.ps1` only sanity-checks; the byte-for-byte comparison
+`check_capture.bat` only sanity-checks; the byte-for-byte comparison
 against our decoder happens on the host:
 `tshark -r boot.pcapng -Y usb.capdata` → extract the bulk payloads →
 feed them through the Phase-1 `FrameDecoder`/`BootUploader` replay
