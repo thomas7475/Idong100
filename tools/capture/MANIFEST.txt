@@ -1,5 +1,27 @@
-idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 21 update)
+idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 22 update)
 ==========================================================
+
+Turn-22 changes (fix for the turn-21 kit):
+- With the turn-21 kit the installer extracted everything but stopped at
+  'Start install driver!' with the GBK box 预安装xeyez失败！ ('pre-install
+  xeyez FAILED'). That step is xEyeSetupHelper.dll!InstallDriver's first
+  call into xEyeDriverCheck.dll!PreinstallSpecialDriver (copies
+  Win7\xeyezDriver\xeyez.inf + xeyezCoIns.dll, writes CoDeviceInstallers
+  and legacy Driver-Signing registry values, SetupCopyOEMInfA the 2008-era
+  inf) - it fails on Win10/11 and aborts the whole install.
+- Fixed by stubbing the PreinstallSpecialDriver thunk at RVA 0xad32 in
+  the embedded xEyeSetupHelper.dll to 'xor eax,eax; ret' (success), on
+  top of the turn-19/21 patches. NSIS integrity CRC recomputed; the
+  real-stub emulation integrity check passes on the patched exe.
+- software/xeyez_setup_patched.exe  82,838 bytes (unchanged from t21)
+    SHA-256 e82c2f444d2d7b9619b07247323cbd1447ba2865d53d3af587bd5bc1ef0c7ee8
+- software/xeyez_alone_patched.dat  23,637,085 bytes
+    SHA-256 845a9170eee16dde87a59cf656c9c1594368975112f6218b200301f78fa16368
+- New: install_drivers_manual.bat (kit root + scripts/) - pnputil
+  /add-driver fallback for manual driver install if the vendor flow
+  still balks, with the one-boot DSE instructions.
+- NOTE for turn-21 users: replace BOTH patched files; the turn-21 .dat
+  (23,635,851 B) is superseded.
 
 Turn-21 changes (fix for the turn-20 kit):
 - The turn-20 kit passed the NSIS integrity check and extracted all files,
@@ -92,7 +114,7 @@ software/xeyez_setup.exe            4252597e98bb4242402b89352b9938e6681c9f5dabe0
 software/xeyez_alone.dat            6a877968deee70e9ec10cacb615703b5af84020677fed655272c84dffe1592be
 software/xeyez_Lobby.dat            0b04734f23a61fe5f7b60a8e0205d4bb80bb909a6bed7773c320d809b893a00a
 software/xeyez_setup_patched.exe    e82c2f444d2d7b9619b07247323cbd1447ba2865d53d3af587bd5bc1ef0c7ee8
-software/xeyez_alone_patched.dat    b16d4a068ba569f2545e87932de94b4fcf69a693866e8d39dd09fb44f207d302
+software/xeyez_alone_patched.dat    845a9170eee16dde87a59cf656c9c1594368975112f6218b200301f78fa16368
 
 Scripts and docs (text files, verify by eye):
 README_CAPTURE.md / docs/CAPTURE_KIT.md — the full procedure: VM setup

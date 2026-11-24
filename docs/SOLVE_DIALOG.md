@@ -5,6 +5,31 @@ of the installers (turn 17) found exactly what it checks and three ways
 past it. **Solution A (registry mark) is the recommended one** — 2 minutes,
 reversible, and then the sensor installer runs normally.
 
+> **Turn-22 update — the "Start install driver!" failure box:** with the
+> turn-21 kit the installer extracted everything but still stopped at
+> "Start install driver!" with the GBK box 预安装xeyez失败！ ("pre-install
+> xeyez FAILED", title idong感应器 安装). Root cause: the NSIS script calls
+> `xEyeSetupHelper.dll!InstallDriver`, whose first step calls
+> `xEyeDriverCheck.dll!PreinstallSpecialDriver` — that helper copies
+> Win7\xeyezDriver\xeyez.inf + xeyezCoIns.dll into the system dir, writes
+> registry values under SYSTEM\CurrentControlSet\Control
+> \CoDeviceInstallers and the legacy 'Driver Signing' policy keys, and runs
+> `SetupOpenInfFileA` + `SetupCopyOEMInfA` on the 2008-era inf. On
+> Win10/11 x64 that step fails (elevation / SetupCopyOEMInfA rejects the
+> ancient inf) and the installer aborts with the box, even though none of
+> it is a prerequisite for the rest of the flow. Fix (turn-22 kit): the
+> `PreinstallSpecialDriver` thunk at RVA 0xad32 inside the embedded
+> xEyeSetupHelper.dll is stubbed to `xor eax,eax; ret` (return success),
+> on top of all earlier patches; the NSIS integrity CRC is recomputed and
+> the stub-code integrity check passes. New files:
+> `xeyez_setup_patched.exe` (82,838 B, SHA-256 e82c2f44...0c7ee8 —
+> unchanged from turn 21) and `xeyez_alone_patched.dat` (23,637,085 B,
+> SHA-256 845a9170...78fa16368). Replace your copies and re-run
+> `install_patched.bat`. If the driver install step still balks, use the
+> new `install_drivers_manual.bat` (pnputil /add-driver route) included
+> in the kit root, and the one-boot 'Disable driver signature
+> enforcement' route if signature is refused.
+
 > **Turn-21 update — driver-install gate inside the installer:** after the
 > turn-20 files, the installer extracted everything but failed at "Start
 > install driver!" with the GBK dialog 驱动目录没有找到！ ("driver directory
