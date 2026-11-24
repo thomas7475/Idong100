@@ -5,6 +5,23 @@ of the installers (turn 17) found exactly what it checks and three ways
 past it. **Solution A (registry mark) is the recommended one** — 2 minutes,
 reversible, and then the sensor installer runs normally.
 
+> **Turn-23 update — the "安装驱动程序失败！" box is NOT a bug: it means the
+> sensor was not attached.** With the turn-22 kit the preinstall stub works
+> and the install reaches the real driver stage. That stage scans for the
+> actual hardware: dialog 201 (请将idong感应器连线...) pops for ~10 s and its
+> WM_TIMER handler (xEyeSetupHelper.dll RVA 0x75f0) retries the device scan
+> 10x1 s looking for USB\VID_0471&PID_2500 / 2500&MI_04 / 2600 / 0666 /
+> 0668 / 2100. If none is found it logs "User terminate!" (RVA 0xde38) and
+> shows dialog 202 = 安装驱动程序失败！+ the service phone — exactly the
+> reported box (progress ~85 %, "Start install driver!" last status).
+> **Fix: run the installer with the idong sensor plugged into a rear USB
+> port.** The stage then enumerates the live devnode and installs the
+> matching INF (xeyez.inf matches those five Philips IDs). New kit script
+> `check_sensor_attached.bat` verifies enumeration before you start. If the
+> sensor IS attached but not one of those IDs (shows as unknown device), run
+> it through the bootloader path: the installer also accepts PID_2600
+> (bootloader) and PID_2500 composite states.
+
 > **Turn-22 update — the "Start install driver!" failure box:** with the
 > turn-21 kit the installer extracted everything but still stopped at
 > "Start install driver!" with the GBK box 预安装xeyez失败！ ("pre-install

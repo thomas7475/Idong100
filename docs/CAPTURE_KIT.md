@@ -1,4 +1,14 @@
 
+> **Turn-23 update —** if the installer stops with 安装驱动程序失败！
+> ("driver installation failed", progress ~85 %, right after "Start install
+> driver!"), that is the vendor's device-scan give-up: the sensor was not
+> attached during install. The stage waits ~10 s for a Philips VID_0471
+> device (PID_2500/2500&MI_04/2600/0666/0668/2100) and aborts if none
+> appears. Plug the idong sensor into a rear USB port first — run
+> `check_sensor_attached.bat` (kit root) to confirm enumeration — then
+> re-run `install_patched.bat`. No binary changes this turn.
+
+
 > **Turn-22 update —** the turn-21 kit still stopped at "Start install
 > driver!" (预安装xeyez失败！ = "pre-install xeyez FAILED"): the very first
 > sub-step (xEyeDriverCheck.dll!PreinstallSpecialDriver - CopyFile +
