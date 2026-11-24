@@ -57,8 +57,8 @@ if exist boot.pcapng (
   pause & exit /b 1
 )
 
-echo [4/4] magic-byte scan (PowerShell)...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0check_capture.ps1" -Pcap "%CAPDIR%\boot.pcapng"
+echo [4/4] magic-byte scan (pure cmd + cscript - no PowerShell)...
+call "%~dp0check_capture.bat" "%CAPDIR%\boot.pcapng"
 
 echo.
 echo  DONE. Copy C:\idong_capture\ to the analysis host.
