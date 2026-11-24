@@ -1,5 +1,18 @@
-idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 22 update)
+idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 23 update)
 ==========================================================
+
+Turn-23 update (the 安装驱动程序失败！ box is not a bug):
+- The turn-22 kit works: install passes the preinstall stub and reaches
+  the real driver stage, which scans for the sensor for ~10 s
+  (dialog 201, 10x1 s WM_TIMER retries at RVA 0x75f0) over the Philips
+  VID_0471 family (PID_2500 / 2500&MI_04 / 2600 / 0666 / 0668 / 2100).
+  With no sensor attached it gives up ("User terminate!", RVA 0xde38)
+  and shows dialog 202 安装驱动程序失败！ — the reported box.
+- ACTION: run install_patched.bat WITH the sensor plugged into a rear
+  USB port. Use the new check_sensor_attached.bat first to confirm the
+  device enumerates (also lists which PID the PC sees).
+- No binary changes this turn: xeyez_setup_patched.exe /
+  xeyez_alone_patched.dat are unchanged from turn 22.
 
 Turn-22 changes (fix for the turn-21 kit):
 - With the turn-21 kit the installer extracted everything but stopped at
