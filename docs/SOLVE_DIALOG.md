@@ -5,6 +5,21 @@ of the installers (turn 17) found exactly what it checks and three ways
 past it. **Solution A (registry mark) is the recommended one** — 2 minutes,
 reversible, and then the sensor installer runs normally.
 
+> **Turn-20 update — the patched installers showed "NSIS Error / Installer
+> integrity check has failed":** the turn-19 repack rebuilt the compressed
+> stream but left the archive's stored CRC and `length_of_all_following_data`
+> stale, so the stub's integrity check failed before the gate was even
+> reached. Root cause was recovered by emulating the stub's `loadHeaders`
+> with Unicorn: the check is `crc32(file[512 .. firstheader + x2 - 4)) ==
+> u32 at firstheader + x2 - 4` (`x2` = the `length_of_all_following_data`
+> dword of the 28-byte firstheader; the first 512 bytes of the file are
+> excluded, everything else - PE stub, firstheader, props, solid stream - is
+> included). The turn-20 rebuild recomputes `x2` and appends a fresh CRC
+> field, and the fixed files pass the *actual stub code* in emulation.
+> Re-download `xeyez_setup_patched.exe` (SHA-256 `b2436be7…c165ded480`,
+> 82,842 B) and `xeyez_alone_patched.dat` (SHA-256 `af070bbf…3ed85985e`,
+> 23,638,139 B) and run `install_patched.bat` again.
+
 > **Turn-19 update — the platform gate now passes and a SECOND
 > dialog appears: `对不起，idong感应器软件与您的操作系统不兼容！`
 > ("Sorry, the idong sensor software is incompatible with your OS!
