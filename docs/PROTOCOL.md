@@ -1,0 +1,105 @@
+# PROTOCOL.md - wire facts (P0.1 deliverable)
+
+Every row cites its source (DLL + RVA where known). Constants here are
+encoded verbatim into `idong/src/protocol/mod.rs` - the Rust module is
+the executable form of this table.
+
+## USB identity
+
+| Item | Value | Source |
+|---|---|---|
+| bootloader | 0471:2600, iface 0, EP 0x02 OUT / 0x82 IN, maxpacket 64 | xeyez.inf, both driver generations |
+| runtime | 0471:2500 composite, vendor MI_04 (UVC/UAC on 0-3) | xeyez.inf, DriverConfig.ini |
+| legacy | 0471:2100 / 0668 / 0666 (identification only) | xeyez.inf |
+| bootloader maxpacket quirk | 64 B (full-speed value at high speed - spec violation, accepted) | live lsusb, CONTEXT.md |
+| runtime read chunk | 4096 B (sys) / 16 KiB accumulation | xeyez.sys `MaximumTransferSize`, EasyUSB.dll |
+| write retries | 3 attempts, 100 ms apart | EasyUSB.dll |
+
+## Boot framing (PU/OD magic)
+
+| Item | Value | Source |
+|---|---|---|
+| H2D magic | 0x7f7f5550, LE bytes `50 55 7f 7f` ("PU") | xEyeUSB.dll |
+| D2H magic | 0x7f7f444f, LE bytes `4f 44 7f 7f` ("OD") | xEyeUSB.dll |
+| frame header | `[u32 magic LE][u16 type LE][payload]`, no length field | xEyeUSB.dll |
+| packet size | 64 B type-3 | `_InitBlobUpload` |
+| timeouts | 3 s ready / 6 s packet / 300 ms x 10 dev-ID / 1 s reset | xEyeUSB.dll (GetTickCount deltas) |
+
+### Boot sequence (`_InitBlobUpload`, xEyeUSB.dll)
+
+1. TX DSP-start -> RX type 2 "Ready to load program!" (3 s)
+2. TX type 2: packet count + CRC of the blob
+3. TX type 3 x 64-byte packets (6 s each)
+4. RX type 3: CRC result - word 0xF at frame offset +8 aborts
+   (boot_protocol @0x1000fdee)
+5. RX type 2: device ID / DSP version (300 ms poll x <= 10)
+6. "Get DSP Reset ACK OK" -> TX type 7 (1 s)
+
+## Runtime framing (7F 55)
+
+| Item | Value | Source |
+|---|---|---|
+| layout | 7F 55; cmd@[2]; b2-b4@[3..5]; u16 arg@[6..7] BYTE-SWAPPED; payload <= 56 B | xeyezHal builder @0x10003010 |
+| cmd 3 | register write, 8 B chunks | SetCmosTable loop |
+| cmd 5 | blob data read | GetBlobData |
+| cmd 6 | GET_IMG_START (status 1) | GetImageBegin |
+| cmd 15 | classifier/reg write | chunk loop @0x10003a50 |
+| timeouts | 1 s TX / 5 s RX | xeyezHal engine @0x100030a0 |
+| keep-alive | RX 0xFFF -> TX 0xFFE within 1 s | xEyeClass reader |
+| link status | type 4; subcode 1/0xF; reply word 0x11 @+0x06 | tx_builder @0x1001028e/0x10010327 |
+
+## Marker record (xEye3Ddata)
+
+0x3BC B: frame counter u32 @ +0 (overlays slot 0); 10 x 88 B slots;
+quality i32 @ slot+0x24 (>= 50 tracked); gate f64 @ slot+0x18; mode
+flag u32 @ +0x3B8 (== 1 -> pipe-writer skip); pipe form 0x208 B after
+the RVA 0x25e0 transform. Source: xEyeClass.dll GetADataFromUSB @RVA
+0x20f0.
+
+| Item | Value |
+|---|---|
+| slots | 10 x 88 B at +0x000..+0x370 |
+| trailer | 72 B (+0x370..+0x3B8) |
+| mode flag | u32 @ +0x3B8 |
+| quality gate | i32 @ slot+0x24 >= 50 |
+| frame rate | 50 fps (xEyeFrame=50, USBComFPS=35 transport) |
+| quality window | RingSize=200, thresholds Green=20/Yellow=35/Red=35 (xEyeUsb.ini) |
+
+## EEPROM T24C16A (2048 B, verified dump MD5 dc02fce8ca39155135a4b0368b3f33ae)
+
+| Offset | Record | Length | Content |
+|---|---|---|---|
+| 0x0000 | header tag | 16 B | `ef0123456789abcd` |
+| 0x0100 | calibration | 120 B | 28 x f32 LE OpenCV: fx fy cx cy x2, dist x2, R 3x3, T 3 |
+| 0x0180 | version | 16 B | "2059" |
+| 0x0192 | int16 | 16 B | 386, 473, 215, 303, 142, 221, 0, 0 |
+| 0x0300 | serial | 32 B | `AB460DC8BA12C6840B49CD5786C329DD` |
+| 0x0322 | code A | 4 B | "000T" |
+| 0x0328 | code B | 4 B | "2613" |
+| +0x400 | mirror | - | every record duplicated |
+
+Record framing: `[payload][checksum = sum(payload) & 0xFF][0xFF]`.
+Known-good values: |T| = 100.0000 mm (designed baseline), mean fx
+432.33 px, |k1| < 0.05, R orthonormal, cx ~312-313 px (640-px frames).
+
+## Firmware SHA-256 pins (v2.6.0.6, turn-12 manifest)
+
+Firmware is never redistributed; users supply their own files, verified
+by these hashes (`FirmwareSet::verify` - safety rule #3):
+
+| File | Size | SHA-256 |
+|---|---|---|
+| ens_code.ldr (BF527) | 54,420 | 3a19c68a33352cda9b4c9e8a476c4978e19a5b983e567cff946fe543f51a60dd |
+| A_a_v4.4_BG0313.bit (Spartan-3) | 235,930 | 75df0a38037e1983d270f1003c2303c25a61dcdb554d455b1f963cd4a70b4abd |
+| app_m8051_2611.hex (8051) | 61,756 | 1fad00c1dca7f995e8b58d4ed6c5c080da4005f63682ad7af6288abd4d118f35 |
+
+## Open items (P2.3 USBPcap gate)
+
+- multi-firmware staging order (ldr/bit/hex)
+- CRC variant announced in the count+CRC step (CRC16-CCITT vs CRC32,
+  endianness - the current `blob_crc` is a placeholder)
+- exact count/CRC payload framing
+- DSP-start payload bytes (64-B scratch buffer, open item #3)
+- marker x/y/z offsets inside the 88-B slot (open item #4 - resolve via
+  xEyeClass RVA 0x25e0 disassembly)
+- handle-config blob layout (open item #6)

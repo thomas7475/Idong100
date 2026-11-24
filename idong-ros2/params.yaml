@@ -1,0 +1,12 @@
+# Sane defaults (draft table 5). firmware_dir must be set by the user.
+/idong:
+  ros__parameters:
+    serial_number: ""
+    frame_id: idong
+    publish_hz_min: 30
+    quality_threshold: 50
+    link_quality_window: 200
+    buffer_depth: 5
+    firmware_dir: ""
+    enable_handle_events: true
+    i_know_the_write_risks: false

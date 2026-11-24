@@ -1,0 +1,9 @@
+# Vendor handle-match analog: identity of the attached sensor.
+string serial           # 32-char device serial (EEPROM)
+string dsp_version      # device-ID exchange string at boot
+string firmware_hash    # sha256 prefix of uploaded firmware set
+float32 baseline_mm      # EEPROM T magnitude (100.00 expected)
+float32 focal_px         # mean EEPROM focal length (432.33 expected)
+---
+bool ok
+string message
