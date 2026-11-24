@@ -1,4 +1,15 @@
 
+> **Turn-22 update —** the turn-21 kit still stopped at "Start install
+> driver!" (预安装xeyez失败！ = "pre-install xeyez FAILED"): the very first
+> sub-step (xEyeDriverCheck.dll!PreinstallSpecialDriver - CopyFile +
+> CoDeviceInstallers/Driver-Signing registry writes + SetupCopyOEMInfA on
+> the 2008-era inf) fails on Win10/11. The current kit stubs that thunk to
+> return success so the install proceeds; it also adds
+> `install_drivers_manual.bat` (pnputil route) as a fallback. Replace
+> `xeyez_alone_patched.dat` (23,637,085 B; the exe is unchanged), re-run
+> `install_patched.bat`; details in SOLVE_DIALOG.md (turn-22 note).
+
+
 > **Turn-21 update —** the turn-20 kit extracted everything but failed at
 > "Start install driver!" (驱动目录没有找到！ = "driver directory not
 > found"). That gate compares the OS via GetVersionExA and accepts only
