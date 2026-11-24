@@ -1,3 +1,11 @@
+
+> **Turn-20 update —** if the turn-19 patched installers showed
+> **"NSIS Error — Installer integrity check has failed"**, the turn-19 repack
+> had a stale CRC. Fixed: the current kit's `xeyez_setup_patched.exe`
+> (82,842 B) and `xeyez_alone_patched.dat` (23,638,139 B) pass the stub's
+> integrity check (verified by emulating the stub). Use `install_patched.bat`
+> as before; details in `SOLVE_DIALOG.md` turn-20 note.
+
 > **Turn-19 update —** a second vendor gate exists: an **OS-version
 > whitelist** in `VersionCheck.dll` (`VerifyInstallSystem`) that accepts
 > only XP 5.1 / Vista 6.0 / Win7 6.1 and, on 64-bit Windows, ONLY Win7.

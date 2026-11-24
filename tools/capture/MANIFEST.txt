@@ -1,5 +1,21 @@
-idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 19 update)
+idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 20 update)
 ==========================================================
+
+Turn-20 changes (fix for the turn-19 kit):
+- The turn-19 patched installers failed the NSIS stub's integrity check
+  ('NSIS Error - Installer integrity check has failed') because the repack
+  left a stale CRC + length_of_all_following_data. The check (recovered by
+  Unicorn-emulating the stub's loadHeaders): crc32(file[512 .. fh+x2-4))
+  must equal the u32 stored at fh+x2-4. The turn-20 rebuild recomputes x2 and
+  appends a fresh CRC; both patched installers now PASS the actual stub code
+  in emulation (scripts/rebuild_patched_installers20.py +
+  scripts/emulate_stub_check20.py).
+- software/xeyez_setup_patched.exe  82,842 bytes
+    SHA-256 b2436be7d4208fcc8e6d2b4304b0d4c324bdcb1169120ff1deaba4c165ded480
+- software/xeyez_alone_patched.dat  23,638,139 bytes
+    SHA-256 af070bbf0b2afe2581b8985718060bf06c776afc260e7e49b7410863ed85985e
+- If you still have the turn-19 versions (76,316 B exe / 23,631,617 B dat),
+  replace them with these; sizes and SHAs above are the quick check.
 
 Turn-19 changes (on top of turn 16/17/18):
 - OS-version gate SOLVED: the installers' VersionCheck.dll whitelists
@@ -52,8 +68,8 @@ software/Wireshark-win64-4.6.10.exe c3bd915305aef0cfaffb29981790623f97b8aa673fb5
 software/xeyez_setup.exe            4252597e98bb4242402b89352b9938e6681c9f5dabe0e43d363c9f630f982711
 software/xeyez_alone.dat            6a877968deee70e9ec10cacb615703b5af84020677fed655272c84dffe1592be
 software/xeyez_Lobby.dat            0b04734f23a61fe5f7b60a8e0205d4bb80bb909a6bed7773c320d809b893a00a
-software/xeyez_setup_patched.exe    5957fc7be63ac41df999356ab4181fc530f521f7edfcf9c03ae5f1e0081af565
-software/xeyez_alone_patched.dat    d11598c6689a16068094463c9a009a229a9cdf9696fe61bcc4db66d1db3f72de
+software/xeyez_setup_patched.exe    b2436be7d4208fcc8e6d2b4304b0d4c324bdcb1169120ff1deaba4c165ded480
+software/xeyez_alone_patched.dat    af070bbf0b2afe2581b8985718060bf06c776afc260e7e49b7410863ed85985e
 
 Scripts and docs (text files, verify by eye):
 README_CAPTURE.md / docs/CAPTURE_KIT.md — the full procedure: VM setup
