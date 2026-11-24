@@ -1,0 +1,5 @@
+# Project style: keep diffs small, imports grouped, 100 columns.
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"
+use_small_heuristics = "Max"
+max_width = 100
