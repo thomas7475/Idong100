@@ -1,3 +1,15 @@
+> **Turn-19 update —** a second vendor gate exists: an **OS-version
+> whitelist** in `VersionCheck.dll` (`VerifyInstallSystem`) that accepts
+> only XP 5.1 / Vista 6.0 / Win7 6.1 and, on 64-bit Windows, ONLY Win7.
+> On Win8/10/11 the installers show `操作系统不兼容` and exit. Compatibility
+> mode cannot fix it (the gate reads `_winmajor`/`_winminor` from
+> MSVCR80.dll, not `GetVersionEx` — the compat lie never reaches it).
+> Use the kit's **patched installers** — `install_patched.bat` swaps in
+> `xeyez_setup_patched.exe` / `xeyez_alone_patched.dat` (4 gate jumps
+> rewritten, every path returns 0; round-trip-verified repack) and
+> launches the installer. Details: `SOLVE_DIALOG.md` § "The OS-version
+> gate — turn 19".
+
 # P2.3 THE GATE — USBPcap capture of a full vendor boot
 
 > Repo copy of the kit README. The runnable kit (installers + scripts) is

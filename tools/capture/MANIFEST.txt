@@ -1,6 +1,36 @@
-idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 18 update)
+idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 19 update)
 ==========================================================
 
+Turn-19 changes (on top of turn 16/17/18):
+- OS-version gate SOLVED: the installers' VersionCheck.dll whitelists
+  only XP 5.1 / Vista 6.0 / Win7 6.1 (WOW64: Win7 only) and exits with
+  the OS-incompatibility dialog on Win8/10/11. Compatibility mode
+  cannot fix it (the gate reads _winmajor/_winminor from MSVCR80.dll,
+  not GetVersionEx). New patched installers: xeyez_setup_patched.exe
+  and xeyez_alone_patched.dat - 4 gate jumps rewritten, every path
+  returns 0; solid NSIS stream decompressed/repatched/recompressed,
+  round-trip verified; stale Authenticode dir zeroed.
+- install_patched.bat (new): backs up originals, swaps in the patched
+  installers, launches. Pure cmd.
+- check_gate.bat rewritten: fixed the ')' parse crash (German cmd
+  error - probe labels contained parentheses inside if-blocks), fixed
+  truncated value display, now also reports the patched-installer
+  presence. Ends with pause (stays open).
+- check_capture.bat / run_capture.bat: pause added at every exit; a
+  parenthesised echo inside an if-block fixed.
+
+Turn-18 changes (on top of turn 16/17):
+- platform_mark.reg v2: writes BOTH registry views (64-bit +
+  Wow6432Node). Root cause of the turn-17 retry: the gate DLL is
+  32-bit, so on 64-bit Windows it reads the Wow6432Node view, which
+  v1 never wrote. Compatibility mode cannot change that.
+- check_gate.ps1 -> check_gate.bat: pure cmd (no PowerShell, user
+  rule). Reports BOTH views, creates %ProgramData%\i-dong, checks
+  the xeyez service.
+- check_capture.ps1 -> check_capture.bat: pure cmd + embedded
+  cscript scanner (byte-accurate, same exit codes 0/2).
+- run_capture.bat now calls check_capture.bat (no PowerShell).
+- The turn-17 .ps1 scripts are retired from the kit.
 Turn-18 changes (on top of turn 16/17):
 - platform_mark.reg v2: writes BOTH registry views (64-bit +
   Wow6432Node). Root cause of the turn-17 retry: the gate DLL is
@@ -22,6 +52,8 @@ software/Wireshark-win64-4.6.10.exe c3bd915305aef0cfaffb29981790623f97b8aa673fb5
 software/xeyez_setup.exe            4252597e98bb4242402b89352b9938e6681c9f5dabe0e43d363c9f630f982711
 software/xeyez_alone.dat            6a877968deee70e9ec10cacb615703b5af84020677fed655272c84dffe1592be
 software/xeyez_Lobby.dat            0b04734f23a61fe5f7b60a8e0205d4bb80bb909a6bed7773c320d809b893a00a
+software/xeyez_setup_patched.exe    5957fc7be63ac41df999356ab4181fc530f521f7edfcf9c03ae5f1e0081af565
+software/xeyez_alone_patched.dat    d11598c6689a16068094463c9a009a229a9cdf9696fe61bcc4db66d1db3f72de
 
 Scripts and docs (text files, verify by eye):
 README_CAPTURE.md / docs/CAPTURE_KIT.md — the full procedure: VM setup
@@ -36,7 +68,12 @@ scripts/run_capture.bat     — one-shot guided capture session
 scripts/check_capture.bat  — magic-byte sanity check inside the VM
                             (pure cmd + cscript; no PowerShell)
 scripts/check_gate.bat     — gate-probe status in BOTH registry views
-                            (pure cmd; run as admin)
+                            (pure cmd; run as admin; fixed turn-19 ')' parse
+                            crash; stays open)
+install_patched.bat        — swaps in the OS-gate-patched installers and
+                            launches them (turn 19; backs up originals)
+software/xeyez_setup_patched.exe — launcher with the OS gate neutralised
+software/xeyez_alone_patched.dat — inner installer, OS gate neutralised
 
 Sources:
 - USBPcap 1.5.4.0 from https://github.com/desowin/usbpcap/releases/tag/1.5.4.0
