@@ -1,0 +1,18 @@
+Windows Registry Editor Version 5.00
+
+; idong100 platform gate satisfier (turn 17)
+; The xeyez_setup.exe launcher gate reads exactly these values via
+; VerifyInstallSystem/CheckVirtualVerSion in VersionCheck.dll:
+;   HKLM\SOFTWARE\TOLTech : Location           (platform install dir)
+;   HKLM\SOFTWARE\TOLTech\xeyez_engine : RootPath (sensor engine root)
+; Import this, then re-run xeyez_setup.exe. On 32-bit Windows use
+; "C:\Program Files\TOLTech" instead of the (x86) path.
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\TOLTech]
+"Location"="C:\\Program Files (x86)\\TOLTech"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\TOLTech\xeyez_engine]
+"RootPath"="C:\\Program Files (x86)\\TOLTech\\xeyez_engine"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Toltech\xeyez_engine]
+"RootPath"="C:\\Program Files (x86)\\TOLTech\\xeyez_engine"
