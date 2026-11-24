@@ -5,6 +5,26 @@ of the installers (turn 17) found exactly what it checks and three ways
 past it. **Solution A (registry mark) is the recommended one** — 2 minutes,
 reversible, and then the sensor installer runs normally.
 
+> **Turn-21 update — driver-install gate inside the installer:** after the
+> turn-20 files, the installer extracted everything but failed at "Start
+> install driver!" with the GBK dialog 驱动目录没有找到！ ("driver directory
+> not found!", title idong感应器 安装). Root cause: the NSIS script calls
+> `xEyeSetupHelper.dll!InstallDriver`, which checks the OS with
+> `GetVersionExA`: XP = 5.1, Vista = 6.0, Win7 = 6.1. On Windows 8/10/11 an
+> unmanifested 32-bit process is told 6.2/6.3, so ALL three checks fail and
+> the installer aborts before choosing a driver directory. Fix (turn-21 kit):
+> two bytes in the embedded xEyeSetupHelper.dll inside xeyez_alone.dat -
+> `IsWin7` now returns true for any OS (so the Win7/Win7-64 driver sets are
+> chosen), and the 'pre-install' devnode helper (CM_Locate_DevNodeA /
+> CM_Reenumerate_DevNode, which fails with no sensor plugged in) is stubbed
+> to return success. Re-download `xeyez_setup_patched.exe` (82,838 B,
+> SHA-256 `e82c2f44…0ef0c7ee8`) and `xeyez_alone_patched.dat`
+> (23,635,851 B, SHA-256 `b16d4a06…4f207d302`), replace the turn-20 ones
+> (82,842 / 23,638,139 B) and re-run `install_patched.bat`.
+> Note: the drivers themselves are 2008-era; on Win10/11 x64 the driver may
+> still be refused signature enforcement - if Windows asks, use the one-boot
+> 'Disable driver signature enforcement' route (README_CAPTURE.md section 4).
+
 > **Turn-20 update — the patched installers showed "NSIS Error / Installer
 > integrity check has failed":** the turn-19 repack rebuilt the compressed
 > stream but left the archive's stored CRC and `length_of_all_following_data`

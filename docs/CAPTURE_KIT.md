@@ -1,4 +1,16 @@
 
+> **Turn-21 update —** the turn-20 kit extracted everything but failed at
+> "Start install driver!" (驱动目录没有找到！ = "driver directory not
+> found"). That gate compares the OS via GetVersionExA and accepts only
+> XP/Vista/Win7; on Win10/11 it must be bypassed. The current kit's
+> `xeyez_setup_patched.exe` (82,838 B) and `xeyez_alone_patched.dat`
+> (23,635,851 B) carry that fix inside the embedded xEyeSetupHelper.dll.
+> Replace any older copies and re-run `install_patched.bat`; details in
+> `SOLVE_DIALOG.md` (turn-21 note). If Windows then refuses the 2008-era
+> driver by signature, use the one-boot 'Disable driver signature
+> enforcement' route (section 4).
+
+
 > **Turn-20 update —** if the turn-19 patched installers showed
 > **"NSIS Error — Installer integrity check has failed"**, the turn-19 repack
 > had a stale CRC. Fixed: the current kit's `xeyez_setup_patched.exe`

@@ -1,5 +1,28 @@
-idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 20 update)
+idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 21 update)
 ==========================================================
+
+Turn-21 changes (fix for the turn-20 kit):
+- The turn-20 kit passed the NSIS integrity check and extracted all files,
+  but failed at 'Start install driver!' with the GBK dialog 驱动目录没有找到！
+  ('driver directory not found', title idong感应器 安装). Root cause: the
+  script's xEyeSetupHelper.dll!InstallDriver checks GetVersionExA for
+  XP(5.1)/Vista(6.0)/Win7(6.1) only; on Win8/10/11 an unmanifested 32-bit
+  process sees 6.2/6.3 so no driver directory is ever selected.
+- Fixed inside the embedded xEyeSetupHelper.dll (xeyez_alone.dat stream):
+  IsWin7() now returns true for any OS (je->jmp at 0xa295) so the Win7 /
+  Win7-64 driver sets are used, and the pre-install devnode helper
+  (CM_Locate_DevNodeA+CM_Reenumerate_DevNode, which fails with no device
+  plugged in) is stubbed to return success (0x2c60). NSIS integrity CRC
+  recomputed (turn-20 recipe); real-stub emulation passes on the patched exe.
+- software/xeyez_setup_patched.exe  82,838 bytes
+    SHA-256 e82c2f444d2d7b9619b07247323cbd1447ba2865d53d3af587bd5bc1ef0c7ee8
+- software/xeyez_alone_patched.dat  23,635,851 bytes
+    SHA-256 b16d4a068ba569f2545e87932de94b4fcf69a693866e8d39dd09fb44f207d302
+- If you have the turn-20 versions (82,842 B exe / 23,638,139 B dat), replace
+  them with these.
+- After install: if Windows refuses the 2008-era driver on Win10/11 x64, use
+  the one-boot 'Disable driver signature enforcement' route (README_CAPTURE
+  section 4).
 
 Turn-20 changes (fix for the turn-19 kit):
 - The turn-19 patched installers failed the NSIS stub's integrity check
@@ -68,8 +91,8 @@ software/Wireshark-win64-4.6.10.exe c3bd915305aef0cfaffb29981790623f97b8aa673fb5
 software/xeyez_setup.exe            4252597e98bb4242402b89352b9938e6681c9f5dabe0e43d363c9f630f982711
 software/xeyez_alone.dat            6a877968deee70e9ec10cacb615703b5af84020677fed655272c84dffe1592be
 software/xeyez_Lobby.dat            0b04734f23a61fe5f7b60a8e0205d4bb80bb909a6bed7773c320d809b893a00a
-software/xeyez_setup_patched.exe    b2436be7d4208fcc8e6d2b4304b0d4c324bdcb1169120ff1deaba4c165ded480
-software/xeyez_alone_patched.dat    af070bbf0b2afe2581b8985718060bf06c776afc260e7e49b7410863ed85985e
+software/xeyez_setup_patched.exe    e82c2f444d2d7b9619b07247323cbd1447ba2865d53d3af587bd5bc1ef0c7ee8
+software/xeyez_alone_patched.dat    b16d4a068ba569f2545e87932de94b4fcf69a693866e8d39dd09fb44f207d302
 
 Scripts and docs (text files, verify by eye):
 README_CAPTURE.md / docs/CAPTURE_KIT.md — the full procedure: VM setup
