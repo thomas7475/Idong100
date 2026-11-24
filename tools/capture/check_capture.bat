@@ -105,9 +105,15 @@ echo.
 if "%OK%"=="1" (
   echo PASS - the capture contains the vendor boot sequence.
   echo Copy it to the analysis host for the byte-for-byte gate.
+  echo.
+  echo Press any key to close this window...
+  pause >nul
   exit /b 0
 ) else (
   echo FAIL - redo the capture per README_CAPTURE.md section 5
   echo ^(power-cycle the sensor first so it is in the bootloader state^).
+  echo.
+  echo Press any key to close this window...
+  pause >nul
   exit /b 2
 )

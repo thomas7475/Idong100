@@ -10,7 +10,7 @@ set USBPCAP=C:\Program Files\USBPcap1\USBPcapCMD.exe
 
 if not exist "%USBPCAP%" (
   echo [ERR] USBPcapCMD not found at "%USBPCAP%"
-  echo        Install USBPcapSetup-1.5.4.0.exe first (README section 3^).
+  echo        Install USBPcapSetup-1.5.4.0.exe first - README section 3.
   pause & exit /b 1
 )
 
