@@ -67,8 +67,6 @@ goto :after_target
 :after_target
 
 set "DIR="
-if exist "!TARGET!\nul" set "DIR=!TARGET!"
-if defined DIR goto :folder
 if exist "!TARGET!\" set "DIR=!TARGET!"
 if defined DIR goto :folder
 set "FILES="!TARGET!""
@@ -83,8 +81,7 @@ for %%f in ("!DIR!\*.pcap") do set /a N+=1
 if !N! GTR 0 goto :collect
 rem --- no .pcap directly here: take the newest runN subfolder
 set "BEST="
-for /l %%i in (1,1,999) do if exist "!DIR!\run%%i\nul" set "BEST=!DIR!\run%%i"
-if not defined BEST for /l %%i in (1,1,999) do if exist "!DIR!\run%%i\" set "BEST=!DIR!\run%%i"
+for /l %%i in (1,1,999) do if exist "!DIR!\run%%i\" set "BEST=!DIR!\run%%i"
 if not defined BEST goto :no_files
 set "DIR=!BEST!"
 set /a N=0

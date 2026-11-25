@@ -56,7 +56,9 @@ rem --- C:\idong_capture, its repair, then the USERPROFILE, LOCALAPPDATA
 rem --- and TEMP fallback folders, and sets CAPROOT and PREDIRRC.
 if defined ARG2 set "CAPROOT=%ARG2%"
 if defined ARG2 md "!CAPROOT!" >nul 2>&1
-if defined ARG2 if not exist "!CAPROOT!\nul" goto :bad_arg2
+if defined ARG2 copy /y nul "!CAPROOT!\arg2_probe.tmp" >nul 2>&1
+if defined ARG2 if errorlevel 1 goto :bad_arg2
+if defined ARG2 del /q "!CAPROOT!\arg2_probe.tmp" >nul 2>&1
 if defined ARG2 goto :folder_ready
 call "%~dp0predir.bat" /called
 set "TMPD=!CAPROOT!\work"
@@ -80,8 +82,10 @@ if not "%ARG%"=="" (
   if !SECS! LSS 10 set "SECS=10"
   if !SECS! GTR 900 set "SECS=900"
 )
-if not exist "!TMPD!" md "!TMPD!"
-if not exist "!TMPD!\nul" goto :no_workdir
+md "!TMPD!" >nul 2>&1
+copy /y nul "!TMPD!\work_probe.tmp" >nul 2>&1
+if errorlevel 1 goto :no_workdir
+del /q "!TMPD!\work_probe.tmp" >nul 2>&1
 
 REM ---------- 1. USBPcap ----------
 echo [1/5] USBPcap
@@ -158,13 +162,14 @@ echo       Click Yes on each one. Next time: right-click this file, Run as admin
 :mkrun
 set /a N=1
 :mkrun2
-if not exist "!CAPROOT!\run!N!" goto :mkrun3
+md "!CAPROOT!\run!N!" >nul 2>&1
+copy /y nul "!CAPROOT!\run!N!\dir_probe.tmp" >nul 2>&1
+if not errorlevel 1 goto :mkrun3
 set /a N+=1
 goto :mkrun2
 :mkrun3
 set "RUNDIR=!CAPROOT!\run!N!"
-md "!RUNDIR!"
-if not exist "!RUNDIR!\nul" goto :no_rundir
+del /q "!RUNDIR!\dir_probe.tmp" >nul 2>&1
 > "!RUNDIR!\session.txt" echo idong100 sensor boot capture
 >> "!RUNDIR!\session.txt" echo Started       : %DATE% %TIME%
 >> "!RUNDIR!\session.txt" echo Computer      : %COMPUTERNAME%

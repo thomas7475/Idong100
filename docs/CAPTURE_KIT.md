@@ -1,4 +1,4 @@
-# idong100 USBPcap capture kit - turn 26, 2026-11-25 - Windows 7
+# idong100 USBPcap capture kit - turn 27, 2026-11-25 - Windows 7
 
 This kit records the complete boot of the idong sensor ("idong Sensor V2.6",
 USB ID 0471:2600 while it waits for its program, 0471:2500 when it runs), so
@@ -162,6 +162,7 @@ is not elevated.
 | Sensor stays at 2600, no 2500 | Vendor program not running | Start the vendor program, or restart it while the capture runs |
 | Sensor: not present | VM does not pass the sensor to the guest | Connect it in the USB menu of the VM |
 | "cannot create the folder C:\idong_capture" (turn 25) | `C:\idong_capture` was created by an elevated window; a normal window may read it but not write into it | Every script calls `predir.bat`: it repairs the rights when elevated, or picks a per-user fallback folder and says which one. To repair by hand: run any kit script once with Run as administrator |
+| "[ERR] no writable capture folder ..." but the folders ARE there (turn 27) | The turn-26 scripts checked folders with `if exist folder\nul`, a DOS-era trick that reports "not there" on FAT32/exFAT drives (common in VMs) right after `md` created them - so every candidate was falsely rejected with "cannot create the folder" | Fixed in turn 27: no existence checks anywhere, a real file write is the only judge. Re-download the kit of turn 27 |
 | "[ERR] no writable capture folder: none of the four candidates ..." (turn 26) | Even the per-user folders rejected the probe file | Double-click `predir.bat` alone: its self-test lists each folder with the exact error and the rights of `C:\idong_capture`, and it stays open. Send that text |
 
 ## 7a. The write-protected C:\idong_capture and the fallback folders (turns 25-26)
@@ -177,7 +178,7 @@ next elevated script re-creates it with the same rights.
 Every script of the kit calls the helper `predir.bat` before it writes
 anything. It tries four folders in this order:
 
-1. `C:\idong_capture` - created when missing, probe file written and deleted,
+1. `C:\idong_capture` - probe file written and deleted,
 2. `%USERPROFILE%\idong_capture` - `C:\Users\<name>\idong_capture`,
 3. `%LOCALAPPDATA%\idong_capture` - `...\AppData\Local\idong_capture`,
 4. `%TEMP%\idong_capture` - `...\AppData\Local\Temp\idong_capture`.
@@ -188,6 +189,15 @@ and the window is elevated, `predir.bat` first repairs the rights of
 `C:\idong_capture` with `icacls ... /grant Users:(OI)(CI)M` (the SID form
 `*S-1-5-32-545` is tried first, for non-English Windows where the group has
 another name) and probes again.
+
+**No script checks anymore whether a folder "exists"** (turn 27). The old
+`if exist folder\nul` check reported freshly created folders as missing on
+FAT32/exFAT drives - common in VMs - which is why the turn-26 kit claimed
+"cannot create the folder" for folders that were demonstrably there. Now
+`md` runs, then a probe file is written, and only the write decides. The
+same rule applies to `run_capture.bat` (its `work` and `runN` folders) and
+`test_usbpcap.bat`; `check_capture.bat` recognizes folders by the trailing
+backslash form `folder\`, which works on every file system.
 
 `predir.bat` sets `CAPROOT` (the folder to use) and `PREDIRRC` (0 = normal,
 1 = fallback, 2 = nothing was writable). The scripts print the folder they
