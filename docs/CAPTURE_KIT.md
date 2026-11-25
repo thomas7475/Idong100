@@ -274,3 +274,14 @@ lobby\ConfigManagement.dll shim). Then run the vendor session long enough to
 reach the live camera image (wait until the picture shows, keep it ~60 s,
 then stop) so the capture finally includes the DSP/FPGA upload and the
 isochronous camera stream.
+
+## Turn 31 note: apply the PATCH kit (not the turn-30 registry/shim) before capture
+
+The turn-30 registry + shim fix did not hold up on the Win7 machine (see
+SOLVE_DIALOG.md turn 31 for the defect analysis). The keep-alive fix is now
+the 4-byte patch of xEyeUSB.dll (download/idong100_patch31 kit):
+run patch_idong_alive31.bat as Administrator, confirm with
+verify_idong31.bat, then start the vendor software and take the next
+USBPcap capture once the live camera image shows (keep it ~60 s). The
+registry entries from turn 30 are irrelevant now; optionally
+reg delete "HKLM\SOFTWARE\TOLTech" /f.
