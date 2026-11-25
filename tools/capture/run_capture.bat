@@ -2,6 +2,7 @@
 setlocal
 set "SELF=%~dp0"
 set "ARG=%~1"
+set "ARG2=%~2"
 setlocal enabledelayedexpansion
 title idong100 - capture the sensor boot
 REM ============================================================
@@ -27,8 +28,10 @@ REM  The window stays open at every exit (user rule, turn 19).
 REM  Nothing in this script sends a byte to the sensor.
 REM ============================================================
 
+set "ARG2=%~2"
 set "CAPROOT=%SystemDrive%\idong_capture"
 set "PREDIRRC=0"
+set "PRENOTE="
 set "TMPD=%CAPROOT%\work"
 set "SECS=120"
 set "RC=1"
@@ -48,21 +51,25 @@ set /a N=1
 echo === idong100 - capture the sensor boot ===
 echo.
 
-rem --- prepare the capture folder (turn 25): C:\idong_capture, or its repair,
-rem --- or the USERPROFILE fallback. CAPROOT and PREDIRRC come from predir.bat.
-call "%~dp0predir.bat"
+rem --- prepare the capture folder (turn 26): predir.bat tries
+rem --- C:\idong_capture, its repair, then the USERPROFILE, LOCALAPPDATA
+rem --- and TEMP fallback folders, and sets CAPROOT and PREDIRRC.
+if defined ARG2 set "CAPROOT=%ARG2%"
+if defined ARG2 md "!CAPROOT!" >nul 2>&1
+if defined ARG2 if not exist "!CAPROOT!\nul" goto :bad_arg2
+if defined ARG2 goto :folder_ready
+call "%~dp0predir.bat" /called
 set "TMPD=!CAPROOT!\work"
 if "!PREDIRRC!"=="2" goto :no_workdir
 if "!PREDIRRC!"=="1" goto :fallback_note
 echo Capture folder: C:\idong_capture
 goto :folder_ready
 :fallback_note
-echo NOTE: C:\idong_capture is not writable in this window. Windows often makes
-echo       such a folder read-only for normal windows after an elevated window
-echo       created it. This run writes into the fallback folder:
+echo NOTE: C:\idong_capture is not writable in this window, so this run uses:
 echo       "!CAPROOT!"
-echo       Right-click this script, Run as administrator, once: that repairs
-echo       C:\idong_capture for your user account.
+echo       !PRENOTE!
+echo       Run predir.bat by hand (double-click) for its self-test of the
+echo       four candidate folders and the exact errors.
 :folder_ready
 echo.
 
@@ -312,14 +319,18 @@ if !EL! LSS 0 set /a EL+=86400
 goto :eof
 
 :no_workdir
-echo [ERR] no writable capture folder: neither C:\idong_capture nor the
-echo       USERPROFILE fallback could be written. Run this script with
-echo       right-click, Run as administrator, once: that repairs the
-echo       rights of C:\idong_capture for your user account.
+echo [ERR] no writable capture folder: none of the four candidates
+echo       SystemDrive, USERPROFILE, LOCALAPPDATA, TEMP accepted a file.
+echo       Run predir.bat by hand (double-click it in the kit folder):
+echo       it prints the exact errors and the rights of C:\idong_capture,
+echo       and it stays open. Its text can be copied and sent as it is.
 goto :done
 
 :no_rundir
 echo [ERR] cannot create the folder "!RUNDIR!".
+echo       The capture folder "!CAPROOT!" accepted a probe file, but the
+echo       run folder below it cannot be created. Run predir.bat by hand
+echo       (double-click) and send its window text.
 goto :done
 
 :no_exe
@@ -358,11 +369,23 @@ goto :done
 
 :bad_arg
 echo [ERR] unknown argument. The only argument is a number of seconds, for example:  run_capture.bat 300
+echo       A second argument can be a capture folder: run_capture.bat 300 D:\caps
+goto :done
+
+:bad_arg2
+echo [ERR] the capture folder "!CAPROOT!" does not exist and cannot be created.
+echo       Check the drive letter and the path, or run the script without a
+echo       second argument: it then picks a folder by itself.
 goto :done
 
 :done
 echo.
 echo Exit code !RC!   0 = PASS   2 = PARTIAL   1 = FAIL   3 = error
+echo.
+echo To copy this text out of the window (to send it without a photo):
+echo   right-click the TITLE BAR - Bearbeiten - Markieren - press Enter,
+echo   then paste with Strg+V into any text field. English Windows:
+echo   title bar - Edit - Select All - Enter.
 echo.
 pause
 endlocal & exit /b %RC%

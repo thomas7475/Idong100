@@ -28,6 +28,7 @@ REM ============================================================
 
 set "CAPROOT=%SystemDrive%\idong_capture"
 set "PREDIRRC=0"
+set "PRENOTE="
 set "TMPD=%CAPROOT%\work"
 set "OUTD=%CAPROOT%\usbpcap_test"
 set "SECS=20"
@@ -49,9 +50,10 @@ echo.
 echo This takes about one minute.
 echo.
 
-rem --- prepare the capture folder (turn 25): C:\idong_capture, or its repair,
-rem --- or the USERPROFILE fallback. CAPROOT and PREDIRRC come from predir.bat.
-call "%~dp0predir.bat"
+rem --- prepare the capture folder (turn 26): predir.bat tries
+rem --- C:\idong_capture, its repair, then the USERPROFILE, LOCALAPPDATA
+rem --- and TEMP fallback folders, and sets CAPROOT and PREDIRRC.
+call "%~dp0predir.bat" /called
 set "TMPD=!CAPROOT!\work"
 set "OUTD=!CAPROOT!\usbpcap_test"
 if "!PREDIRRC!"=="2" goto :no_workdir
@@ -59,10 +61,11 @@ if "!PREDIRRC!"=="1" goto :fallback_note
 echo Test folder: C:\idong_capture
 goto :folder_ready
 :fallback_note
-echo NOTE: C:\idong_capture is not writable in this window. This test writes
-echo       into the fallback folder "!CAPROOT!" instead. Right-click this
-echo       script, Run as administrator, once: that repairs C:\idong_capture
-echo       for your user account.
+echo NOTE: C:\idong_capture is not writable in this window, so this test uses:
+echo       "!CAPROOT!"
+echo       !PRENOTE!
+echo       Run predir.bat by hand (double-click) for its self-test of the
+echo       four candidate folders and the exact errors.
 :folder_ready
 echo.
 
@@ -288,8 +291,11 @@ set "RC=0"
 goto :done
 
 :no_workdir
-echo [ERR] cannot create the folder "!CAPROOT!". Create it by hand, or give
-echo       your user account the right to write there, then run this test again.
+echo [ERR] no writable capture folder: none of the four candidates
+echo       SystemDrive, USERPROFILE, LOCALAPPDATA, TEMP accepted a file.
+echo       Run predir.bat by hand (double-click it in the kit folder):
+echo       it prints the exact errors and the rights of C:\idong_capture,
+echo       and it stays open. Its text can be copied and sent as it is.
 goto :done
 
 :no_exe
@@ -342,6 +348,11 @@ goto :done
 :done
 echo.
 echo Exit code !RC!   0 = USBPcap works   1 = problem, read the lines above
+echo.
+echo To copy this text out of the window (to send it without a photo):
+echo   right-click the TITLE BAR - Bearbeiten - Markieren - press Enter,
+echo   then paste with Strg+V into any text field. English Windows:
+echo   title bar - Edit - Select All - Enter.
 echo.
 pause
 endlocal & exit /b %RC%

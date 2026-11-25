@@ -27,16 +27,18 @@ REM ============================================================
 
 set "RC=3"
 set "MODE="
+set "PREDIRRC=0"
+set "PRENOTE="
 set "TARGET=!ARG1!"
 if /i not "!ARG1!"=="--info" goto :have_mode
 set "MODE=--info"
 set "TARGET=!ARG2!"
 :have_mode
 if defined TARGET goto :have_target
-rem --- no argument: use the folder predir.bat prepared (turn 25). It finds
-rem --- C:\idong_capture, repairs it when Windows locked it, or picks the
-rem --- USERPROFILE fallback and sets PREDIRRC.
-call "%~dp0predir.bat"
+rem --- no argument: use the folder predir.bat found (turn 26). It tries
+rem --- C:\idong_capture, its repair, then the USERPROFILE, LOCALAPPDATA
+rem --- and TEMP fallback folders, and sets CAPROOT and PREDIRRC.
+call "%~dp0predir.bat" /called
 if "!PREDIRRC!"=="2" goto :no_folder
 set "TARGET=!CAPROOT!"
 :have_target
@@ -49,6 +51,9 @@ goto :target_echoed
 echo.
 echo NOTE: C:\idong_capture is not writable in this window, so the captures
 echo       are read from the fallback folder "!CAPROOT!" instead.
+echo       !PRENOTE!
+echo       Run predir.bat by hand (double-click) for its self-test of the
+echo       four candidate folders and the exact errors.
 :target_echoed
 
 echo === idong100 - check capture ===
@@ -117,10 +122,11 @@ set "RC=1"
 goto :done
 
 :no_folder
-echo [ERR] no writable capture folder: neither C:\idong_capture nor the
-echo       USERPROFILE fallback could be written. Run this script with
-echo       right-click, Run as administrator, once: that repairs
-echo       C:\idong_capture for your user account.
+echo [ERR] no writable capture folder: none of the four candidates
+echo       SystemDrive, USERPROFILE, LOCALAPPDATA, TEMP accepted a file.
+echo       Run predir.bat by hand (double-click it in the kit folder):
+echo       it prints the exact errors and the rights of C:\idong_capture,
+echo       and it stays open. Its text can be copied and sent as it is.
 set "RC=3"
 
 :done
@@ -131,6 +137,11 @@ if "!RC!"=="1" echo Result: FAIL - see the lines above.
 if "!RC!"=="3" echo Result: SCANNER ERROR - see the lines above.
 echo.
 echo Exit code !RC!   0 = PASS   2 = PARTIAL   1 = FAIL   3 = scanner error
+echo.
+echo To copy this text out of the window (to send it without a photo):
+echo   right-click the TITLE BAR - Bearbeiten - Markieren - press Enter,
+echo   then paste with Strg+V into any text field. English Windows:
+echo   title bar - Edit - Select All - Enter.
 echo.
 pause
 endlocal & exit /b %RC%
