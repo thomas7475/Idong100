@@ -262,3 +262,15 @@ any time, they do not need the script to be finished.
   of wireshark.org over HTTPS. SHA-256:
   `cbee6bb8d250287d8bcc41dc0353c425d87dceffa5005b3d9ab755090709e7b9`.
   The checksum was not compared with a second source.
+
+## Turn 30 note: keep the vendor software ALIVE during capture
+
+The turn-28 capture ended while the app was still polling because the vendor
+engine self-terminates: on a failed edition check it shows the upsell
+MessageBox and calls exit(-1) when you press OK (see SOLVE_DIALOG.md turn 30).
+Before the next capture session, apply the turn-30 fix kit on the Win7 machine
+(fix_idong_alive30.bat: HKLM\SOFTWARE\TOLTech\Location registry value +
+lobby\ConfigManagement.dll shim). Then run the vendor session long enough to
+reach the live camera image (wait until the picture shows, keep it ~60 s,
+then stop) so the capture finally includes the DSP/FPGA upload and the
+isochronous camera stream.

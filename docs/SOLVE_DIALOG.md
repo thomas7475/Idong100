@@ -651,3 +651,56 @@ vendor PC software, never by our driver.
 Consequence for the capture plan: the ad did NOT block the DSP/FPGA upload -
 the vendor app simply had not reached that stage in the 108 s window. Next
 capture remains "run the vendor session until the camera image shows".
+
+## Turn 30 (2026-11-25): "software closes after OK" - the ad is a death notice; fixed with a registry value + shim DLL
+
+User quote: "the problem is when i close the message with ok the software
+closes and i cant do nothing else, the r and g button in the menu do nothing"
+(with win7-afterdriver.install-menue.png: sensor-settings window, device field
+shows a dash, tray menu R/P/S/I/G/X with G grayed).
+
+Disassembly of xEyeUSB.dll 2.6.0.6 (same logic in 2.5.0.7) - the message box
+is followed by exit(-1), that is why the software dies on OK and the tray
+menu items (R/G) have no live engine to act on:
+
+  sub_6500 (init step) -> sub_7520 (edition check):
+    RegOpenKeyA(HKLM, "SOFTWARE\TOLTech")
+    RegQueryValueExA("Location")
+    LoadLibraryA(<Location>\lobby\ConfigManagement.dll)
+    GetProcAddress("GetLobbyVer") -> GetLobbyVer()
+  any failure (-1/-2) -> sub_77d0:
+    FindWindowA("xEyezEngine2009")
+    MessageBoxA(hwnd, upsell text, "idong感应器引擎")
+    MSVCR80.dll!exit(-1)
+
+Exit call sites: 0x10006847, 0x100068a6, 0x100068dd (init 0x10006500),
+0x10006b5b, 0x10006ba6 (sub_6940) - all reached only from failed checks.
+
+Why it fails on the user's Win7 machine: neither v2.6.0.6 nor v2.5.0.7
+installs (xeyez_alone AND xeyez_Lobby variants) contain
+lobby\ConfigManagement.dll, and no binary we possess writes
+HKLM\SOFTWARE\TOLTech\Location (that is the job of the full Sports-King lobby
+ecosystem, not installed there). The sportsking extract's
+ConfigManagement.dll has a NEWER GetLobbyVer (4 pointer args, results via
+pointers) while the engine calls GetLobbyVer() with no args and reads eax -
+copying it would return garbage, so a shim is the safe fix.
+
+FIX KIT (turn 30, delivered in download/):
+- lobby_shim/ConfigManagement.dll - hand-built 32-bit PE shim
+  (scripts/build_shim30.py), exports int __cdecl GetLobbyVer(void) -> 2
+  (Sports King PC edition; any >= 0 passes the check). LIEF-verified:
+  export "GetLobbyVer", EAT -> code "mov eax,2; ret".
+- fix_idong_alive30.bat - admin .bat: reg add
+  HKLM\SOFTWARE\TOLTech /v Location /t REG_SZ /d <install dir>, copy the shim
+  to <install>\lobby\ConfigManagement.dll. Edit INSTALLDIR at the top if the
+  engine is installed elsewhere (the .bat verifies xEyeUSB.dll exists there).
+- idong100_exit_after_ok_turn30.md - full writeup + code map.
+- idong100_phase2_turn30_2026-11-25.zip - the whole kit.
+
+Effect: the edition check passes -> no ad -> no exit(-1) -> the engine stays
+alive; the R/P/S/I/G/X tray menu items work again.
+
+Effect on the plan: with the vendor software kept alive, the next capture can
+run until the live camera image stage (turn-28 capture ended while the app
+was still in its polling window). Our Rust driver never executes this path
+(it is lobby bookkeeping, not sensor control), so no driver changes.
