@@ -1,4 +1,4 @@
-MANIFEST - idong100 phase 2 USBPcap capture kit, turn 26, 2026-11-25
+MANIFEST - idong100 phase 2 USBPcap capture kit, turn 27, 2026-11-25
 
 Inside the Windows 7 (VM or PC) that has the sensor, in this order:
   1. software\USBPcapSetup-1.5.4.0.exe   install, then RESTART Windows
@@ -10,17 +10,17 @@ the fallback folder the scripts name when it is write-protected.
 All scripts are pure cmd.exe and keep their window open.
 
 Files
-  check_capture.bat                            17735 bytes  reads USBPcap files, prints Sensor / MCU / DSP / Banner / Verdict. No argument needed: it reads C:\idong_capture\runN by itself
+  check_capture.bat                            17562 bytes  reads USBPcap files, prints Sensor / MCU / DSP / Banner / Verdict. No argument needed: it reads C:\idong_capture\runN by itself
   check_gate.bat                                5211 bytes  state of the vendor platform mark in the registry, for the vendor installer
   check_sensor_attached.bat                     2317 bytes  shows whether Windows sees the sensor as 0471:2600, 0471:2500 or not at all
   install_drivers_manual.bat                    3164 bytes  fallback: installs the vendor driver with pnputil, Windows 7 and Windows 10 syntax
   install_patched.bat                           3824 bytes  swaps in the patched vendor installers (Windows 8/10/11 only, not needed on Windows 7)
   platform_mark.reg                             2951 bytes  platform mark for the vendor installer (turn 18), only if the installer asks for the i-dong platform
-  predir.bat                                    5725 bytes  self-test and helper: finds a writable capture folder out of four candidates, repairs C:\idong_capture when elevated, prints the probe errors, stays open when run by hand (turn 26)
-  run_capture.bat                              14501 bytes  records one complete sensor boot into C:\idong_capture\runN and scans it
-  test_usbpcap.bat                             12508 bytes  self test: is USBPcap installed and does it record? Run this first
-  README_CAPTURE.md                            14915 bytes  this kit, step by step, with the state machine and the folder list
-  SOLVE_DIALOG.md                              26955 bytes  every vendor dialog explained so far, turn by turn
+  predir.bat                                    6229 bytes  self-test and helper: finds a writable capture folder out of four candidates, repairs C:\idong_capture when elevated, prints the probe errors, stays open when run by hand (turn 26)
+  run_capture.bat                              14742 bytes  records one complete sensor boot into C:\idong_capture\runN and scans it
+  test_usbpcap.bat                             12575 bytes  self test: is USBPcap installed and does it record? Run this first
+  README_CAPTURE.md                            15929 bytes  this kit, step by step, with the state machine and the folder list
+  SOLVE_DIALOG.md                              30129 bytes  every vendor dialog explained so far, turn by turn
   software/USBPcapSetup-1.5.4.0.exe           195040 bytes  USBPcap, install inside the Windows 7 VM, then restart the VM
   software/Wireshark-win64-3.2.18.exe       70472640 bytes  optional, last Wireshark for Windows 7, SHA-256 cbee6bb8d250287d8bcc41dc0353c425d87dceffa5005b3d9ab755090709e7b9
   software/xeyez_Lobby.dat                  20901912 bytes  vendor file
