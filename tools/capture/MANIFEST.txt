@@ -1,4 +1,4 @@
-MANIFEST - idong100 phase 2 USBPcap capture kit, turn 27, 2026-11-25
+MANIFEST - idong100 phase 2 USBPcap capture kit, turn 28, 2026-11-25
 
 Inside the Windows 7 (VM or PC) that has the sensor, in this order:
   1. software\USBPcapSetup-1.5.4.0.exe   install, then RESTART Windows
@@ -10,7 +10,7 @@ the fallback folder the scripts name when it is write-protected.
 All scripts are pure cmd.exe and keep their window open.
 
 Files
-  check_capture.bat                            17562 bytes  reads USBPcap files, prints Sensor / MCU / DSP / Banner / Verdict. No argument needed: it reads C:\idong_capture\runN by itself
+  check_capture.bat                            18467 bytes  reads USBPcap files, prints Sensor / MCU / DSP / Banner / Verdict. No argument needed: it reads C:\idong_capture\runN by itself
   check_gate.bat                                5211 bytes  state of the vendor platform mark in the registry, for the vendor installer
   check_sensor_attached.bat                     2317 bytes  shows whether Windows sees the sensor as 0471:2600, 0471:2500 or not at all
   install_drivers_manual.bat                    3164 bytes  fallback: installs the vendor driver with pnputil, Windows 7 and Windows 10 syntax

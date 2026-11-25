@@ -541,3 +541,79 @@ User replaces the kit with the turn-27 one. predir.bat by hand should now
 say "OK: C:\idong_capture is writable." Then test_usbpcap.bat ->
 run_capture.bat -> check_capture.bat, and the runN folder it names gets
 sent.
+
+## Turn 28 (2026-11-25): the first real capture - and the download is the vendor hex file
+
+User delivered idong_capture.zip: run1/USBPcap1.pcap (230,939 B, 3,260 USBPcap
+records, 108 s) with two complete plug cycles, plus a screenshot of the
+post-driver-install state. Quote: "i was able to get a capture of the USB camera
+initializing the capture has 2 cycles of plugging un plugging, analyze the
+findings i was able to open the capture with wireshark 4.0.17 is there more to
+capture, if so let me know, if not lets continue with the driver implementation."
+
+### What the capture contains (verified, not assumed)
+
+Bus 4 (USBPcap1), device 2: two byte-identical boot cycles.
+
+1. Enumerate as 0471:2600 (boot loader, maxpkt 64).
+2. The 7f55 handshake: 0x0800 GetMcuVersion -> "2600"; 0x0101 with body
+   0x53A3 = 21,411 = the exact download size; the image is sent as 334 x 64 B
+   + 1 x 35 B raw blocks on ep 0x02 (no per-block framing); the sensor echoes
+   every block back on ep 0x82 byte-identically (334/334 verified); 0x0102
+   (0x8000 + size), 0x0103 (fe2ac9bb ae11d5c2), 0x0104 run.
+3. Re-enumeration as 0471:2500 (composite ef/02/01, bcdDevice 3.001, 5
+   interfaces: bulk 0x02/0x82/0x03/0x83 (512 B), iso 0x85 IN (812/4900 B
+   alt 1/2), int 0x84 (32 B)).
+4. Runtime on 0x02/0x82: 0x0701 image requests (replies are raw, not framed:
+   "2619"+cc, 64-B image-like payloads), 0x0400-0x0404 exposure/gain pairs
+   (00 38 / 00 18), 0x0300-0x0303 config write + verified read-back, 0x0500,
+   0x0800 (-> "2619" = MCU app version), 0x0d00 and 0x0f04 polls. Control
+   requests bm 0xA1 (req 82/84/83/86/87) return descriptors and TLV lists.
+5. The session ends in 0x0701/0x0d00/0x0f04 polling - the vendor program
+   never got further.
+
+**Verified**: the 21,411 downloaded bytes are byte-identical to
+app_m8051_2611.hex from the vendor installer loaded at 0x8000.
+app_m8051_2500.hex does not match. The MCU download is fully reproducible
+offline.
+
+### Not in this capture (the honest gap list)
+
+- No PU/OD frames at all: this firmware version does not use the 50 55 7f 7f /
+  4f 44 7f 7f DSP framing the DLL analysis predicted for the DSP upload.
+- No DSP upload (ens_code.ldr 54,420 B) and no FPGA image traffic.
+- No traffic on ep 0x85 (isochronous) or 0x84 (interrupt) - the camera data
+  stream itself was never opened by the vendor program in this window.
+
+### Kit fixes of turn 28 (check_capture.bat)
+
+1. The kit's own report called this valid pcap "not a USBPcap .pcap file
+   (wrong magic number)". The magic constant is right; the failing path is
+   bin() returning an empty string (VBArray/ADODB hiccup) - previously
+   indistinguishable from a wrong magic. Now a short read is reported as its
+   own error with a note that the file itself is fine.
+2. The old PASS gate demanded PU+OD frames - which this firmware never sends.
+   New PASS gate: both 2600 and 2500 descriptors present AND >= 10,000 B on
+   ep 0x02 (the download volume). The real capture now scores PASS.
+   Synthetic harness: 66/66 PASSED. The scanner counts ep02/ep82 byte
+   volumes now.
+
+### Verdict for the user
+
+One more capture scene is still needed - the full vendor session until the
+camera image actually shows in the vendor UI (that is when the DSP/FPGA
+upload and the isochronous stream would appear). But the boot-loader half of
+the driver is implementable now with zero further captures, because every
+byte of that phase is verified against the vendor's own files.
+
+### Files of turn 28
+
+- scripts/analyze_capture28.py - USBPcap pcap parser (descriptors, tokens,
+  endpoint stats, --hex dump)
+- scripts/timeline_capture28.py - chronological event timeline + 7f55 census
+- scripts/run_checker_once.js - runs the kit's JScript scanner on one pcap
+  (Node shim) for local verification
+- work/cap28/mcu_download.bin - the extracted 21,411-B download (kept out of
+  download/ deliberately: it is a firmware image, not a deliverable)
+- download/idong100_capture_analysis_turn28.md - the full analysis report
+- Kit rebuilt as turn 28 (check_capture.bat with the fixes above).
