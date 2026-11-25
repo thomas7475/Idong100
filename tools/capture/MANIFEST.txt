@@ -1,160 +1,37 @@
-idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 23 update)
-==========================================================
+MANIFEST - idong100 phase 2 USBPcap capture kit, turn 25, 2026-11-25
 
-Turn-23 update (the 安装驱动程序失败！ box is not a bug):
-- The turn-22 kit works: install passes the preinstall stub and reaches
-  the real driver stage, which scans for the sensor for ~10 s
-  (dialog 201, 10x1 s WM_TIMER retries at RVA 0x75f0) over the Philips
-  VID_0471 family (PID_2500 / 2500&MI_04 / 2600 / 0666 / 0668 / 2100).
-  With no sensor attached it gives up ("User terminate!", RVA 0xde38)
-  and shows dialog 202 安装驱动程序失败！ — the reported box.
-- ACTION: run install_patched.bat WITH the sensor plugged into a rear
-  USB port. Use the new check_sensor_attached.bat first to confirm the
-  device enumerates (also lists which PID the PC sees).
-- No binary changes this turn: xeyez_setup_patched.exe /
-  xeyez_alone_patched.dat are unchanged from turn 22.
+Inside the Windows 7 (VM or PC) that has the sensor, in this order:
+  1. software\USBPcapSetup-1.5.4.0.exe   install, then RESTART Windows
+  2. test_usbpcap.bat                    is USBPcap installed and recording?
+  3. run_capture.bat                     record one complete sensor boot
+  4. check_capture.bat                   read the capture, print the verdict
+Read README_CAPTURE.md first. Captures go to C:\idong_capture\runN,
+or to the USERPROFILE fallback when C:\idong_capture is write-protected.
+All scripts are pure cmd.exe and keep their window open.
 
-Turn-22 changes (fix for the turn-21 kit):
-- With the turn-21 kit the installer extracted everything but stopped at
-  'Start install driver!' with the GBK box 预安装xeyez失败！ ('pre-install
-  xeyez FAILED'). That step is xEyeSetupHelper.dll!InstallDriver's first
-  call into xEyeDriverCheck.dll!PreinstallSpecialDriver (copies
-  Win7\xeyezDriver\xeyez.inf + xeyezCoIns.dll, writes CoDeviceInstallers
-  and legacy Driver-Signing registry values, SetupCopyOEMInfA the 2008-era
-  inf) - it fails on Win10/11 and aborts the whole install.
-- Fixed by stubbing the PreinstallSpecialDriver thunk at RVA 0xad32 in
-  the embedded xEyeSetupHelper.dll to 'xor eax,eax; ret' (success), on
-  top of the turn-19/21 patches. NSIS integrity CRC recomputed; the
-  real-stub emulation integrity check passes on the patched exe.
-- software/xeyez_setup_patched.exe  82,838 bytes (unchanged from t21)
-    SHA-256 e82c2f444d2d7b9619b07247323cbd1447ba2865d53d3af587bd5bc1ef0c7ee8
-- software/xeyez_alone_patched.dat  23,637,085 bytes
-    SHA-256 845a9170eee16dde87a59cf656c9c1594368975112f6218b200301f78fa16368
-- New: install_drivers_manual.bat (kit root + scripts/) - pnputil
-  /add-driver fallback for manual driver install if the vendor flow
-  still balks, with the one-boot DSE instructions.
-- NOTE for turn-21 users: replace BOTH patched files; the turn-21 .dat
-  (23,635,851 B) is superseded.
+Files
+  check_capture.bat                            17157 bytes  reads USBPcap files, prints Sensor / MCU / DSP / Banner / Verdict. No argument needed: it reads C:\idong_capture\runN by itself
+  check_gate.bat                                5211 bytes  state of the vendor platform mark in the registry, for the vendor installer
+  check_sensor_attached.bat                     2317 bytes  shows whether Windows sees the sensor as 0471:2600, 0471:2500 or not at all
+  install_drivers_manual.bat                    3164 bytes  fallback: installs the vendor driver with pnputil, Windows 7 and Windows 10 syntax
+  install_patched.bat                           3824 bytes  swaps in the patched vendor installers (Windows 8/10/11 only, not needed on Windows 7)
+  platform_mark.reg                             2951 bytes  platform mark for the vendor installer (turn 18), only if the installer asks for the i-dong platform
+  predir.bat                                    2703 bytes  helper of the three capture scripts: makes the capture folder writable, repairs the rights, or falls back to %USERPROFILE%\idong_capture (turn 25)
+  run_capture.bat                              13464 bytes  records one complete sensor boot into C:\idong_capture\runN and scans it
+  test_usbpcap.bat                             11976 bytes  self test: is USBPcap installed and does it record? Run this first
+  README_CAPTURE.md                            12786 bytes  this kit, step by step, with the state machine and the folder list
+  SOLVE_DIALOG.md                              23739 bytes  every vendor dialog explained so far, turn by turn
+  software/USBPcapSetup-1.5.4.0.exe           195040 bytes  USBPcap, install inside the Windows 7 VM, then restart the VM
+  software/Wireshark-win64-3.2.18.exe       70472640 bytes  optional, last Wireshark for Windows 7, SHA-256 cbee6bb8d250287d8bcc41dc0353c425d87dceffa5005b3d9ab755090709e7b9
+  software/xeyez_Lobby.dat                  20901912 bytes  vendor file
+  software/xeyez_alone.dat                  23655864 bytes  vendor file
+  software/xeyez_alone_patched.dat          23637085 bytes  vendor file
+  software/xeyez_setup.exe                     82816 bytes  vendor file
+  software/xeyez_setup_patched.exe             82838 bytes  vendor file
 
-Turn-21 changes (fix for the turn-20 kit):
-- The turn-20 kit passed the NSIS integrity check and extracted all files,
-  but failed at 'Start install driver!' with the GBK dialog 驱动目录没有找到！
-  ('driver directory not found', title idong感应器 安装). Root cause: the
-  script's xEyeSetupHelper.dll!InstallDriver checks GetVersionExA for
-  XP(5.1)/Vista(6.0)/Win7(6.1) only; on Win8/10/11 an unmanifested 32-bit
-  process sees 6.2/6.3 so no driver directory is ever selected.
-- Fixed inside the embedded xEyeSetupHelper.dll (xeyez_alone.dat stream):
-  IsWin7() now returns true for any OS (je->jmp at 0xa295) so the Win7 /
-  Win7-64 driver sets are used, and the pre-install devnode helper
-  (CM_Locate_DevNodeA+CM_Reenumerate_DevNode, which fails with no device
-  plugged in) is stubbed to return success (0x2c60). NSIS integrity CRC
-  recomputed (turn-20 recipe); real-stub emulation passes on the patched exe.
-- software/xeyez_setup_patched.exe  82,838 bytes
-    SHA-256 e82c2f444d2d7b9619b07247323cbd1447ba2865d53d3af587bd5bc1ef0c7ee8
-- software/xeyez_alone_patched.dat  23,635,851 bytes
-    SHA-256 b16d4a068ba569f2545e87932de94b4fcf69a693866e8d39dd09fb44f207d302
-- If you have the turn-20 versions (82,842 B exe / 23,638,139 B dat), replace
-  them with these.
-- After install: if Windows refuses the 2008-era driver on Win10/11 x64, use
-  the one-boot 'Disable driver signature enforcement' route (README_CAPTURE
-  section 4).
-
-Turn-20 changes (fix for the turn-19 kit):
-- The turn-19 patched installers failed the NSIS stub's integrity check
-  ('NSIS Error - Installer integrity check has failed') because the repack
-  left a stale CRC + length_of_all_following_data. The check (recovered by
-  Unicorn-emulating the stub's loadHeaders): crc32(file[512 .. fh+x2-4))
-  must equal the u32 stored at fh+x2-4. The turn-20 rebuild recomputes x2 and
-  appends a fresh CRC; both patched installers now PASS the actual stub code
-  in emulation (scripts/rebuild_patched_installers20.py +
-  scripts/emulate_stub_check20.py).
-- software/xeyez_setup_patched.exe  82,842 bytes
-    SHA-256 b2436be7d4208fcc8e6d2b4304b0d4c324bdcb1169120ff1deaba4c165ded480
-- software/xeyez_alone_patched.dat  23,638,139 bytes
-    SHA-256 af070bbf0b2afe2581b8985718060bf06c776afc260e7e49b7410863ed85985e
-- If you still have the turn-19 versions (76,316 B exe / 23,631,617 B dat),
-  replace them with these; sizes and SHAs above are the quick check.
-
-Turn-19 changes (on top of turn 16/17/18):
-- OS-version gate SOLVED: the installers' VersionCheck.dll whitelists
-  only XP 5.1 / Vista 6.0 / Win7 6.1 (WOW64: Win7 only) and exits with
-  the OS-incompatibility dialog on Win8/10/11. Compatibility mode
-  cannot fix it (the gate reads _winmajor/_winminor from MSVCR80.dll,
-  not GetVersionEx). New patched installers: xeyez_setup_patched.exe
-  and xeyez_alone_patched.dat - 4 gate jumps rewritten, every path
-  returns 0; solid NSIS stream decompressed/repatched/recompressed,
-  round-trip verified; stale Authenticode dir zeroed.
-- install_patched.bat (new): backs up originals, swaps in the patched
-  installers, launches. Pure cmd.
-- check_gate.bat rewritten: fixed the ')' parse crash (German cmd
-  error - probe labels contained parentheses inside if-blocks), fixed
-  truncated value display, now also reports the patched-installer
-  presence. Ends with pause (stays open).
-- check_capture.bat / run_capture.bat: pause added at every exit; a
-  parenthesised echo inside an if-block fixed.
-
-Turn-18 changes (on top of turn 16/17):
-- platform_mark.reg v2: writes BOTH registry views (64-bit +
-  Wow6432Node). Root cause of the turn-17 retry: the gate DLL is
-  32-bit, so on 64-bit Windows it reads the Wow6432Node view, which
-  v1 never wrote. Compatibility mode cannot change that.
-- check_gate.ps1 -> check_gate.bat: pure cmd (no PowerShell, user
-  rule). Reports BOTH views, creates %ProgramData%\i-dong, checks
-  the xeyez service.
-- check_capture.ps1 -> check_capture.bat: pure cmd + embedded
-  cscript scanner (byte-accurate, same exit codes 0/2).
-- run_capture.bat now calls check_capture.bat (no PowerShell).
-- The turn-17 .ps1 scripts are retired from the kit.
-Turn-18 changes (on top of turn 16/17):
-- platform_mark.reg v2: writes BOTH registry views (64-bit +
-  Wow6432Node). Root cause of the turn-17 retry: the gate DLL is
-  32-bit, so on 64-bit Windows it reads the Wow6432Node view, which
-  v1 never wrote. Compatibility mode cannot change that.
-- check_gate.ps1 -> check_gate.bat: pure cmd (no PowerShell, user
-  rule). Reports BOTH views, creates %ProgramData%\i-dong, checks
-  the xeyez service.
-- check_capture.ps1 -> check_capture.bat: pure cmd + embedded
-  cscript scanner (byte-accurate, same exit codes 0/2).
-- run_capture.bat now calls check_capture.bat (no PowerShell).
-- The turn-17 .ps1 scripts are retired from the kit.
-
-SHA-256 of every file (sha256sum format; verify after copying the zip
-out of the sandbox):
-
-software/USBPcapSetup-1.5.4.0.exe  87a7edf9bbbcf07b5f4373d9a192a6770d2ff3add7aa1e276e82e38582ccb622
-software/Wireshark-win64-4.6.10.exe c3bd915305aef0cfaffb29981790623f97b8aa673fb5c790b1c64a3fd85c1e94
-software/xeyez_setup.exe            4252597e98bb4242402b89352b9938e6681c9f5dabe0e43d363c9f630f982711
-software/xeyez_alone.dat            6a877968deee70e9ec10cacb615703b5af84020677fed655272c84dffe1592be
-software/xeyez_Lobby.dat            0b04734f23a61fe5f7b60a8e0205d4bb80bb909a6bed7773c320d809b893a00a
-software/xeyez_setup_patched.exe    e82c2f444d2d7b9619b07247323cbd1447ba2865d53d3af587bd5bc1ef0c7ee8
-software/xeyez_alone_patched.dat    845a9170eee16dde87a59cf656c9c1594368975112f6218b200301f78fa16368
-
-Scripts and docs (text files, verify by eye):
-README_CAPTURE.md / docs/CAPTURE_KIT.md — the full procedure: VM setup
-                            (dual-PID hostdev passthrough for the
-                            re-enumeration), install order,
-                            driver-signature caveats, the capture
-                            session, acceptance criteria
-SOLVE_DIALOG.md            — the platform-gate fix (turn 18 root cause:
-                            Wow6432Node redirect; both-view .reg)
-platform_mark.reg          — the gate mark, BOTH registry views
-scripts/run_capture.bat     — one-shot guided capture session
-scripts/check_capture.bat  — magic-byte sanity check inside the VM
-                            (pure cmd + cscript; no PowerShell)
-scripts/check_gate.bat     — gate-probe status in BOTH registry views
-                            (pure cmd; run as admin; fixed turn-19 ')' parse
-                            crash; stays open)
-install_patched.bat        — swaps in the OS-gate-patched installers and
-                            launches them (turn 19; backs up originals)
-software/xeyez_setup_patched.exe — launcher with the OS gate neutralised
-software/xeyez_alone_patched.dat — inner installer, OS gate neutralised
-
-Sources:
-- USBPcap 1.5.4.0 from https://github.com/desowin/usbpcap/releases/tag/1.5.4.0
-  (linked from https://desowin.org/usbpcap/)
-- Wireshark 4.6.10 x64 from https://www.wireshark.org/download.html
-- xeyez_setup.exe + .dat payloads: the vendor's own v2.6.0.6 installer
-  set, already on the analysis host from the turn-12 remote extraction
-  (download.i-dong.com archive). They are NOT public-domain software;
-  this kit is for the owner's own interoperability research (GPL-free
-  private research use; see project CONTEXT.md legal notes).
+Turn 24: every .bat rewritten or fixed for Windows 7, CRLF line endings,
+PowerShell files removed, Wireshark-win64-4.6.10.exe replaced by Wireshark-win64-3.2.18.exe.
+Turn 25: predir.bat added - C:\idong_capture created by an elevated window is
+write-protected for normal windows; the scripts now repair it or use the
+USERPROFILE fallback and say which folder they used.
+The kit never sends a byte to the sensor.
