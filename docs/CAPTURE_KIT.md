@@ -1,4 +1,4 @@
-# idong100 USBPcap capture kit - turn 25, 2026-11-25 - Windows 7
+# idong100 USBPcap capture kit - turn 26, 2026-11-25 - Windows 7
 
 This kit records the complete boot of the idong sensor ("idong Sensor V2.6",
 USB ID 0471:2600 while it waits for its program, 0471:2500 when it runs), so
@@ -161,38 +161,75 @@ is not elevated.
 | Sensor line: "0471:2600 did not appear" | Recording started too late | Unplug the sensor after the recording has started |
 | Sensor stays at 2600, no 2500 | Vendor program not running | Start the vendor program, or restart it while the capture runs |
 | Sensor: not present | VM does not pass the sensor to the guest | Connect it in the USB menu of the VM |
-| "cannot create the folder C:\idong_capture" (turn 25) | `C:\idong_capture` was created by an elevated window; a normal window may read it but not write into it | Nothing to do by hand: every script now calls `predir.bat`, which repairs the rights when elevated or falls back to `%USERPROFILE%\idong_capture` and says so. To repair by hand: run any kit script once with Run as administrator |
+| "cannot create the folder C:\idong_capture" (turn 25) | `C:\idong_capture` was created by an elevated window; a normal window may read it but not write into it | Every script calls `predir.bat`: it repairs the rights when elevated, or picks a per-user fallback folder and says which one. To repair by hand: run any kit script once with Run as administrator |
+| "[ERR] no writable capture folder: none of the four candidates ..." (turn 26) | Even the per-user folders rejected the probe file | Double-click `predir.bat` alone: its self-test lists each folder with the exact error and the rights of `C:\idong_capture`, and it stays open. Send that text |
 
-## 7a. The write-protected C:\idong_capture (turn 25)
+## 7a. The write-protected C:\idong_capture and the fallback folders (turns 25-26)
 
 `C:\idong_capture` can end up writable only for administrators: an elevated
 window created it (the first run of an elevated `run_capture.bat` or
 `test_usbpcap.bat`). On Windows 7, a folder created by an elevated process is
 by default not writable by a normal user window: `md C:\idong_capture\run1`
 then fails with "Access is denied", which the scripts of turn 24 reported as
-"cannot create the folder".
+"cannot create the folder". Deleting the folder does not help, because the
+next elevated script re-creates it with the same rights.
 
-Every script of the kit now calls the helper `predir.bat` before it writes
-anything. It:
+Every script of the kit calls the helper `predir.bat` before it writes
+anything. It tries four folders in this order:
 
-1. creates `C:\idong_capture` when it does not exist,
-2. writes and deletes a probe file in it,
-3. repairs the rights with `icacls ... /grant Users:(OI)(CI)M` when the probe
-   fails and the window is elevated,
-4. falls back to `%USERPROFILE%\idong_capture` when that also fails, and
-5. says which folder is used, so the location of the captures stays visible.
+1. `C:\idong_capture` - created when missing, probe file written and deleted,
+2. `%USERPROFILE%\idong_capture` - `C:\Users\<name>\idong_capture`,
+3. `%LOCALAPPDATA%\idong_capture` - `...\AppData\Local\idong_capture`,
+4. `%TEMP%\idong_capture` - `...\AppData\Local\Temp\idong_capture`.
+
+Folders 3 and 4 are per-user folders that are writable by design on every
+Windows 7 profile, so one of the four always works. When candidate 1 fails
+and the window is elevated, `predir.bat` first repairs the rights of
+`C:\idong_capture` with `icacls ... /grant Users:(OI)(CI)M` (the SID form
+`*S-1-5-32-545` is tried first, for non-English Windows where the group has
+another name) and probes again.
 
 `predir.bat` sets `CAPROOT` (the folder to use) and `PREDIRRC` (0 = normal,
-1 = fallback, 2 = no writable folder at all). The scripts print the folder and
-the note from `predir.bat` at the start, and the result lines of section 1.4
-apply to the folder that was named there. The repair in step 3 grants the
-*Users* group the right to create, change and delete files in the capture
-folder - the same rights the folder would have if a normal window had created
-it. It does not touch any other folder and it is not run automatically: it
-runs only inside a kit script that was started by hand.
+1 = fallback, 2 = nothing was writable). The scripts print the folder they
+use at the start; the file list of section 1.4 applies to that folder. The
+repair grants the *Users* group the right to create, change and delete files
+in the capture folder - the same rights the folder would have if a normal
+window had created it. It touches nothing else.
+
+`run_capture.bat` also takes the capture folder as its second argument:
+`run_capture.bat 300 D:\caps` records into `D:\caps\runN`, for machines whose
+`C:` is full or broken.
+
+### Running predir.bat by hand
+
+Double-clicking `predir.bat` alone starts its self-test: it prints the
+verdict for each of the four candidate folders, the exact error of every
+failed probe, and - when it tried the repair - the current rights of
+`C:\idong_capture` as `icacls` prints them. It ends with `pause`, so the
+window stays open, and with the steps for copying the window text out (see
+7b). When all four folders fail, run it by hand once and send its text.
 
 A one-time alternative without the kit: right-click `cmd.exe`, Run as
 administrator, then `icacls C:\idong_capture /grant Users:(OI)(CI)M`.
+
+## 7b. Copying text out of a cmd window (turn 26)
+
+A cmd window is not a normal text window, so dragging the mouse over it
+selects nothing. To copy its text out:
+
+1. right-click the **title bar** of the window (or its icon, top left),
+2. in the menu that opens choose **Markieren** ("Mark", English: Edit - then
+   Select All; on English Windows the menu item is "Edit"),
+3. the whole window content is now selected - press **Enter** to copy it,
+4. click into any text field (browser, editor, e-mail) and paste with
+   **Strg+V**.
+
+Every kit script prints these four steps at its end, in both the German and
+the English wording. The alternative is a screenshot, but the copied text can
+be searched and takes no photo of the whole screen.
+
+For an open cmd window that is stuck at a prompt: the same steps work at
+any time, they do not need the script to be finished.
 
 ## 8. What is verified and what is not
 

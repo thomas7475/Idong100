@@ -422,3 +422,60 @@ Also in this turn: turn 24 was pushed to GitHub (`main`, `project/state`,
 Right-click `cmd.exe`, Run as administrator, then:
 
     icacls C:\idong_capture /grant Users:(OI)(CI)M
+
+## Turn 26 (2026-11-25): the scripts still could not write, and the copy problem
+
+User report: "the new scrips are not working the predir.bat does nothing and
+does not stay open the other capture .bat complain that it could not write to
+the folder even if it is there they generate a work folder but for some
+reason the scripts no not work rewrite them, and why cant i mark and copy any
+of the content of the script cmd window". Screenshot: run_capture.bat ended
+with "[ERR] no writable capture folder: neither C:\idong_capture nor the
+USERPROFILE fallback could be written" - predir.bat had returned 2.
+
+### Why the turn-25 scripts stopped
+
+The turn-25 predir.bat had only two candidates, C:\idong_capture and
+%USERPROFILE%\idong_capture. On this machine both rejected the probe file,
+so PREDIRRC=2 and every script aborted before USBPcap was even started. Why
+both failed was invisible: the probe errors were discarded (>nul 2>&1) and
+predir.bat itself closed instantly when run by hand (no pause, "not meant to
+be run by hand"), which the user read as "does nothing and does not stay
+open". The "work folder" the user saw being generated was the leftover
+C:\idong_capture\work of the earlier turn-24 attempt.
+
+### The turn-26 rewrite
+
+1. predir.bat now tries four folders in this order:
+   C:\idong_capture, %USERPROFILE%\idong_capture,
+   %LOCALAPPDATA%\idong_capture, %TEMP%\idong_capture. The last two are
+   per-user folders that are writable by design on every Windows 7 profile,
+   so one of the four always accepts a file, even when C:\ or the profile
+   root is locked down.
+2. When the first candidate fails and the window is elevated, the icacls
+   repair of C:\idong_capture runs (SID form first). When the repair fails
+   as well, the current rights of the folder are printed, as icacls
+   sees them, instead of being swallowed.
+3. Every probe error is collected and shown: hand-run predir.bat prints one
+   line per candidate with the exact reason ("cannot create the folder" /
+   "cannot write a file into it").
+4. predir.bat run by hand is now a supported self-test: header, verdicts,
+   the error list, the result line, and a pause, so the window stays open.
+   The calling scripts use `predir.bat /called` for the quiet variant.
+5. run_capture.bat takes the capture folder as a second argument
+   (run_capture.bat 300 D:\caps) for disks whose C: cannot be written at
+   all.
+6. The three capture scripts tell the user, at every exit, how to copy the
+   window text out: title bar - Bearbeiten - Markieren - Enter, then paste
+   with Strg+V (English: Edit - Select All). This is also section 7b of
+   CAPTURE_KIT.md now. cmd windows are not normal text windows, so dragging
+   over them selects nothing - that is the answer to the user's copy
+   question, not a bug in the scripts.
+
+### Still not verified
+
+There is no Windows in the sandbox where these scripts are written: the
+folder candidates, the icacls repair and the fallback chain are statically
+checked only (0 lint errors, the JScript scanner harness passes 66/66). If
+prefdir.bat by hand reports a case not covered by the four candidates, its
+window text decides the next step.
