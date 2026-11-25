@@ -1,29 +1,37 @@
-idong100 P2.3 USBPcap capture kit — 2026-11-24 (turn 16)
-==========================================================
+MANIFEST - idong100 phase 2 USBPcap capture kit, turn 25, 2026-11-25
 
-SHA-256 of every file (sha256sum format; verify after copying the zip out
-of the sandbox):
+Inside the Windows 7 (VM or PC) that has the sensor, in this order:
+  1. software\USBPcapSetup-1.5.4.0.exe   install, then RESTART Windows
+  2. test_usbpcap.bat                    is USBPcap installed and recording?
+  3. run_capture.bat                     record one complete sensor boot
+  4. check_capture.bat                   read the capture, print the verdict
+Read README_CAPTURE.md first. Captures go to C:\idong_capture\runN,
+or to the USERPROFILE fallback when C:\idong_capture is write-protected.
+All scripts are pure cmd.exe and keep their window open.
 
-software/USBPcapSetup-1.5.4.0.exe  87a7edf9bbbcf07b5f4373d9a192a6770d2ff3add7aa1e276e82e38582ccb622
-software/Wireshark-win64-4.6.10.exe c3bd915305aef0cfaffb29981790623f97b8aa673fb5c790b1c64a3fd85c1e94
-software/xeyez_setup.exe            4252597e98bb4242402b89352b9938e6681c9f5dabe0e43d363c9f630f982711
-software/xeyez_alone.dat            6a877968deee70e9ec10cacb615703b5af84020677fed655272c84dffe1592be
-software/xeyez_Lobby.dat            0b04734f23a61fe5f7b60a8e0205d4bb80bb909a6bed7773c320d809b893a00a
+Files
+  check_capture.bat                            17157 bytes  reads USBPcap files, prints Sensor / MCU / DSP / Banner / Verdict. No argument needed: it reads C:\idong_capture\runN by itself
+  check_gate.bat                                5211 bytes  state of the vendor platform mark in the registry, for the vendor installer
+  check_sensor_attached.bat                     2317 bytes  shows whether Windows sees the sensor as 0471:2600, 0471:2500 or not at all
+  install_drivers_manual.bat                    3164 bytes  fallback: installs the vendor driver with pnputil, Windows 7 and Windows 10 syntax
+  install_patched.bat                           3824 bytes  swaps in the patched vendor installers (Windows 8/10/11 only, not needed on Windows 7)
+  platform_mark.reg                             2951 bytes  platform mark for the vendor installer (turn 18), only if the installer asks for the i-dong platform
+  predir.bat                                    2703 bytes  helper of the three capture scripts: makes the capture folder writable, repairs the rights, or falls back to %USERPROFILE%\idong_capture (turn 25)
+  run_capture.bat                              13464 bytes  records one complete sensor boot into C:\idong_capture\runN and scans it
+  test_usbpcap.bat                             11976 bytes  self test: is USBPcap installed and does it record? Run this first
+  README_CAPTURE.md                            12786 bytes  this kit, step by step, with the state machine and the folder list
+  SOLVE_DIALOG.md                              23739 bytes  every vendor dialog explained so far, turn by turn
+  software/USBPcapSetup-1.5.4.0.exe           195040 bytes  USBPcap, install inside the Windows 7 VM, then restart the VM
+  software/Wireshark-win64-3.2.18.exe       70472640 bytes  optional, last Wireshark for Windows 7, SHA-256 cbee6bb8d250287d8bcc41dc0353c425d87dceffa5005b3d9ab755090709e7b9
+  software/xeyez_Lobby.dat                  20901912 bytes  vendor file
+  software/xeyez_alone.dat                  23655864 bytes  vendor file
+  software/xeyez_alone_patched.dat          23637085 bytes  vendor file
+  software/xeyez_setup.exe                     82816 bytes  vendor file
+  software/xeyez_setup_patched.exe             82838 bytes  vendor file
 
-Scripts and docs (text files, verify by eye):
-README_CAPTURE.md         — the full procedure: VM setup (dual-PID hostdev
-                            passthrough for the re-enumeration), install
-                            order, driver-signature caveats, the capture
-                            session, acceptance criteria
-scripts/run_capture.bat  — one-shot guided capture session
-scripts/check_capture.ps1 — magic-byte sanity check inside the VM
-
-Sources:
-- USBPcap 1.5.4.0 from https://github.com/desowin/usbpcap/releases/tag/1.5.4.0
-  (linked from https://desowin.org/usbpcap/)
-- Wireshark 4.6.10 x64 from https://www.wireshark.org/download.html
-- xeyez_setup.exe + .dat payloads: the vendor's own v2.6.0.6 installer
-  set, already on the analysis host from the turn-12 remote extraction
-  (download.i-dong.com archive). They are NOT public-domain software;
-  this kit is for the owner's own interoperability research (GPL-free
-  private research use; see project CONTEXT.md legal notes).
+Turn 24: every .bat rewritten or fixed for Windows 7, CRLF line endings,
+PowerShell files removed, Wireshark-win64-4.6.10.exe replaced by Wireshark-win64-3.2.18.exe.
+Turn 25: predir.bat added - C:\idong_capture created by an elevated window is
+write-protected for normal windows; the scripts now repair it or use the
+USERPROFILE fallback and say which folder they used.
+The kit never sends a byte to the sensor.

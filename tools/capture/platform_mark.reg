@@ -1,12 +1,37 @@
 Windows Registry Editor Version 5.00
 
-; idong100 platform gate satisfier (turn 17)
-; The xeyez_setup.exe launcher gate reads exactly these values via
-; VerifyInstallSystem/CheckVirtualVerSion in VersionCheck.dll:
-;   HKLM\SOFTWARE\TOLTech : Location           (platform install dir)
-;   HKLM\SOFTWARE\TOLTech\xeyez_engine : RootPath (sensor engine root)
-; Import this, then re-run xeyez_setup.exe. On 32-bit Windows use
-; "C:\Program Files\TOLTech" instead of the (x86) path.
+; idong100 platform-gate satisfier v2 (turn 18) - updates the turn-17
+; v1 in place. THE FIX for "dialog still shows on 64-bit Windows":
+;
+;   VersionCheck.dll (the gate) is PE32 / 32-bit code. A 32-bit
+;   process that opens HKLM\SOFTWARE\... is silently redirected by
+;   WOW64 to HKLM\SOFTWARE\Wow6432Node\... . v1 wrote only the
+;   64-bit view, so the 32-bit gate NEVER SAW the mark and showed
+;   the same dialog again. Running the installer with Vista or Win7
+;   compatibility mode changes nothing here - compatibility mode
+;   does not change which registry view a 32-bit process sees.
+;
+;   v2 writes BOTH views, so it works on 64-bit Windows AND on real
+;   32-bit Windows (where the Wow6432Node lines are inert dead data).
+;
+; Gate reads (re-verified turn 18 by disassembly):
+;   VerifyInstallSystem (VersionCheck.dll, imports RegOpenKeyExA /
+;   RegQueryValueExA, machine 0x014c):
+;     HKLM\SOFTWARE\TOLTech : Location                       (platform dir)
+;     HKLM\SOFTWARE\TOLTech\xeyez_engine : RootPath            (engine root)
+;     HKLM\SOFTWARE\Toltech\xeyez_engine : RootPath            (same key,
+;       registry is case-insensitive; spelling the installer writes)
+;     %CommonAppData%\i-dong folder, \\.\vMouse / \\.\vKeyboard
+;       (device nodes - not required for the launcher gate)
+;
+; Import as Administrator:   reg import platform_mark.reg
+; Verify afterwards:         check_gate.bat
+;
+; Clean up afterwards (optional):
+;   reg delete "HKLM\SOFTWARE\TOLTech" /f
+;   reg delete "HKLM\SOFTWARE\Wow6432Node\TOLTech" /f
+;   rd /s /q "%ProgramData%\i-dong"
+; ------------------------------------------------------------
 
 [HKEY_LOCAL_MACHINE\SOFTWARE\TOLTech]
 "Location"="C:\\Program Files (x86)\\TOLTech"
@@ -16,3 +41,24 @@ Windows Registry Editor Version 5.00
 
 [HKEY_LOCAL_MACHINE\SOFTWARE\Toltech\xeyez_engine]
 "RootPath"="C:\\Program Files (x86)\\TOLTech\\xeyez_engine"
+
+; --- 32-bit view: the one the 32-bit gate DLL actually reads on
+; --- 64-bit Windows (HKLM\SOFTWARE\Wow6432Node\...). Harmless dead
+; --- keys on real 32-bit Windows.
+[HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\TOLTech]
+"Location"="C:\\Program Files (x86)\\TOLTech"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\TOLTech\xeyez_engine]
+"RootPath"="C:\\Program Files (x86)\\TOLTech\\xeyez_engine"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Toltech\xeyez_engine]
+"RootPath"="C:\\Program Files (x86)\\TOLTech\\xeyez_engine"
+
+; ------------------------------------------------------------
+; On real 32-bit Windows: drop the " (x86)" from the paths above
+; (C:\Program Files\TOLTech).
+;
+; %CommonAppData%\i-dong is a FOLDER probe - a .reg cannot create it.
+; check_gate.bat creates it for you, or run as admin:
+;   md "%ProgramData%\i-dong"
+; (Windows XP: md "%ALLUSERSPROFILE%\Application Data\i-dong")

@@ -1,196 +1,217 @@
-# P2.3 THE GATE — USBPcap capture of a full vendor boot
+# idong100 USBPcap capture kit - turn 25, 2026-11-25 - Windows 7
 
-> Repo copy of the kit README. The runnable kit (installers + scripts) is
-> `download/idong100_p2_usbpcap_kit.zip` on the analysis host; this file
-> is the canonical procedure documentation.
+This kit records the complete boot of the idong sensor ("idong Sensor V2.6",
+USB ID 0471:2600 while it waits for its program, 0471:2500 when it runs), so
+that the byte stream can be compared with the Phase 1 decoder. Every script is
+pure cmd.exe, none uses PowerShell, and every window stays open at the end.
 
-Goal: byte-verify the boot upload sequence the Rust driver will use
-(`_InitBlobUpload`, xEyeUSB.dll) before ANY write-capable code path is
-allowed on hardware. This resolves open items #1 (multi-firmware staging
-order), #2 (CRC variant), #3 (count/CRC + DSP-start payload framing).
+## 1. The four questions
 
-The capture target: the sensor boots in the VM (Windows + vendor stack),
-the whole USB traffic is recorded, and the transcript is compared
-byte-for-byte against the Phase-1 decoder (`idong/src/protocol/boot.rs`).
+### 1.1 Is there a way to reset the camera to USB ID 2600?
 
-## 0. Why a VM is fine for this
+No command is needed. 0471:2600 is the state the sensor is in after every
+power-up: it is the boot loader of its 8051 microcontroller. The vendor program
+finds it there, downloads the MCU program (`app_m8051_2611.hex`), and the sensor
+disconnects and comes back as 0471:2500, where the DSP upload (`ens_code.ldr`)
+and the FPGA upload run. This is read from the vendor DLLs
+(`xeyezHal.dll`, `xEyeUSB.dll` 2.6.0.6), it was not tested on hardware here.
 
-The vendor stack is Windows-only and 32-bit. QEMU/KVM with virt-manager
-passes the physical sensor through to Windows; USBPcap sits inside
-Windows and records everything the vendor app does. The capture is
-exactly as good as bare metal: same driver, same timing budget, same
-device.
+There is no shipped tool that resets a running sensor back to 2600. The vendor
+DLL does contain an `McuReset` command, and the scripts in this kit never send
+it, because it is not needed and a wrong reset could damage the sensor.
 
-## 1. Kit contents
+So the way back to 2600 is to **unplug the sensor and plug it in again**, while
+USBPcap is already recording and the vendor program is running.
 
-| File | Purpose | SHA-256 |
-|---|---|---|
-| `software/USBPcapSetup-1.5.4.0.exe` | USB sniffer (desowin, signed) | `87a7edf9bbbcf07b5f4373d9a192a6770d2ff3add7aa1e276e82e38582ccb622` |
-| `software/Wireshark-win64-4.6.10.exe` | GUI + pcapng reader + extcap | `c3bd915305aef0cfaffb29981790623f97b8aa673fb5c790b1c64a3fd85c1e94` |
-| `software/xeyez_setup.exe` | Vendor v2.6.0.6 stack (yours) | `4252597e98bb4242402b89352b9938e6681c9f5dabe0e43d363c9f630f982711` |
-| `scripts/run_capture.bat` | One-shot capture session | — |
-| `scripts/check_capture.ps1` | Magic-byte sanity check (in VM) | — |
-| `MANIFEST.txt` | Hashes of every kit file | — |
+In the VM: use the USB menu of the VM software and disconnect the sensor from
+the guest, then connect it again. The VM may show two devices, 0471:2600 and a
+moment later 0471:2500. Connect both to the guest.
 
-The two `.dat` payloads (`xeyez_Lobby.dat`, `xeyez_alone.dat`) must sit
-next to `xeyez_setup.exe` when the vendor installer runs — the setup exe
-launches them. Copy them from `analysis/remote/dependent/
-xeyez_pc_v2.6.0.6/` if the VM install re-downloads nothing (they are on
-your host already; the kit is intentionally lean — ask if you want the
-20 MB `.dat` files zipped in too).
+### 1.2 check_capture.bat does nothing and closes immediately
 
-## 2. VM requirements (QEMU / virt-manager)
+Fixed. The old checker needed a path as argument, printed one line and exited
+without a pause. It also looked for `C:\idong_capture\boot.pcapng`, and that
+file was never written: the old `run_capture.bat` called USBPcap with
+`--snap 0` (USBPcap rejects 0), without `-A` (USBPcap then records nothing) and
+from `C:\Program Files\USBPcap1\` (the installer puts the program into
+`C:\Program Files\USBPcap\`). The new `check_capture.bat` needs no argument: it
+reads `C:\idong_capture` by itself, parses the USB packets, prints a report and
+waits for a key. You can also drag one `.pcap` file or a folder onto it.
 
-- **Windows 10 64-bit or Windows 7 32-bit guest.** The vendor app is
-  32-bit but runs fine on x64 Windows (WOW64). Win10 x64 is the least
-  painful: test-signing is not required (see §6).
-- **QXL/Spice display is fine**; no GPU passthrough needed.
-- **CPU**: 2 vCPUs, 4 GB RAM is plenty (the vendor app is light).
-- **USB passthrough — the one critical setup detail:**
+### 1.3 Is there a way to test if USBPcap is working as intended?
 
-  The sensor RE-ENUMERATES during boot: it starts as 0471:2600
-  (bootloader, one configuration) and re-appears as 0471:2500 (runtime
-  composite, FOUR interfaces incl. UVC video). Virt-manager's USB
-  host-device passthrough is bound to the *device address*, and a
-  re-enumeration changes the address → **the passthrough silently
-  DETACHES mid-boot and the device vanishes from the VM.**
+Yes: `test_usbpcap.bat`. It finds `USBPcapCMD.exe`, prints the version, checks
+the driver service and the USB hub class filter, lists the root hubs, shows
+whether the sensor is seen as 2600 or 2500, records 20 seconds from every root
+hub, and then counts the USB packets in the files. The last line is
+`USBPcap WORKS in this Windows` or the reason why not.
 
-  Two working options:
+### 1.4 Where is the captured file stored?
 
-  **A. QEMU command-line USB host passthrough (recommended).**
-  Edit the VM's XML (virt-manager → ⚙ → XML tab) and add inside the
-  `<devices>` section:
+| File | Content |
+| --- | --- |
+| `C:\idong_capture\run<N>\USBPcap1.pcap`, `USBPcap2.pcap`, ... | One capture per USB root hub, `<N>` grows with every run |
+| `C:\idong_capture\run<N>\session.txt` | Start, stop, USBPcap version, elevated or not |
+| `C:\idong_capture\run<N>\sensor_states.txt` | When the sensor was seen as 2600, 2500 or not present |
+| `C:\idong_capture\run<N>\check_report.txt` | The same report that `check_capture.bat` printed |
+| `C:\idong_capture\usbpcap_test\test<K>.pcap` | Files of `test_usbpcap.bat`, can be deleted |
+| `C:\idong_capture\work\` | Scratch files of the scripts, can be deleted |
 
-  ```xml
-  <hostdev mode='subsystem' type='usb' managed='yes'>
-    <source>
-      <vendor id='0x0471'/>
-      <product id='0x2600'/>
-    </source>
-    <address type='usb' bus='0' port='1'/>
-  </hostdev>
-  ```
-  Add a SECOND identical block with `product id='0x2500'`. With TWO
-  hostdev rules (one per PID), QEMU re-attaches automatically at the
-  new identity after re-enumeration — this is the known recipe for
-  devices that change PID on firmware load. (USB redirects via
-  spice/virt-viewer "USB device selection" do NOT survive
-  re-enumeration; avoid them for this capture.)
+`<N>` is the number of the run folder: `run1`, `run2`, ... The folder is also
+printed at the end of `run_capture.bat`.
 
-  **B. If your QEMU is older** and dual-PID matching misbehaves, use
-  bus/port addressing: attach by the physical port the sensor is
-  plugged into (find it via `lsusb -t`), so any device that appears on
-  that port is passed through:
-  ```xml
-  <hostdev mode='subsystem' type='usb' managed='yes'>
-    <source>
-      <address bus='1' port='2'/>  <!-- physical hub port, from lsusb -t -->
-    </source>
-  </hostdev>
-  ```
+## 2. Step by step on the Windows 7 VM
 
-  Verify inside the VM BEFORE the session: the bootloader must appear in
-  Device Manager as an unknown/RAW device with VID 0471 PID 2600 (it has
-  no driver bound yet — that's normal and CORRECT: we want the VENDOR
-  driver to install it during the capture).
+The vendor software is installed, the camera is detected and its driver works.
+That is the starting point. Everything below runs **inside the Windows 7 VM**,
+not on the host.
 
-## 3. Software install order (inside the VM)
+1. **USBPcap.** Run `software\USBPcapSetup-1.5.4.0.exe` and install it. Then
+   **restart the VM**. Without the restart the USBPcap driver is not loaded and
+   `USBPcapCMD` answers "No filter control devices are available."
+2. **Test USBPcap.** Right-click `test_usbpcap.bat`, Run as administrator. Move
+   the mouse inside the VM while it records. The result must be
+   `USBPcap WORKS in this Windows`. If it is not, read the last lines: they
+   name the reason and the fix.
+3. **Prepare.** Start the vendor program and plug the sensor in, so that the
+   camera works as usual. Leave the vendor program open.
+4. **Record.** Right-click `run_capture.bat`, Run as administrator. It starts
+   USBPcap on every root hub first, then tells you to unplug the sensor and to
+   plug it in again. In the VM: disconnect it in the USB menu and connect it
+   again. When the camera works again, press a key. Without a key the capture
+   stops after 120 seconds. An optional number is the time limit:
+   `run_capture.bat 300`.
+5. **Read.** `run_capture.bat` scans the files at the end. You can also
+   double-click `check_capture.bat` at any time, it reads the newest run
+   folder.
+6. **Send.** Copy the whole folder `C:\idong_capture\run<N>` to the analysis
+   host: all `USBPcap<K>.pcap` files and the three text files. If the folder is
+   inside a VM, shared folders, a network share or a second USB stick that is
+   attached to the guest all work.
 
-1. **Wireshark** first — run `Wireshark-win64-4.6.10.exe`, defaults are
-   fine. Do NOT launch it yet.
-2. **USBPcap** second — run `USBPcapSetup-1.5.4.0.exe`. It installs
-   `USBPcapDriver.sys` + `USBPcapCMD.exe`. **The installer asks to
-   reboot — this is required** (the filter driver loads at boot). Do
-   the reboot inside the VM (a VM reboot is enough, not a host reboot).
-3. **Vendor stack** — copy `xeyez_setup.exe` + the two `.dat` files into
-   one folder, run `xeyez_setup.exe`. Choose the **"alone"** flavour if
-   asked (the standalone tool, not the Lobby game portal — "xeyez_alone"
-   is the driver+utility install we analyzed; the Lobby variant also
-   works). When the installer finishes, the tray app `xeyezMonitor.exe`
-   / service may auto-start. **Stop here — do not plug the sensor yet.**
+`check_sensor_attached.bat` is a quick check without recording: it prints
+whether Windows sees the sensor as 0471:2600, as 0471:2500 or not at all.
 
-## 4. Driver-signature caveats (Windows 10)
+## 3. How to read the scan
 
-- The vendor `xeyez.sys` (2008-era) is signed with an old AuthentiCode
-  cert chain. On Win10 x64 it generally installs (the vendor co-installer
-  `xeyezCoIns.dll` uses `UpdateDriverForPlugAndPlayDevices`), but if
-  Windows refuses it: Settings → Update & Security → Recovery → Advanced
-  startup → Troubleshoot → Advanced options → Startup Settings → **"Disable
-  driver signature enforcement"** (option 7, one-boot only). That is the
-  fastest unblock; test-signing mode (`bcdedit /set testsigning on`) is
-  the persistent variant.
-- USBPcap 1.5.4.0 is properly signed — no issue there.
+`check_capture.bat` prints one block per file: File, Size, Time, Sensor, MCU,
+DSP, Banner and Verdict. The verdict of the best file is the result.
 
-## 5. THE CAPTURE PROCEDURE (the 10-minute session)
+| Verdict | Meaning | What to do |
+| --- | --- | --- |
+| PASS | At least 10 MCU frames to the sensor and 3 frames from the DSP upload | Send the folder |
+| PARTIAL | Some sensor frames, but the boot is cut off | Run again, unplug the sensor after the recording has started, wait longer |
+| ENUM-ONLY | Only the USB enumeration, no sensor frames | The vendor program was not running, or the sensor was not replugged |
+| EMPTY | File is 0 or 24 bytes long | USBPcap opened the root hub but no packet arrived: run `test_usbpcap.bat` |
+| ERROR | Not a USBPcap file, or a corrupt record | Send the file anyway, the message says what is wrong |
 
-Everything below is automated by `scripts/run_capture.bat`; it is
-spelled out here so the capture can be re-done by hand if needed.
+The Sensor line shows the USB address of 0471:2600 and of 0471:2500. A good
+capture shows both. If it says "0471:2500 did not appear inside this capture",
+the vendor program did not finish the download: start it before the sensor is
+plugged in and run again.
 
-1. In the VM, plug/attach the sensor via the hostdev rules (§2). Wait
-   5 s. Confirm the bootloader is present: Device Manager shows
-   "TOLTech xeyez Bootloader"-ish unknown device, or Wireshark's USBPcap
-   interface list shows a `0471:2600` device.
-2. Start the capture (run_capture.bat does):
-   `"C:\Program Files\USBPcap1\USBPcapCMD.exe" -d \\.\USBPcap1 -o
-   C:\idong_capture\boot.pcapng --snap 0` — then attach the sensor.
-   USBPcapCMD lists devices when run bare; run_capture.bat targets the
-   root hub filter `-d \\.\USBPcap1` so BOTH enumerations (2600 → 2500)
-   land in one file.
-3. **Launch the vendor app** (xeyez.exe / the tray monitor that auto-
-   started). This triggers `_InitBlobUpload`: the exact sequence we
-   decode in `idong/src/protocol/boot.rs`:
-   DSP-start → "Ready to load program!" → count+CRC → 64-B type-3
-   packets → CRC verdict → device-ID polls → DSP reset → re-enum.
-4. Let the app run **at least 60 s past the boot** — the runtime
-   keep-alives (0xFFF/0xFFE) and marker stream are also wanted (they
-   validate stream.rs). If the app shows a preview/marker view, let it
-   stream a minute.
-5. Stop the capture (run_capture.bat stops USBPcapCMD; or press the
-   key/click the console window's stop). `boot.pcapng` is complete.
-6. Run `scripts/check_capture.ps1` in the VM: it scans the pcapng for
-   the PU/OD magics (bytes `50 55 7f 7f` / `4f 44 7f 7f`) and the
-   0471:2600→0471:2500 device-change events; it reports counts so you
-   KNOW the capture is good before copying it out.
-7. Copy the whole `C:\idong_capture\` folder out of the VM (shared
-   folder, or `scp`/RDP clipboard) to the analysis host.
+## 4. Notes for a VM
 
-## 6. Acceptance criteria (what makes this capture THE GATE)
+- USBPcap records what the **guest** Windows sends and receives. The VM passes
+  the USB transfers through to the real sensor, so the payloads in the file are
+  the vendor driver's requests and the sensor's answers. The timing in the file
+  is the timing of the guest, not of the physical bus.
+- Both 0471:2600 and 0471:2500 have to be attached to the guest. If the VM
+  software asks again when the sensor changes its ID, answer yes.
+- If the VM uses a USB 3.0 controller and the test files stay empty, switch
+  the VM's USB controller to USB 2.0. USBPcap needs an extra step for USB 3.0
+  root hubs: `USBPcapCMD.exe -I` in an elevated command prompt, as its own
+  help text says.
+- Run the scripts with "Run as administrator" inside the guest. Otherwise
+  Windows shows one UAC prompt per root hub for every run.
 
-The pcapng must contain, in order:
+## 5. Wireshark, optional
 
-1. Device-attach of 0471:2600 + GET_DESCRIPTOR traffic (bootloader).
-2. Host→device bulk OUT frames with the PU magic `50 55 7f 7f` — the
-   DSP-start, then type-2 count+CRC, then the type-3 64-byte packet
-   train (about 3687 packets for the 235,930-B `.bit` — or a different
-   count if the staging order starts with `.ldr`/`.hex`; THAT is what
-   the capture will tell us — open item #1).
-3. Device→host bulk IN frames with the OD magic `4f 44 7f 7f` — the
-   "Ready to load program!" ASCII (type 2), the CRC verdict (type 3,
-   status word), device-ID string.
-4. USB disconnect of 2600 + re-connect of 2500 (re-enumeration), with
-   the composite descriptors (UVC/UAC interfaces 0-3 + vendor MI_04).
-5. Runtime traffic: 0xFFF polls answered 0xFFE within ~1 s, link-status
-   type-4 exchanges, and bulk-IN marker records at ~50 fps.
+The kit does not need Wireshark: `check_capture.bat` reads the files itself.
+To look at a capture by hand, install `software\Wireshark-win64-3.2.18.exe`
+inside the VM and open `USBPcap<K>.pcap`. Wireshark 4.x does not install on
+Windows 7: the Wireshark documentation says "Wireshark 3.2 was the last release
+branch to officially support Windows 7 and Windows Server 2008 R2", and 3.2.18
+is the last 3.2 version in the official version index. 3.2.18 is from 2021 and
+gets no security updates, so use it only to open your own capture files.
 
-If any of 2-4 is missing, the capture is void — redo §5 with the
-sensor freshly power-cycled (it boots to the bootloader again only
-after being unplugged from power; a warm USB replug may keep it in
-runtime state — that's the vendor design, not an error).
+## 6. Without the scripts
 
-## 7. After the capture (host side, next turn)
+In a command prompt that was started with "Run as administrator":
 
-`check_capture.ps1` only sanity-checks; the byte-for-byte comparison
-against our decoder happens on the host:
-`tshark -r boot.pcapng -Y usb.capdata` → extract the bulk payloads →
-feed them through the Phase-1 `FrameDecoder`/`BootUploader` replay
-(golden-vector test, `tests/data/`). When the transcript matches to the
-byte, `BOOT_CONFIRMED` flips to `true` and Phase 3 (real hardware boot
-via our own uploader) is unblocked. Until then, nothing writes.
+```
+"C:\Program Files\USBPcap\USBPcapCMD.exe" --extcap-interfaces
+"C:\Program Files\USBPcap\USBPcapCMD.exe" -d \\.\USBPcap1 -A -o C:\idong_capture\manual.pcap
+```
 
-## 8. Safety rules reminder (unchanged)
+The first line lists the root hubs, for example `\\.\USBPcap1`. The second one
+records that root hub into `manual.pcap`. Stop with `q` in that window. Three
+rules: `-A` is required, an existing file is never overwritten (USBPcap exits
+at once, use a new name), and the path must not contain a space when the window
+is not elevated.
 
-- The capture itself is passive — it cannot damage anything. Run it as
-  many times as needed.
-- The vendor stack DOES write to the device (it's their job); that's
-  fine, they wrote it.
-- OUR code still writes nothing until the gate passes.
+## 7. Troubleshooting
+
+| What you see | Reason | Fix |
+| --- | --- | --- |
+| `test_usbpcap.bat`: "not found. USBPcap is not installed" | USBPcapSetup was not run inside the VM | Run it inside the guest, restart the VM |
+| "none. USBPcap finds no USB root hub" | No restart after the install, driver not loaded | Restart the VM |
+| "USBPcapCMD created no file" | UAC prompt was not answered, or not elevated | Run as administrator |
+| Files stay at 0 or 24 bytes | No USB traffic during the test, or USB 3.0 root hub | Move the mouse, replug the sensor, USB 2.0 controller |
+| Sensor line: "0471:2600 did not appear" | Recording started too late | Unplug the sensor after the recording has started |
+| Sensor stays at 2600, no 2500 | Vendor program not running | Start the vendor program, or restart it while the capture runs |
+| Sensor: not present | VM does not pass the sensor to the guest | Connect it in the USB menu of the VM |
+| "cannot create the folder C:\idong_capture" (turn 25) | `C:\idong_capture` was created by an elevated window; a normal window may read it but not write into it | Nothing to do by hand: every script now calls `predir.bat`, which repairs the rights when elevated or falls back to `%USERPROFILE%\idong_capture` and says so. To repair by hand: run any kit script once with Run as administrator |
+
+## 7a. The write-protected C:\idong_capture (turn 25)
+
+`C:\idong_capture` can end up writable only for administrators: an elevated
+window created it (the first run of an elevated `run_capture.bat` or
+`test_usbpcap.bat`). On Windows 7, a folder created by an elevated process is
+by default not writable by a normal user window: `md C:\idong_capture\run1`
+then fails with "Access is denied", which the scripts of turn 24 reported as
+"cannot create the folder".
+
+Every script of the kit now calls the helper `predir.bat` before it writes
+anything. It:
+
+1. creates `C:\idong_capture` when it does not exist,
+2. writes and deletes a probe file in it,
+3. repairs the rights with `icacls ... /grant Users:(OI)(CI)M` when the probe
+   fails and the window is elevated,
+4. falls back to `%USERPROFILE%\idong_capture` when that also fails, and
+5. says which folder is used, so the location of the captures stays visible.
+
+`predir.bat` sets `CAPROOT` (the folder to use) and `PREDIRRC` (0 = normal,
+1 = fallback, 2 = no writable folder at all). The scripts print the folder and
+the note from `predir.bat` at the start, and the result lines of section 1.4
+apply to the folder that was named there. The repair in step 3 grants the
+*Users* group the right to create, change and delete files in the capture
+folder - the same rights the folder would have if a normal window had created
+it. It does not touch any other folder and it is not run automatically: it
+runs only inside a kit script that was started by hand.
+
+A one-time alternative without the kit: right-click `cmd.exe`, Run as
+administrator, then `icacls C:\idong_capture /grant Users:(OI)(CI)M`.
+
+## 8. What is verified and what is not
+
+- Read in the USBPcap 1.5.4.0 source (`USBPcapCMD/cmd.c`): the program is a
+  windowless program that attaches to the console of its parent, both stdout
+  and stderr redirected to a file keeps it quiet, `-A` is required, the output
+  file is created with `CREATE_NEW`, the driver service is named `USBPcap`, a
+  process that is not elevated restarts itself with a UAC prompt per root hub.
+- Tested: the scanner inside `check_capture.bat` with synthetic USBPcap files
+  in a Node harness: full boot, enumeration only, partial boot, runtime only,
+  records across 1 MiB read chunks, header only, truncated file, not a pcap,
+  empty file, stream only, 2600 and 2500 on the same address, interrupt
+  endpoints, corrupt record. All passed.
+- Not tested: the cmd.exe scripts were never executed, there is no Windows in
+  the sandbox where they were written. They were checked line by line and with
+  a static checker for the usual batch traps. The capture recipe was not tried
+  on a real sensor. If a script stops with an error, send the text of its
+  window.
+- `Wireshark-win64-3.2.18.exe` was downloaded from the official version index
+  of wireshark.org over HTTPS. SHA-256:
+  `cbee6bb8d250287d8bcc41dc0353c425d87dceffa5005b3d9ab755090709e7b9`.
+  The checksum was not compared with a second source.
