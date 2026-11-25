@@ -90,3 +90,25 @@ driver can be written.
 - **NEVER write to the T24C16A EEPROM** — the dump is the only backup of
   the factory calibration.
 - Treat any MD5 change on a future EEPROM read as corruption.
+## Turn-32 wire facts (2026-11-26, cap2/cap3/cap4 - full sessions)
+
+- The wire protocol is fully observed for boot + idle session:
+  `7F 55 <cmd u16 LE> <flags> <00> <body>` frames plus raw 64-B records.
+  See docs/PROTOCOL.md "Turn 32" and agents/14-captures32/FINDINGS.md.
+- Boot on 0471:2600: 0x0008 -> "2600"; 0x0101 begin(size BE); 335 raw
+  64-B blocks; 0x0201 verify(0x8000, size) + full echo readback; 0x0301
+  key FE2AC9BBAE11D5C2; 0x0401 launch -> re-enumerates as 0471:2500.
+- Session on 0471:2500: 0x0008 -> "2619"; 0x0107(off,len) EEPROM read
+  (raw len bytes, last = sum checksum - the calibration record, "000T",
+  "2613" reads observed); 0x0104/0x0204 CMOS register tables;
+  0x0103/0x0203 8-B chunks; 0x0303 end; polls 0x0003/0x0004/0x0005/
+  0x000d/0x0404/0x040f.
+- The downloaded image = app_m8051_2611.hex flattened over
+  [0x8000,0xD3A3), gaps 0x00 (SHA-256 5da1565c...c2aba9c).
+- NO DSP/FPGA upload on the wire: ens_code.ldr and
+  A_a_v4.4_BG0313.bit are never sent; 0 PU/OD frames in ~12,000 records.
+- No image/marker stream in 535 s of vendor-session capture: the app
+  never entered a camera/motion mode. The marker-record model
+  (xEyeClass 0x3BC records) remains unobserved on the wire.
+- Turn-28 command IDs were big-endian readings of the same commands
+  (0102<->0x0201, 0104 "run"<->0x0401, 0701<->0x0107, 0f04<->0x040f).

@@ -81,6 +81,83 @@ impl FirmwareSet {
         "1fad00c1dca7f995e8b58d4ed6c5c080da4005f63682ad7af6288abd4d118f35",
     ];
 
+    /// SHA-256 of the flattened MCU image the vendor downloads to the
+    /// 2500 device (turn 32, byte-verified against three captures).
+    pub const MCU_IMAGE_SHA256: &str =
+        "5da1565c6704d387081844e712b4be4d521083e21a619df7d6cb11551c2aba9c";
+
+    /// Build the 21,411-B MCU image the vendor sends with 0x0101:
+    /// the Intel-HEX records of `app_m8051_2611.hex` flattened over
+    /// [0x8000, 0xD3A3) with 0x00 gap fill. Byte-identical to the
+    /// download in cap2/cap3/cap4 (readback-verified 335/335 blocks).
+    ///
+    /// Rule: hex records below 0x8000 (the 3-B reset vector at 0x0000)
+    /// are ignored - the vendor image starts at 0x8000; hex gaps become
+    /// 0x00, not the 0xFF flash-erase value.
+    pub fn mcu_image(&self) -> Result<Vec<u8>> {
+        use std::path::PathBuf;
+        let text = std::str::from_utf8(&self.hex)
+            .map_err(|_| IdongError::Usb("app_m8051_2611.hex is not ASCII".into()))?;
+        let (base, end) = (0x8000usize, 0xD3A3usize);
+        let mut mem = vec![0u8; end - base];
+        let mut hibase = 0usize;
+        for line in text.lines() {
+            let line = line.trim();
+            if !line.starts_with(':') {
+                continue;
+            }
+            let b = Self::hex_bytes(line.as_bytes())
+                .ok_or_else(|| IdongError::Usb(format!("bad hex line: {line}")))?;
+            if b.len() < 5 {
+                continue;
+            }
+            let (cnt, typ) = (b[0] as usize, b[3]);
+            let data = &b[4..4 + cnt];
+            match typ {
+                0x00 => {
+                    let addr = hibase + ((b[1] as usize) << 8) + b[2] as usize;
+                    if addr >= base && addr + data.len() <= end {
+                        mem[addr - base..addr - base + data.len()].copy_from_slice(data);
+                    }
+                }
+                0x02 => hibase = (((data[0] as usize) << 8) + data[1] as usize) << 4,
+                0x04 => hibase = (((data[0] as usize) << 8) + data[1] as usize) << 16,
+                0x01 => break,
+                _ => {}
+            }
+        }
+        if Self::sha256hex(&mem) != Self::MCU_IMAGE_SHA256 {
+            return Err(IdongError::FirmwareIntegrity {
+                path: PathBuf::from("app_m8051_2611.hex (flattened MCU image)"),
+                got: Self::sha256hex(&mem),
+                want: Self::MCU_IMAGE_SHA256.to_string(),
+            });
+        }
+        Ok(mem)
+    }
+
+    /// Minimal ASCII-hex pair decoder (no external deps in the core).
+    fn hex_ascii_val(c: u8) -> Option<u8> {
+        match c {
+            b'0'..=b'9' => Some(c - b'0'),
+            b'A'..=b'F' => Some(c - b'A' + 10),
+            b'a'..=b'f' => Some(c - b'a' + 10),
+            _ => None,
+        }
+    }
+
+    fn hex_bytes(s: &[u8]) -> Option<Vec<u8>> {
+        let body = &s[1..]; // skip ':'
+        if body.len() % 2 != 0 {
+            return None;
+        }
+        let mut out = Vec::with_capacity(body.len() / 2);
+        for pair in body.chunks(2) {
+            out.push((Self::hex_ascii_val(pair[0])? << 4) | Self::hex_ascii_val(pair[1])?);
+        }
+        Some(out)
+    }
+
     /// Verify each image against its pinned SHA-256 (safety rule #3:
     /// a mismatch aborts before the first byte leaves the host).
     pub fn verify(&self) -> Result<()> {

@@ -12,6 +12,7 @@ pub mod boot;
 pub mod cmd;
 pub mod frames;
 pub mod records;
+pub mod runtime;
 
 use std::time::Duration;
 
@@ -74,15 +75,20 @@ pub const CRC_FAIL_WORD: u16 = 0x000F;
 /// Link-status reply word (tx_builder @0x10010291).
 pub const LINK_STATUS_REPLY_WORD: u16 = 0x0011;
 
-// ---- Runtime framing (xeyezHal.dll v2.6.0.6) ----
-/// Runtime frame header: 7F 55 at byte offset 0-1.
+// ---- Runtime framing (observed, turn 32: cap2/cap3/cap4) ----
+/// Runtime frame header: 7F 55 <cmd u16 LE> <flags> <rsv> (6 B).
+/// Full observed command set: `protocol::runtime`.
 pub const RUNTIME_MAGIC: [u8; 2] = [0x7f, 0x55];
 /// Runtime TX timeout (1 s).
 pub const RUNTIME_TX_TIMEOUT: Duration = Duration::from_secs(1);
 /// Runtime RX timeout (5 s).
 pub const RUNTIME_RX_TIMEOUT: Duration = Duration::from_secs(5);
-/// Runtime command payload maximum (56 B).
+/// Runtime command payload maximum (56 B, the largest observed body).
 pub const RUNTIME_PAYLOAD_MAX: usize = 56;
+/// MCU image load base (0x0201 verify args) and observed size
+/// (0x0101 begin args): 0x8000..0xD3A3 = 21,411 B.
+pub const MCU_IMAGE_BASE: u16 = 0x8000;
+pub const MCU_IMAGE_SIZE: u16 = 0x53A3;
 
 // ---- Keep-alive (xEyeClass reader thread) ----
 /// Device polls with 0xFFF; the host must answer 0xFFE within 1 s.
