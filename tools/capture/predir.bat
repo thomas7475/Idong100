@@ -11,10 +11,18 @@ REM  tried, and it WAITS for a key before it closes.
 REM
 REM  Why this exists (turn 25): C:\idong_capture was created by
 REM  an elevated window, and on Windows 7 such a folder is by
-REM  default not writable for a normal window. Turn 26 adds:
+REM  default not writable for a normal window. Turn 26 added:
 REM  more fallback folders, the probe errors are collected and
 REM  shown, and every script tells you how to copy its window
 REM  text so it can be sent as a screenshot-free report.
+REM
+REM  Turn 27 removed the folder existence checks completely:
+REM  "if exist folder\nul" reported folders as missing on this
+REM  Windows (FAT32/exFAT drive, seen in VMs) even right after
+REM  md had created them, so all four candidates were rejected
+REM  with "cannot create the folder" although the folders were
+REM  there. A real file write is now the only judge: md, then
+REM  copy nul into the folder. Only the write decides.
 REM
 REM  Folders tried, in this order:
 REM    1. SystemDrive\idong_capture    C:\idong_capture
@@ -28,6 +36,9 @@ REM
 REM  The first folder that accepts a probe file becomes CAPROOT.
 REM  When the first candidate fails and this window is elevated,
 REM  C:\idong_capture gets an icacls repair attempt first.
+REM
+REM  A folder "exists" for this script only when a file can be
+REM  written into it. There is no existence check on purpose.
 REM
 REM  Sets for the caller:
 REM    CAPROOT   folder to use
@@ -122,11 +133,7 @@ goto :wait_end
 
 rem ============ subroutines, called with W set ============
 :try
-if not exist "%W%\nul" md "%W%" >nul 2>&1
-if not exist "%W%\nul" (
-  call :note "cannot create the folder"
-  goto :eof
-)
+md "%W%" >nul 2>&1
 copy /y nul "%W%\predir_probe.tmp" >nul 2>&1
 if errorlevel 1 (
   call :note "cannot write a file into it"
@@ -137,12 +144,11 @@ set "CAPROOT=%W%"
 goto :eof
 
 :note
-if "!PROBES!"=="" set "PROBES=[!W!: %~1]"
-if not "!PROBES!"=="" set "PROBES=!PROBES! [!W!: %~1]"
-if "!W!"=="%C1%" set "PROBES_C1=%~1"
-if "!W!"=="%C2%" set "PROBES_C2=%~1"
-if "!W!"=="%C3%" set "PROBES_C3=%~1"
-if "!W!"=="%C4%" set "PROBES_C4=%~1"
+set "PROBES=!PROBES! [!W!: %~1]"
+if not defined PROBES_C1 if "!W!"=="%C1%" set "PROBES_C1=%~1"
+if not defined PROBES_C2 if "!W!"=="%C2%" set "PROBES_C2=%~1"
+if not defined PROBES_C3 if "!W!"=="%C3%" set "PROBES_C3=%~1"
+if not defined PROBES_C4 if "!W!"=="%C4%" set "PROBES_C4=%~1"
 goto :eof
 
 :wait_end

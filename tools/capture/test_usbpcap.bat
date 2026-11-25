@@ -76,8 +76,10 @@ if not "%ARG%"=="" (
   if !SECS! LSS 5 set "SECS=5"
   if !SECS! GTR 900 set "SECS=900"
 )
-if not exist "!TMPD!" md "!TMPD!"
-if not exist "!TMPD!\nul" goto :no_workdir
+md "!TMPD!" >nul 2>&1
+copy /y nul "!TMPD!\work_probe.tmp" >nul 2>&1
+if errorlevel 1 goto :no_workdir
+del /q "!TMPD!\work_probe.tmp" >nul 2>&1
 
 REM ---------- 1. the program ----------
 echo [1/6] USBPcapCMD.exe

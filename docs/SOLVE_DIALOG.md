@@ -479,3 +479,65 @@ folder candidates, the icacls repair and the fallback chain are statically
 checked only (0 lint errors, the JScript scanner harness passes 66/66). If
 prefdir.bat by hand reports a case not covered by the four candidates, its
 window text decides the next step.
+
+## Turn 27 (2026-11-25): the folders WERE created, the script denied it
+
+User report: "the script is still not working correct it says the folder
+where not created but from the picture you can clearly see that they where
+created." Attached: foldercreated.png (Explorer at C:\Users\t - idong_capture
+sits there, created 25.11. 14:39) and foldercreated2.png (Explorer at C:\ -
+idong_capture sits there, created 25.11. 14:39). The pasted predir.bat
+self-test output says all four candidates failed with "cannot create the
+folder" - but the timestamps of both folders match the run, so md had
+created them.
+
+### Root cause: the \nul existence trick
+
+The turn-26 predir.bat judged a folder with:
+
+    if not exist "%W%\nul" md "%W%" >nul 2>&1
+    if not exist "%W%\nul" ( call :note "cannot create the folder" ... )
+
+"if exist folder\nul" is a DOS-era device-name trick. On NTFS it answers
+true for any existing folder, but on FAT32/exFAT volumes - common for VM
+disks - it answers false even for a folder that md created a millisecond
+earlier. The user's Windows ran from such a volume: every md succeeded
+(both folders exist, timestamps prove it), every check lied, so all four
+candidates were rejected with "cannot create the folder" and PREDIRRC=2
+again. The same \nul check sat in run_capture.bat (ARG2, work, runN),
+test_usbpcap.bat (work) and check_capture.bat (TARGET and runN scan).
+
+A second, smaller bug compounded the confusion: :note appended the first
+candidate's error twice (the empty-string test and the append both ran
+under enabledelayedexpansion), which is why the pasted output lists
+"[C:\idong_capture: cannot create the folder]" two times.
+
+### The turn-27 fix
+
+1. :try in predir.bat: md unconditionally, then copy /y nul into the
+   folder - the write alone decides. No existence check anywhere.
+2. :note rewritten so each error lands exactly once (PROBES_Cx guards).
+3. The same treatment in run_capture.bat (ARG2 probe, work probe, mkrun
+   loop: create runN, write dir_probe.tmp, only a failed write advances
+   N), test_usbpcap.bat (work probe).
+4. check_capture.bat: folder tests use the trailing-backslash form
+   folder\ only (works on every file system); the \nul variants removed.
+5. predir.bat header comment documents the turn-27 change; CAPTURE_KIT.md
+   section 7a rewritten around "a folder counts only when a file can be
+   written into it", plus a troubleshooting row for the \nul liar.
+
+### Verification
+
+Lint: 0 errors on all 9 .bat. Node scanner harness: 66/66 PASSED. Kit
+text checks: ASCII, CRLF, no PowerShell. Still no Windows in the sandbox:
+the FAT32 explanation for the lying \nul check is the consistent hypothesis
+(both folders created at 14:39 while the self-test denied them), but the
+volume format itself is not verified - the fix removes the check on every
+file system, so the explanation no longer matters for the scripts to work.
+
+### Next
+
+User replaces the kit with the turn-27 one. predir.bat by hand should now
+say "OK: C:\idong_capture is writable." Then test_usbpcap.bat ->
+run_capture.bat -> check_capture.bat, and the runN folder it names gets
+sent.
