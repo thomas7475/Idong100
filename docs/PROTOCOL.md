@@ -156,3 +156,33 @@ direction bit in the info byte at offset 16, device address at offset 19,
 endpoint at offset 21. A bulk or interrupt transfer to the sensor carries its
 payload in the submit packet, from the sensor in the complete packet. A control
 transfer is a SETUP packet with stage 0 and a COMPLETE packet with stage 3.
+
+## Turn 28 update: the real wire protocol, read off a real capture
+
+The phase-2 capture (see SOLVE_DIALOG turn 28) corrected the model built from
+the DLL analysis. All traffic is bulk on ep 0x02 OUT / 0x82 IN; framing is
+`7F 55 cmd_lo cmd_hi len_lo len_hi body` (little-endian; replies repeat the
+command with a 0x01 flag byte). The MCU download is NOT 50 55 7f 7f framed:
+it is raw 64-B blocks after a 0101 handshake carrying the total size, and the
+sensor echoes every block back on 0x82 (verified byte-identical, 334/334).
+The downloaded image is app_m8051_2611.hex at 0x8000, byte-identical.
+
+Boot loader commands (0471:2600): 0x0800 GetMcuVersion -> "2600"; 0x0101
+begin (size); data blocks; 0x0102 verify (0x8000+size); 0x0103 finalize
+(four u16); 0x0104 run -> re-enumerates as 0471:2500.
+
+Runtime commands (0471:2500): 0x0701 request-frame (raw replies: version
+"2619"+cc, 64-B image payloads, 5-B status words); 0x0400/0x0401/0x0402/
+0x0404 exposure/gain (00 38 / 00 18 pairs); 0x0300 begin, 0x0301 write entry,
+0x0302 read back (verified to return the written value), 0x0303 end;
+0x0500 flush; 0x0800 version -> "2619"; 0x0d00 and 0x0f04 polls.
+
+The 2500 configuration descriptor: 5 interfaces; endpoints bulk 0x02/0x82/
+0x03/0x83 (maxpkt 512), isochronous IN 0x85 (alt 1: 812 B, alt 2: 4900 B),
+interrupt IN 0x84 (32 B). Vendor control requests on ep 0 with bmRequestType
+0xA1: req 0x82/0x84 register TLV access, req 0x83/0x86/0x87 return
+descriptors.
+
+Still unobserved on the wire: the DSP upload, the FPGA upload, and any
+traffic on ep 0x85/0x84 (the camera stream). These need the "full vendor
+session" capture of turn 28's next step.

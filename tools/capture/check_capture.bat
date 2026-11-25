@@ -180,7 +180,7 @@ function addBytes(map, key, n) {
 function newResult(path) {
     return { path: path, err: "", warn: "", size: 0, packets: 0, data: 0,
              firstTs: 0, lastTs: 0, truncated: 0, cam2600: -1, cam2500: -1,
-             pu: 0, od: 0, rtOut: 0, rtIn: 0, ready: 0,
+             pu: 0, od: 0, rtOut: 0, rtIn: 0, ready: 0, ep02Bytes: 0, ep82Bytes: 0,
              outFrames: {}, inFrames: {}, inBytes: {} };
 }
 
@@ -218,11 +218,13 @@ function processPacket(r, s, off, incl) {             // off = position of the U
     head = s.substr(d, 4);
     if ((ep & 0x80) === 0) {                          // OUT: the payload travels in the submit packet
         count(r.outFrames, dev);
+        if ((ep & 0x7f) === 0x02) { r.ep02Bytes += avail; }
         if (head === PU) { r.pu++; }
         else if (head.substr(0, 2) === RT && (ep & 0x7f) === 0x02) { r.rtOut++; }
     } else {                                          // IN: the payload travels in the complete packet
         count(r.inFrames, dev);
         addBytes(r.inBytes, dev, avail);
+        if ((ep & 0x7f) === 0x02) { r.ep82Bytes += avail; }
         if (head === OD) { r.od++; if (hasReady(s, d, avail)) { r.ready++; } }
         else if (head.substr(0, 2) === RT && (ep & 0x7f) === 0x02) { r.rtIn++; }
     }
@@ -243,6 +245,12 @@ function scanFile(path) {
             return r;
         }
         h = bin(st.Read(24));
+        if (h.length < 24) {
+            r.err = "could not read the first 24 bytes (ADODB/VBArray) - "
+                  + "tell us if this repeats, the file itself is fine";
+            st.Close();
+            return r;
+        }
         if (h.substr(0, 4) !== PCAP_MAGIC) {
             r.err = "not a USBPcap .pcap file (wrong magic number)";
             st.Close();
@@ -287,6 +295,11 @@ function verdict(r) {
         if (r.cam2600 >= 0 || r.cam2500 >= 0) { return "ENUM-ONLY"; }
         return "NO-CAMERA";
     }
+    // Turn 28: the real capture proved this firmware downloads the MCU program
+    // as plain blocks on ep 02 with a full echo on ep 82 - only the handshake
+    // frames carry 7f 55. A complete boot therefore shows: BOTH 2600 and 2500
+    // descriptors AND a sizeable data volume on endpoint 02 (the download).
+    if (r.cam2600 >= 0 && r.cam2500 >= 0 && r.ep02Bytes >= 10000) { return "PASS"; }
     if (r.pu >= GATE_PU && r.od >= GATE_OD) { return "PASS"; }
     return "PARTIAL";
 }
@@ -360,7 +373,8 @@ function gateLines(out, r) {
              " frames 7f 55 on endpoint 02 and 82");
     out.push("Banner  : \"Ready to load program!\" " + (r.ready > 0 ? "FOUND, " + r.ready + " time(s)" : "not found"));
     if (v === "PASS") {
-        out.push("Verdict : PASS - the sensor boot is in this file (at least " + GATE_PU + " PU and " + GATE_OD + " OD frames).");
+        out.push("Verdict : PASS - the sensor boot is in this file (at least " + GATE_PU + " PU and " + GATE_OD + " OD frames,");
+        out.push("          or a full 2600->2500 boot: both descriptors plus at least 10000 bytes on ep 02).");
     } else if (v === "PARTIAL") {
         out.push("Verdict : PARTIAL - sensor frames are there, but fewer than " + GATE_PU + " PU or " + GATE_OD + " OD.");
         out.push("          Start the capture BEFORE the sensor is plugged in and stop it only after the vendor program is up.");
