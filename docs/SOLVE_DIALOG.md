@@ -617,3 +617,37 @@ byte of that phase is verified against the vendor's own files.
   download/ deliberately: it is a firmware image, not a deliverable)
 - download/idong100_capture_analysis_turn28.md - the full analysis report
 - Kit rebuilt as turn 28 (check_capture.bat with the fixes above).
+
+## Turn 29 (2026-11-25): the post-driver-install dialog decoded - it is an ad, not an error
+
+User quote: "lets continue the pc software reports the above, so this is a
+problem, can we fix this or do i need a other software version." with the same
+win7-afterdriver.install.png (GBK mojibake on a Western-locale Win7).
+
+Found the exact string inside the vendor binaries (xEyeUSB.dll 2.6.0.6
+.rdata VA 0x10016060, duplicate 0x100160d8; also in 2.5.0.7):
+
+  idong感应器引擎 / 您购买的是爱动体感运动机(大众版)，若要升级到爱动体感
+  运动机(运动王PC版)，请拨打咨询热线400-1818-520。
+
+= "You purchased the Public Edition (大众版); to upgrade to the Sports King PC
+Edition call the hotline 400-1818-520." An upsell advertisement.
+
+Code proof that it is harmless: dialog function at .text 0x76d0 does
+FindWindowA("xEyezEngine2009") + MessageBoxA; called from init step 0x6500
+(dialog call at 0x67ff); the code after the call loops back into init - no
+abort, no error state. The turn-28 capture independently proves the app kept
+running its full runtime protocol afterwards. Same string/logic in v2.5.0.7,
+so no vendor version escapes it. The edition is derived from the installed
+lobby (registry SOFTWARE\TOLTech\Location ->
+lobby\ConfigManagement.dll!GetLobbyVer, letters DSHYK -> edition codes 0/1/2).
+
+Answers given: no other software version needed; nothing functional to fix;
+OK to click through; the garbled characters are just the system locale
+(GBK app on Western Win7) - optionally set "language for non-Unicode
+programs" to Chinese (Simplified) to read it; the dialog is shown by the
+vendor PC software, never by our driver.
+
+Consequence for the capture plan: the ad did NOT block the DSP/FPGA upload -
+the vendor app simply had not reached that stage in the 108 s window. Next
+capture remains "run the vendor session until the camera image shows".
