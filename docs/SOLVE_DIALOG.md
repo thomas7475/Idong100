@@ -704,3 +704,68 @@ Effect on the plan: with the vendor software kept alive, the next capture can
 run until the live camera image stage (turn-28 capture ended while the app
 was still in its polling window). Our Rust driver never executes this path
 (it is lobby bookkeeping, not sensor control), so no driver changes.
+
+## Turn 31 (2026-11-25): turn-30 fix failed on the machine - patched the DLL itself
+
+User quote: "the fix is not working the dll gets placed but i still get the
+up sell message, research a more robust fix patch the software itself if
+needed but make sure it is robust and working."
+
+### Turn-30 defect analysis (owned)
+1. The shim DLL itself was malformed (export table built at wrong optional-
+   header offsets; the checked-in build only passed because LIEF tolerates
+   the layout). A real 32-bit Windows loader may reject or misread it.
+2. The .bat shipped with LF line endings - the user's echo shows cmd
+   executing the English prose as commands ("Der Befehl 'appear'...").
+3. The default INSTALLDIR was a guessed path
+   (C:\Program Files\TOLTech\xeyez_engine) and not validated; user's echo
+   shows the registry value actually written to a doubled path under
+   ...\xeyez_engine\xeyez_engine\Chs.
+4. No WOW64 consideration (32-bit app on 64-bit Windows reads
+   HKLM\SOFTWARE\Wow6432Node in the reflected view).
+5. No verification step and no restore path.
+
+### What was verified this turn
+- Uploaded v2.6.0.6.zip is the same payload already analysed
+  (xeyez_alone.dat / xeyez_Lobby.dat / xeyez_setup.exe + pingbisetup.exe).
+- Both "alone" and "Lobby" installs ship byte-identical xEyeUSB.dll
+  (md5 00563d0f5c49d1d132e1475ee8f4841b) - one patch covers both.
+- Scanned all 372 PEs of the payload: the upsell text/phone/public-edition
+  wording exists ONLY in xEyeUSB.dll (plus the phone as UTF-16 in
+  xEyeSetupHelper.dll) - no second module shows the box.
+- xEyeUSB.dll is NOT Authenticode-signed (no WINTRUST/IMAGEHLP imports;
+  only driver-check DLLs use CryptHashData) - patching cannot break a
+  signature. CheckSum field left as the vendor's value (loader ignores it
+  for DLLs).
+- Patch = exactly 4 bytes at 2 sites (scripts/patch31.py, manifest kept):
+    file 0x7520 (VA 0x10007520): 55 8B EC -> 31 C0 C3   edition check now
+        "xor eax,eax; ret" -> always "valid, edition ok"
+    file 0x77d0 (VA 0x100077d0): 55       -> C3         upsell+close now
+        "ret" - the box + SendMessageA(0xBD9) + MSVCR80!exit(-1) never run
+  Everything else byte-identical (sha256 f01838... -> e85662...).
+- Unicorn emulation of the REAL bytes, 23 scenarios each:
+  original shows MessageBox + exit on every failure path (23/23), patched
+  never shows it and keeps running (23/23); two negative-control variants
+  fail as designed (17/23) proving the harness detects breakage.
+- Structural PE validation (LIEF): machine/entry/17 imports/21 exports
+  unchanged; patched offsets decode as the intended instructions.
+- Sandbox limit, stated plainly: this box has no 32-bit Wine (i386-windows
+  empty, no wine32 package, no cross-compiler), so the last proof - loading
+  the patched DLL in a real Windows loader - happens on the user's Win7
+  machine; that is what the kit's verify step is for.
+
+### The kit (download/idong100_patch31 + idong100_patch31_kit.zip)
+- xEyeUSB\xEyeUSB.dll (patched), xEyeUSB\xEyeUSB.dll.orig (vendor
+  reference; also byte-identical in the Lobby install).
+- patch_idong_alive31.bat - Administrator; finds the install itself
+  (C:/D:\TOLTech, Program Files + (x86), plus registry Location incl.
+  Wow6432Node); refuses any file that is not the exact 2.6.0.6 build
+  (size 137584 + fc /b against both references); backup
+  xEyeUSB.dll.idong31-backup; copy; fc /b self-check with rollback.
+- restore_idong31.bat - undo (backup first, else kit reference; fc /b
+  verify).
+- verify_idong31.bat - read-only state check (patched/unpatched/other).
+- All .bat: pure cmd, no PowerShell, CRLF, ASCII-only, if-exist chain for
+  the folders (no for-in parenthesis traps). Decision logic simulated in
+  Python over a fake install tree: unpatched->DONE, patched->no-op,
+  foreign build->refuse, restore->byte-identical.
