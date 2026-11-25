@@ -1,34 +1,63 @@
 @echo off
+setlocal
+title idong100 - sensor state
 REM ============================================================
-REM idong100 P2 kit - sensor pre-flight check (cmd only)
-REM Confirms the idong sensor is attached and enumerating before
-REM running the vendor installer, which gives up after ~10 s if
-REM none of the Philips VID_0471 device IDs are present and then
-REM shows 安装驱动程序失败！. Run as Administrator.
+REM  check_sensor_attached.bat - which idong sensor state is present?
+REM  Turn 24 rewrite. Pure cmd.exe, no PowerShell.
+REM
+REM  0471:2600  the sensor is in its boot loader. It was just plugged
+REM             in and waits for the vendor program.
+REM  0471:2500  the vendor program has downloaded the sensor program,
+REM             the sensor is running.
+REM  nothing    the sensor is not plugged in, or the VM does not pass
+REM             it through to this Windows.
+REM
+REM  The vendor installer needs the sensor present: without any VID_0471
+REM  device it stops after about 10 seconds with a message box whose
+REM  Chinese title says that the driver installation failed.
+REM  The window stays open at every exit (user rule, turn 19).
 REM ============================================================
-setlocal enableextensions
 
+set "RC=1"
+set "S2600="
+set "S2500="
+
+echo === idong100 - sensor state ===
 echo.
-echo === idong100 sensor pre-flight check ===
+echo Devices with VID 0471 that this Windows sees now:
+wmic path Win32_PnPEntity get DeviceID /value 2>nul | findstr /i "VID_0471"
+if errorlevel 1 echo   none
 echo.
+wmic path Win32_PnPEntity get DeviceID /value 2>nul | findstr /i "VID_0471&PID_2600" >nul && set "S2600=1"
+wmic path Win32_PnPEntity get DeviceID /value 2>nul | findstr /i "VID_0471&PID_2500" >nul && set "S2500=1"
+if defined S2600 goto :s2600
+if defined S2500 goto :s2500
 
-set FOUND=0
-for /f "usebackq tokens=*" %%i in (`wmic path Win32_PnPEntity where "DeviceID like 'USB\\%%VID_0471%%'" get DeviceID 2^>nul ^| findstr /i "VID_0471"`) do (
-  echo   FOUND: %%i
-  set FOUND=1
-)
+echo Result: NO sensor found.
+echo   Plug the sensor in. In a VM, also connect it to the VM in the USB menu.
+echo   Then run this check again.
+goto :done
 
-if "%FOUND%"=="1" (
-  echo.
-  echo A Philips VID_0471 USB device is enumerated - the installer's
-  echo device scan should find it and the driver stage can proceed.
-) else (
-  echo.
-  echo NO Philips VID_0471 USB device found. The vendor installer will
-  echo wait about 10 seconds and then fail with 安装驱动程序失败！
-  echo Plug the idong sensor into a rear USB port ^(avoid hubs^), wait
-  echo for the enumeration sound, then run this check again.
-)
+:s2600
+set "RC=0"
+echo Result: the sensor is present as 0471:2600, the boot loader.
+echo   The vendor program can download the sensor program now. It is normal
+echo   to see this state for a few seconds after plugging the sensor in.
+if defined S2500 goto :both
+goto :done
+
+:s2500
+set "RC=0"
+echo Result: the sensor is present as 0471:2500, its program is loaded.
+echo   To capture the program download: unplug the sensor and plug it in
+echo   again while run_capture.bat is capturing.
+goto :done
+
+:both
+echo   Both 0471:2600 and 0471:2500 are present: two sensors, or a second
+echo   device with the same vendor ID.
+
+:done
 echo.
 pause
-endlocal
+endlocal & exit /b %RC%

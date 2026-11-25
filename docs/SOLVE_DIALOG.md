@@ -318,3 +318,107 @@ actually reads); on 32-bit Windows the plain view. `\\.\vKeyboard`/
 `\\.\vMouse` only exist after the *virtual HID drivers* are installed —
 those are NOT required for the launcher to pass; the registry mark
 alone satisfies the launcher's `VerifyInstallSystem` "Lobby" path.
+
+
+## Turn 24 (2026-11-25): Windows 7 VM, the box after the driver install, check_capture closed at once
+
+Setup of this turn: Windows 7 VM, vendor software installed, camera detected,
+the driver works. All scripts of the kit were rewritten for this state.
+
+### 1. The box after the driver install is not an error
+
+The screenshot `win7-afterdriver.install.png` shows a message box of the vendor
+program: "您购买的是爱动体感运动机(大众版)，若要升级到爱动体感运动机(运动王PC版)，请拨打咨询热线400-1818-520。"
+In English: "You bought the i-dong motion machine (standard edition). To upgrade
+to the i-dong motion machine (Sports King PC edition) please call the hotline
+400-1818-520." It is an advertisement that the program shows when it recognises
+the sensor as the standard edition. The installation is complete, the sensor
+was found. Click OK and continue. Nothing has to be fixed.
+
+This is a different box from the "安装驱动程序失败！" one of turn 23. That one
+means that no sensor with VID 0471 was present while the installer looked for
+it; run `check_sensor_attached.bat` to see the state before installing.
+
+### 2. Why check_capture.bat "does nothing, it closes immediately"
+
+Three defects of the turn-23 kit came together:
+
+| Defect | Effect | Fix in turn 24 |
+| --- | --- | --- |
+| `check_capture.bat` needed a path as argument | It printed one line and exited, no pause | No argument needed: it reads `C:\idong_capture`, newest `runN`, a file or a folder can be dropped onto it, `pause` on every exit |
+| `run_capture.bat` called `USBPcapCMD.exe --snap 0` without `-A` | USBPcap rejects snaplen 0, and without `-A` it records nothing | `-A` on every start, default snaplen |
+| `run_capture.bat` started `C:\Program Files\USBPcap1\USBPcapCMD.exe` | The installer puts the program into `C:\Program Files\USBPcap\` | The scripts search the install folders and the uninstall registry entry |
+
+So the checker looked for `C:\idong_capture\boot.pcapng`, a file that never
+existed.
+
+### 3. Further defects of the kit found and fixed in turn 24
+
+| File | Defect | Fix |
+| --- | --- | --- |
+| all `.bat` | Line-feed line endings from the Linux sandbox | All converted to CRLF, `.gitattributes` keeps them CRLF |
+| kit | Left-over PowerShell files `check_gate.ps1`, `scripts\check_capture.ps1` | Removed, the kit is pure cmd.exe |
+| `run_capture.bat` | Search for a free run folder: `if exist ... set /a N+=1 & goto` - the `goto` ran even when the condition was false, an endless loop | Two separate statements with parentheses-free `if` |
+| `run_capture.bat` | USBPcap was started in the window of the script | USBPcapCMD attaches to the console of its parent and reads its keys, so it swallowed the "press a key to stop" key press. It now runs in its own minimized window per root hub |
+| `test_usbpcap.bat` | Label `:eval_missing` was missing | Added |
+| both | Argument check through a pipe with delayed expansion | Replaced by a `for /f "delims=0123456789"` test, no pipe |
+| `install_drivers_manual.bat` | `pnputil /add-driver` does not exist on Windows 7, and a fallback message without fallback code | Windows 7 syntax `pnputil -i -a`, real fallback to `Win7\xeyezDriver` |
+| kit | `Wireshark-win64-4.6.10.exe` does not install on Windows 7 | Replaced by 3.2.18, the last 3.2 version |
+
+### 4. Procedure on the Windows 7 VM
+
+1. `software\USBPcapSetup-1.5.4.0.exe` inside the VM, then restart the VM.
+2. `test_usbpcap.bat`: is USBPcap installed and does it record?
+3. `run_capture.bat`: unplug the sensor while it records, plug it in again.
+4. `check_capture.bat`: reads the files and prints the verdict.
+5. Send `C:\idong_capture\run<N>` to the analysis host.
+
+The files are in `C:\idong_capture\run<N>\USBPcap<K>.pcap`. Details are in
+`CAPTURE_KIT.md`.
+
+## Turn 25 (2026-11-25): the write-protected C:\idong_capture
+
+User report: "for the new capture.bat i get cannot create he folder
+C:\idong_capture the folder is there but it is write protected, it is created
+when i deleted it." (The folder blocks writing; when it is deleted, it comes
+back with the same problem - because the next elevated script creates it
+again.)
+
+### Cause
+
+An elevated window (Run as administrator) created `C:\idong_capture` in an
+earlier run. On Windows 7 the default ACL of a folder created by an elevated
+process contains write entries for `BUILTIN\Administrators` and
+`NT AUTHORITY\SYSTEM`, but not the normal write entry for the interactive
+user. Every later non-elevated window could read the folder but not write into
+it, so `md C:\idong_capture\run1` failed with "Access is denied" and the
+turn-24 scripts reported "cannot create the folder".
+
+Deleting and letting an elevated script re-create it reproduces the same ACL,
+which matches the user's observation "it is created when i deleted it".
+
+### Fix
+
+New helper `tools/capture/predir.bat`, called by `run_capture.bat`,
+`test_usbpcap.bat` and `check_capture.bat` before anything is written:
+
+1. create `C:\idong_capture` when missing,
+2. write and delete a probe file,
+3. on failure, elevated: `icacls C:\idong_capture /grant Users:(OI)(CI)M`
+   (the SID form `*S-1-5-32-545` is tried first, for accounts whose Users
+   group is not named "Users"), then probe again,
+4. on failure: fall back to `%USERPROFILE%\idong_capture`,
+5. print which folder is in use and set `CAPROOT` / `PREDIRRC` for the caller.
+
+Result: the scripts no longer stop on this folder. They either repair it
+(elevated), or they use the fallback folder and say so, and the output always
+names the folder the captures went to.
+
+Also in this turn: turn 24 was pushed to GitHub (`main`, `project/state`,
+`chat/context`), including the rebuilt kit zip in `download/`.
+
+### Manual repair without the kit
+
+Right-click `cmd.exe`, Run as administrator, then:
+
+    icacls C:\idong_capture /grant Users:(OI)(CI)M

@@ -103,3 +103,56 @@ by these hashes (`FirmwareSet::verify` - safety rule #3):
 - marker x/y/z offsets inside the 88-B slot (open item #4 - resolve via
   xEyeClass RVA 0x25e0 disassembly)
 - handle-config blob layout (open item #6)
+
+## Turn 24: 2600 and 2500, and what a capture has to contain
+
+### The state of the sensor
+
+| USB ID | State | What happens there |
+| --- | --- | --- |
+| 0471:2600 | Boot loader of the 8051 microcontroller, after every power-up | The vendor host downloads the MCU program `app_m8051_2611.hex` |
+| 0471:2500 | The MCU program runs, composite device | DSP upload `ens_code.ldr` and FPGA upload, then the normal camera traffic |
+
+The vendor host side, read from `xeyezHal.dll` and `xEyeUSB.dll` 2.6.0.6:
+`xEyeUSB.dll!InitDevice` calls `xeyezHal_StartFlow` (mode 2), that runs
+`McuUpdate`: `GetMcuVersion` answers "2600", then `DownLoadHex` and
+`CodeDownload_Flow` send the hex file with the `7F 55` framing. The host then
+polls up to 20 times with `Sleep(1000)` for plug state 5, which is 0471:2500,
+and runs `InitDevice` again on 2500 ("MCU application program has run!"):
+`_InitBlobUpload` loads the DSP blob and the FPGA image. A polling thread of the
+vendor program starts `InitDevice` again when the device appears again.
+
+Consequences for the capture:
+
+- The MCU download is on the wire only between a power-up and the first
+  `InitDevice` of the vendor program. To record it, USBPcap must run before the
+  sensor is plugged in.
+- A sensor that is already at 0471:2500 cannot be put back to 2600 with a
+  command from our side. The vendor DLL has `McuReset`, and the kit never sends
+  it. Unplug and plug in again instead.
+- If the vendor program is not running, the sensor stays at 2600 and nothing is
+  downloaded.
+
+### What check_capture.bat looks for
+
+| Name | On the wire | Meaning | Gate |
+| --- | --- | --- | --- |
+| PU | `50 55 7F 7F` | Program upload, host to sensor, on the MCU endpoint 0x02 | at least 10 frames |
+| OD | `4F 44 7F 7F` | Sensor to host during the DSP upload, endpoint 0x82 | at least 3 frames |
+| RT | `7F 55` | Runtime framing of the vendor protocol | counted |
+| Banner | ASCII `Ready to load program!` in an OD frame | The DSP loader is ready | reported |
+
+Both 0471:2600 and 0471:2500 are found by their device descriptor, which
+USBPcap records as a control transfer. The USB address of each is printed in
+the Sensor line. When both phases run on the same address, the counts of both
+are summed and the report says so.
+
+### USBPcap file layout, as the scanner reads it
+
+24 byte pcap header (link type 249), then per packet 16 byte record header, 27
+byte USBPcap header (28 for control transfers), then the payload. Fields used:
+transfer type at offset 22 (0 isochronous, 1 interrupt, 2 control, 3 bulk),
+direction bit in the info byte at offset 16, device address at offset 19,
+endpoint at offset 21. A bulk or interrupt transfer to the sensor carries its
+payload in the submit packet, from the sensor in the complete packet. A control
+transfer is a SETUP packet with stage 0 and a COMPLETE packet with stage 3.

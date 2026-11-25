@@ -13,7 +13,7 @@ REM
 REM  Reports what the gates read, in BOTH registry views:
 REM  the platform mark (turn 18) AND the new OS-gate note.
 REM
-REM  Usage: right-click -> Run as administrator
+REM  Usage: right-click, Run as administrator
 REM ============================================================
 setlocal enabledelayedexpansion
 title idong100 gate probe
@@ -135,7 +135,8 @@ pause >nul
 endlocal
 exit /b 0
 
-:PROBE  -- key, value, view label - no parentheses in echo
+:PROBE
+REM PROBE subroutine: key, value, view label - no parentheses in echo
 reg query "%~1" /v "%~2" >nul 2>&1
 if errorlevel 1 (
   echo [MISS] %~1 : %~2 - %~3

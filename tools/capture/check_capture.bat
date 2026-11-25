@@ -1,119 +1,424 @@
+@if (@X)==(@Y) @end /* JScript comment
 @echo off
-REM ============================================================
-REM  check_capture.bat - idong100 P2.3 capture sanity check (turn 18)
-REM
-REM  Pure cmd.exe - NO PowerShell anywhere (user rule, turn 18).
-REM  The exact byte counting is done by a tiny embedded VBScript run
-REM  via cscript (ships with every Windows since 98 - it is not
-REM  PowerShell). The .bat writes the .vbs to %TEMP% at runtime.
-REM
-REM  Scans a USBPcap pcapng for the vendor protocol markers:
-REM    - PU magic 50 55 7f 7f (host->device boot frames)
-REM    - OD magic 4f 44 7f 7f (device->host boot frames)
-REM    - "Ready to load program!" ASCII (type-2 ready reply)
-REM
-REM  Usage:  check_capture.bat C:\idong_capture\boot.pcapng
-REM  Exit codes: 0 = PASS, 2 = FAIL (same codes as the old .ps1)
-REM ============================================================
+setlocal
+set "SELF=%~f0"
+set "ARG1=%~1"
+set "ARG2=%~2"
 setlocal enabledelayedexpansion
-if "%~1"=="" (
-  echo [ERR] usage: check_capture.bat C:\idong_capture\boot.pcapng
-  exit /b 1
-)
-if not exist "%~1" (
-  echo [ERR] file not found: %~1
-  exit /b 1
-)
-for %%F in ("%~1") do echo capture size: %%~zF bytes
+title idong100 - check capture
+REM ============================================================
+REM  check_capture.bat - is the idong sensor boot in a USBPcap file?
+REM  Turn 24 rewrite. cmd.exe + JScript run by cscript. No PowerShell.
+REM
+REM  Double-click  : scans the newest folder C:\idong_capture\runN
+REM  Drag and drop : drop a .pcap file on this script
+REM  Command line  : check_capture.bat D:\caps\boot.pcap
+REM                   check_capture.bat D:\caps      all .pcap inside
+REM
+REM  It parses the real USBPcap packets, it does not just count bytes:
+REM    PU  50 55 7f 7f   host to sensor, DSP boot framing
+REM    OD  4f 44 7f 7f   sensor to host
+REM    7f 55             MCU download and runtime framing
+REM    "Ready to load program!"   the DSP boot banner
+REM  Gate: PASS = at least 10 PU and 3 OD frames in one file.
+REM  Exit codes: 0 PASS, 2 PARTIAL, 1 FAIL, 3 scanner error.
+REM  The window stays open at every exit (user rule, turn 19).
+REM ============================================================
 
-set "VBS=%TEMP%\idong_cap_scan.vbs"
-set "OUT=%TEMP%\idong_cap_result.txt"
-
-> "%VBS%" echo Option Explicit
->>"%VBS%" echo Dim fso, shell, f, d, i, nPU, nOD, nRD
->>"%VBS%" echo Set fso = CreateObject("Scripting.FileSystemObject"^)
->>"%VBS%" echo Set shell = CreateObject("WScript.Shell"^)
->>"%VBS%" echo d = fso.GetAbsolutePathName(WScript.Arguments(0^)^)
->>"%VBS%" echo Set f = fso.OpenTextFile(d, 1, False, -1^) 'TristateTrue=binary-safe? no: use ADODB
->>"%VBS%" echo f.Close
->>"%VBS%" echo ' binary read via ADODB.Stream (no BOM mangling^)
->>"%VBS%" echo Dim bs
->>"%VBS%" echo Set bs = CreateObject("ADODB.Stream"^)
->>"%VBS%" echo bs.Type = 1 'adTypeBinary
->>"%VBS%" echo bs.Open
->>"%VBS%" echo bs.LoadFromFile d
->>"%VBS%" echo Dim b(): ReDim b(bs.Size - 1^)
->>"%VBS%" echo If bs.Size ^> 0 Then
->>"%VBS%" echo   b = bs.Read
->>"%VBS%" echo End If
->>"%VBS%" echo bs.Close
->>"%VBS%" echo nPU = 0: nOD = 0: nRD = 0
->>"%VBS%" echo ' PU magic 50 55 7f 7f
->>"%VBS%" echo For i = 0 To UBound(b^) - 3
->>"%VBS%" echo   If b(i^) = ^&H50 And b(i+1^) = ^&H55 And b(i+2^) = ^&H7F And b(i+3^) = ^&H7F Then nPU = nPU + 1
->>"%VBS%" echo Next
->>"%VBS%" echo ' OD magic 4f 44 7f 7f
->>"%VBS%" echo For i = 0 To UBound(b^) - 3
->>"%VBS%" echo   If b(i^) = ^&H4F And b(i+1^) = ^&H44 And b(i+2^) = ^&H7F And b(i+3^) = ^&H7F Then nOD = nOD + 1
->>"%VBS%" echo Next
->>"%VBS%" echo ' ASCII "Ready to load program!"
->>"%VBS%" echo Dim s: s = "Ready to load program!"
->>"%VBS%" echo For i = 0 To UBound(b^) - 24
->>"%VBS%" echo   Dim j, m: m = True
->>"%VBS%" echo   For j = 0 To 24
->>"%VBS%" echo     If Chr(b(i+j^)^) ^<^> Mid(s, j+1, 1^) Then m = False: Exit For
->>"%VBS%" echo   Next
->>"%VBS%" echo   If m Then nRD = nRD + 1: i = i + 24
->>"%VBS%" echo Next
->>"%VBS%" echo ' write results for the .bat to read
->>"%VBS%" echo Dim o: Set o = fso.CreateTextFile(WScript.Arguments(1^), True^)
->>"%VBS%" echo o.WriteLine nPU
->>"%VBS%" echo o.WriteLine nOD
->>"%VBS%" echo o.WriteLine nRD
->>"%VBS%" echo o.Close
-
-cscript //nologo "%VBS%" "%~1" "%OUT%" >nul 2>&1
-if not exist "%OUT%" (
-  echo [ERR] vbs scanner failed - check cscript is allowed in the VM.
-  echo        ^(it is a standard Windows component, not PowerShell^)
-  del "%VBS%" >nul 2>&1
-  exit /b 3
-)
-
-set /a PU=0, OD=0, READY=0
-< "%OUT%" (
-  set /a PU=
-  set /a OD=
-  set /a READY=
-)
-del "%VBS%" "%OUT%" >nul 2>&1
-
-echo PU magic (50 55 7f 7f^)      : %PU% occurrences
-echo OD magic (4f 44 7f 7f^)      : %OD% occurrences
-echo ready-string occurrences    : %READY%
-
-set OK=1
-if %PU% LSS 10   ( echo [FAIL] too few PU frames - boot upload probably not captured & set OK=0 )
-if %OD% LSS 3    ( echo [FAIL] too few OD frames - device replies missing & set OK=0 )
-if %READY% LSS 1 ( echo [FAIL] no 'Ready to load program!' - device never answered DSP-start & set OK=0 )
-if %PU% LSS 500 (
-  echo [WARN] fewer than 500 PU frames - full packet train may be short;
-  echo        a staging order that starts with a small blob can be normal.
-)
-
+set "RC=3"
+set "MODE="
+set "TARGET=!ARG1!"
+if /i not "!ARG1!"=="--info" goto :have_mode
+set "MODE=--info"
+set "TARGET=!ARG2!"
+:have_mode
+if defined TARGET goto :have_target
+rem --- no argument: use the folder predir.bat prepared (turn 25). It finds
+rem --- C:\idong_capture, repairs it when Windows locked it, or picks the
+rem --- USERPROFILE fallback and sets PREDIRRC.
+call "%~dp0predir.bat"
+if "!PREDIRRC!"=="2" goto :no_folder
+set "TARGET=!CAPROOT!"
+:have_target
+if defined MODE goto :after_target
+if "!PREDIRRC!"=="1" goto :fallback_note_a
 echo.
-if "%OK%"=="1" (
-  echo PASS - the capture contains the vendor boot sequence.
-  echo Copy it to the analysis host for the byte-for-byte gate.
-  echo.
-  echo Press any key to close this window...
-  pause >nul
-  exit /b 0
-) else (
-  echo FAIL - redo the capture per README_CAPTURE.md section 5
-  echo ^(power-cycle the sensor first so it is in the bootloader state^).
-  echo.
-  echo Press any key to close this window...
-  pause >nul
-  exit /b 2
+echo Reading from C:\idong_capture
+goto :target_echoed
+:fallback_note_a
+echo.
+echo NOTE: C:\idong_capture is not writable in this window, so the captures
+echo       are read from the fallback folder "!CAPROOT!" instead.
+:target_echoed
+
+echo === idong100 - check capture ===
+echo.
+if not exist "!TARGET!" (
+  echo [ERR] not found: "!TARGET!"
+  echo       Nothing captured yet? Run run_capture.bat first.
+  goto :done
 )
+goto :after_target
+:after_target
+
+set "DIR="
+if exist "!TARGET!\nul" set "DIR=!TARGET!"
+if defined DIR goto :folder
+if exist "!TARGET!\" set "DIR=!TARGET!"
+if defined DIR goto :folder
+set "FILES="!TARGET!""
+set "REPORT=!TARGET!"
+for %%f in ("!TARGET!") do set "REPORT=%%~dpf"
+if "!REPORT:~-1!"=="\" set "REPORT=!REPORT:~0,-1!"
+goto :run
+
+:folder
+set /a N=0
+for %%f in ("!DIR!\*.pcap") do set /a N+=1
+if !N! GTR 0 goto :collect
+rem --- no .pcap directly here: take the newest runN subfolder
+set "BEST="
+for /l %%i in (1,1,999) do if exist "!DIR!\run%%i\nul" set "BEST=!DIR!\run%%i"
+if not defined BEST for /l %%i in (1,1,999) do if exist "!DIR!\run%%i\" set "BEST=!DIR!\run%%i"
+if not defined BEST goto :no_files
+set "DIR=!BEST!"
+set /a N=0
+for %%f in ("!DIR!\*.pcap") do set /a N+=1
+if !N! EQU 0 goto :no_files
+
+:collect
+set "FILES="
+for %%f in ("!DIR!\*.pcap") do set "FILES=!FILES! "%%~ff""
+set "REPORT=!DIR!"
+
+:run
+set "M=--info"
+set "R="
+if defined MODE goto :run_go
+set "M=--report"
+set "R="!REPORT!\check_report.txt""
+:run_go
+echo Scanning:
+for %%f in (!FILES!) do echo   %%~f
+echo.
+cscript //nologo //E:JScript "!SELF!" !M! !R! !FILES!
+set "RC=!errorlevel!"
+if defined MODE goto :done
+set "REPORT=!REPORT!\check_report.txt"
+if not exist "!REPORT!" goto :done
+echo.
+echo Report saved: "!REPORT!"
+goto :done
+
+:no_files
+echo [ERR] no .pcap file found in "!DIR!"
+echo       Run run_capture.bat first, or drop one .pcap file on this script.
+set "RC=1"
+goto :done
+
+:no_folder
+echo [ERR] no writable capture folder: neither C:\idong_capture nor the
+echo       USERPROFILE fallback could be written. Run this script with
+echo       right-click, Run as administrator, once: that repairs
+echo       C:\idong_capture for your user account.
+set "RC=3"
+
+:done
+echo.
+if "!RC!"=="0" echo Result: PASS - the sensor boot is in the capture.
+if "!RC!"=="2" echo Result: PARTIAL - some sensor frames, see the lines above.
+if "!RC!"=="1" echo Result: FAIL - see the lines above.
+if "!RC!"=="3" echo Result: SCANNER ERROR - see the lines above.
+echo.
+echo Exit code !RC!   0 = PASS   2 = PARTIAL   1 = FAIL   3 = scanner error
+echo.
+pause
+endlocal & exit /b %RC%
+*/
+
+// ================= JScript part, run by cscript //E:JScript =================
+// ES3 only (JScript 5.8 ships with Windows 7). ASCII output only.
+var PU = String.fromCharCode(0x50, 0x55, 0x7f, 0x7f);   // host -> sensor, DSP boot framing
+var OD = String.fromCharCode(0x4f, 0x44, 0x7f, 0x7f);   // sensor -> host, DSP boot framing
+var RT = String.fromCharCode(0x7f, 0x55);               // MCU download + runtime framing
+var READY = "Ready to load program!";
+var PCAP_MAGIC = String.fromCharCode(0xd4, 0xc3, 0xb2, 0xa1);
+var CHUNK = 1 << 20;
+var GATE_PU = 10;
+var GATE_OD = 3;
+
+function bin(bytes) {                 // VBArray of bytes -> binary string
+    var a, out = [], i, n;
+    try { a = new VBArray(bytes).toArray(); } catch (e) { return ""; }
+    for (i = 0; i < a.length; i += 4096) {
+        n = Math.min(i + 4096, a.length);
+        out.push(String.fromCharCode.apply(null, a.slice(i, n)));
+    }
+    return out.join("");
+}
+function u16(s, o) { return s.charCodeAt(o) | (s.charCodeAt(o + 1) << 8); }
+function u32(s, o) {
+    return (s.charCodeAt(o) | (s.charCodeAt(o + 1) << 8) | (s.charCodeAt(o + 2) << 16))
+         + s.charCodeAt(o + 3) * 16777216;
+}
+function count(map, key) {
+    var k = String(key);
+    if (map[k] === undefined) { map[k] = 1; } else { map[k]++; }
+}
+function addBytes(map, key, n) {
+    var k = String(key);
+    if (map[k] === undefined) { map[k] = n; } else { map[k] += n; }
+}
+function newResult(path) {
+    return { path: path, err: "", warn: "", size: 0, packets: 0, data: 0,
+             firstTs: 0, lastTs: 0, truncated: 0, cam2600: -1, cam2500: -1,
+             pu: 0, od: 0, rtOut: 0, rtIn: 0, ready: 0,
+             outFrames: {}, inFrames: {}, inBytes: {} };
+}
+
+function hasReady(s, d, avail) {
+    return s.substr(d, avail).indexOf(READY) >= 0;    // search inside this payload only
+}
+
+function processPacket(r, s, off, incl) {             // off = position of the USBPcap header inside s
+    var ts = u32(s, off - 16), hlen, dev, ep, tr, dlen, d, avail, head;
+    r.packets++;
+    if (r.firstTs === 0) { r.firstTs = ts; }
+    r.lastTs = ts;
+    if (incl < 27) { return; }
+    hlen = u16(s, off);
+    if (hlen < 27 || hlen > incl) { return; }
+    dev = u16(s, off + 19);
+    ep = s.charCodeAt(off + 21);
+    tr = s.charCodeAt(off + 22);
+    dlen = u32(s, off + 23);
+    d = off + hlen;
+    avail = incl - hlen;
+    if (avail > dlen) { avail = dlen; }
+    if (tr === 2) {                                   // control transfer
+        if (avail >= 18 && s.charCodeAt(off + 27) === 3 &&
+            s.charCodeAt(d) === 0x12 && s.charCodeAt(d + 1) === 0x01 &&
+            u16(s, d + 8) === 0x0471) {
+            if (u16(s, d + 10) === 0x2600 && r.cam2600 < 0) { r.cam2600 = dev; }
+            if (u16(s, d + 10) === 0x2500 && r.cam2500 < 0) { r.cam2500 = dev; }
+        }
+        return;
+    }
+    if (tr !== 3 && tr !== 1) { return; }             // only bulk and interrupt carry sensor frames
+    if (avail < 2) { return; }
+    r.data++;
+    head = s.substr(d, 4);
+    if ((ep & 0x80) === 0) {                          // OUT: the payload travels in the submit packet
+        count(r.outFrames, dev);
+        if (head === PU) { r.pu++; }
+        else if (head.substr(0, 2) === RT && (ep & 0x7f) === 0x02) { r.rtOut++; }
+    } else {                                          // IN: the payload travels in the complete packet
+        count(r.inFrames, dev);
+        addBytes(r.inBytes, dev, avail);
+        if (head === OD) { r.od++; if (hasReady(s, d, avail)) { r.ready++; } }
+        else if (head.substr(0, 2) === RT && (ep & 0x7f) === 0x02) { r.rtIn++; }
+    }
+}
+
+function scanFile(path) {
+    var r = newResult(path), st, h, s, chunk, carry = "", pos, incl, base = 24, left;
+    try { st = new ActiveXObject("ADODB.Stream"); }
+    catch (e1) { r.err = "ADODB.Stream is not available on this system"; return r; }
+    try {
+        st.Type = 1;
+        st.Open();
+        st.LoadFromFile(path);
+        r.size = st.Size;
+        if (r.size < 24) {
+            r.err = "file is too small (" + r.size + " bytes) - USBPcap did not write a header";
+            st.Close();
+            return r;
+        }
+        h = bin(st.Read(24));
+        if (h.substr(0, 4) !== PCAP_MAGIC) {
+            r.err = "not a USBPcap .pcap file (wrong magic number)";
+            st.Close();
+            return r;
+        }
+        if (u32(h, 20) !== 249) { r.warn = "link type " + u32(h, 20) + ", expected 249 (USBPcap)"; }
+        for (;;) {                       // read in chunks, never past the end of the stream
+            left = st.Size - st.Position;
+            if (left <= 0) { break; }
+            chunk = bin(st.Read(left < CHUNK ? left : CHUNK));
+            if (chunk.length === 0) { break; }
+            s = carry + chunk;
+            pos = 0;
+            while (pos + 16 <= s.length) {
+                incl = u32(s, pos + 8);
+                if (incl < 1 || incl > 4 * CHUNK) {
+                    r.err = "corrupt record (length " + incl + ") at offset " + (base + pos);
+                    break;
+                }
+                if (pos + 16 + incl > s.length) { break; }
+                processPacket(r, s, pos + 16, incl);
+                pos += 16 + incl;
+            }
+            if (r.err !== "") { break; }
+            base += pos;
+            carry = s.substr(pos);
+        }
+        st.Close();
+    } catch (e2) {
+        r.err = "read error: " + (e2.message || e2);
+        try { st.Close(); } catch (e3) {}
+        return r;
+    }
+    if (carry.length > 0) { r.truncated = 1; }
+    return r;
+}
+
+function verdict(r) {
+    if (r.err !== "") { return "ERROR"; }
+    if (r.packets === 0) { return "EMPTY"; }
+    if (r.pu + r.od + r.rtOut + r.rtIn === 0) {
+        if (r.cam2600 >= 0 || r.cam2500 >= 0) { return "ENUM-ONLY"; }
+        return "NO-CAMERA";
+    }
+    if (r.pu >= GATE_PU && r.od >= GATE_OD) { return "PASS"; }
+    return "PARTIAL";
+}
+function rank(v) {                     // lower = better
+    if (v === "PASS") { return 0; }
+    if (v === "PARTIAL") { return 1; }
+    if (v === "ERROR") { return 3; }
+    return 2;
+}
+function codeOf(v) {
+    if (v === "PASS") { return 0; }
+    if (v === "PARTIAL") { return 2; }
+    if (v === "ERROR") { return 3; }
+    return 1;
+}
+function fmtSize(n) {
+    if (n >= 1048576) { return (Math.round(n / 104857.6) / 10) + " MB"; }
+    if (n >= 1024) { return Math.round(n / 1024) + " KB"; }
+    return n + " bytes";
+}
+function fmtTime(sec) {
+    var d = new Date(sec * 1000), m;
+    m = (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":";
+    m += (d.getMinutes() < 10 ? "0" : "") + d.getMinutes() + ":";
+    m += (d.getSeconds() < 10 ? "0" : "") + d.getSeconds();
+    return m;
+}
+
+function gateLines(out, r) {
+    var v = verdict(r), a = r.cam2600, b = r.cam2500, same = (a >= 0 && a === b);
+    out.push("File    : " + r.path);
+    if (r.err !== "") {
+        out.push("Status  : ERROR - " + r.err);
+        out.push("");
+        return v;
+    }
+    out.push("Size    : " + fmtSize(r.size) + ", " + r.packets + " USB packets, " + r.data + " with data");
+    if (r.firstTs > 0) {
+        out.push("Time    : first packet " + fmtTime(r.firstTs) + ", last packet " +
+                 (r.lastTs >= r.firstTs ? r.lastTs - r.firstTs : r.firstTs - r.lastTs) + " s later");
+    }
+    if (r.warn !== "") { out.push("Note    : " + r.warn); }
+    if (r.truncated) {
+        out.push("Note    : the last packet is cut off - the capture was still running when the file was read");
+    }
+    if (a < 0 && b < 0) {
+        out.push("Sensor  : no 0471:2600 and no 0471:2500 device descriptor in this file");
+    } else {
+        out.push("Sensor  : 0471:2600 " + (a < 0 ? "not seen" : "USB address " + a) +
+                 ",  0471:2500 " + (b < 0 ? "not seen" : "USB address " + b));
+    }
+    if (a >= 0) {
+        out.push("MCU     : " + (r.outFrames[a] || 0) + " frames host to sensor, " + (r.inFrames[a] || 0) +
+                 " frames sensor to host" + (same ? "  (2600 and 2500 share this address, both phases are summed)"
+                                                  : "  - the MCU program download on 0471:2600"));
+    }
+    if (b >= 0 && !same) {
+        out.push("DSP     : " + (r.outFrames[b] || 0) + " frames host to sensor, " + (r.inFrames[b] || 0) +
+                 " frames sensor to host, " + fmtSize(r.inBytes[b] || 0) +
+                 " from the sensor  - the DSP and FPGA upload and the running program on 0471:2500");
+    }
+    if (a < 0 && b >= 0) {
+        out.push("Note    : the capture begins with 0471:2500. The 2600 download happened before the capture started.");
+        out.push("          Unplug the sensor and plug it in again while the capture is running.");
+    } else if (a >= 0 && b < 0) {
+        out.push("Note    : 0471:2500 did not appear inside this capture: the MCU download was not completed.");
+        out.push("          Have the vendor program running, wait longer before you stop the capture.");
+    }
+    out.push("Framing : " + r.pu + " PU frames 50 55 7f 7f (host to sensor), " + r.od +
+             " OD frames 4f 44 7f 7f (sensor to host), " + r.rtOut + " + " + r.rtIn +
+             " frames 7f 55 on endpoint 02 and 82");
+    out.push("Banner  : \"Ready to load program!\" " + (r.ready > 0 ? "FOUND, " + r.ready + " time(s)" : "not found"));
+    if (v === "PASS") {
+        out.push("Verdict : PASS - the sensor boot is in this file (at least " + GATE_PU + " PU and " + GATE_OD + " OD frames).");
+    } else if (v === "PARTIAL") {
+        out.push("Verdict : PARTIAL - sensor frames are there, but fewer than " + GATE_PU + " PU or " + GATE_OD + " OD.");
+        out.push("          Start the capture BEFORE the sensor is plugged in and stop it only after the vendor program is up.");
+    } else if (v === "ENUM-ONLY") {
+        out.push("Verdict : FAIL - the sensor was enumerated but the vendor software sent no frames.");
+        out.push("          Is the vendor program running in this Windows system (service xEyeService and xeyez.exe)?");
+    } else if (v === "NO-CAMERA") {
+        out.push("Verdict : FAIL - no sensor traffic in this file. The sensor sits on another USB root hub, see the other files.");
+    } else if (v === "EMPTY") {
+        out.push("Verdict : FAIL - USBPcap wrote only the file header, no USB packet was recorded on this root hub.");
+    }
+    out.push("");
+    return v;
+}
+
+function infoLines(out, r) {
+    var name = r.path.replace(/^.*\\/, ""), line;
+    if (r.err !== "") {
+        out.push("ERROR  " + name + "  " + r.err);
+    } else {
+        line = (r.packets > 0 ? "OK     " : "EMPTY  ") + name + "  " + fmtSize(r.size) + ", " +
+               r.packets + " packets, " + r.data + " with data";
+        if (r.truncated) { line += " (last packet cut off)"; }
+        out.push(line);
+    }
+    return r.packets > 0 ? 0 : 1;
+}
+
+function emit(out, reportPath) {
+    var i, fso, f;
+    for (i = 0; i < out.length; i++) { WScript.Echo(out[i]); }
+    if (reportPath === "") { return; }
+    try {
+        fso = new ActiveXObject("Scripting.FileSystemObject");
+        f = fso.CreateTextFile(reportPath, true, false);
+        for (i = 0; i < out.length; i++) { f.WriteLine(out[i]); }
+        f.Close();
+    } catch (e) { WScript.Echo("[WARN] could not write the report file: " + reportPath); }
+}
+
+function main() {
+    var args = WScript.Arguments, n = args.length, i, mode = "gate", reportPath = "", first = 0;
+    var out = [], results = [], overall = "", any = 1, v;
+    if (n > 0 && String(args(0)) === "--info") { mode = "info"; first = 1; }
+    else if (n > 0 && String(args(0)) === "--report") {
+        if (n > 1) { reportPath = String(args(1)); }
+        first = 2;
+    }
+    if (n <= first) {
+        out.push("[ERR] no .pcap file was given to the scanner.");
+        emit(out, reportPath);
+        WScript.Quit(3);
+    }
+    for (i = first; i < n; i++) { results.push(scanFile(String(args(i)))); }
+    if (mode === "info") {
+        for (i = 0; i < results.length; i++) { if (infoLines(out, results[i]) === 0) { any = 0; } }
+        emit(out, "");
+        WScript.Quit(any);
+    }
+    for (i = 0; i < results.length; i++) {
+        v = gateLines(out, results[i]);
+        if (overall === "" || rank(v) < rank(overall)) { overall = v; }
+    }
+    out.push("OVERALL : " + overall + "  - the best of " + results.length + " file(s). Send the whole folder to the analysis host.");
+    emit(out, reportPath);
+    WScript.Quit(codeOf(overall));
+}
+
+main();
