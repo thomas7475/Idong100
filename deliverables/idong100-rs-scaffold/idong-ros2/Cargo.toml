@@ -1,0 +1,15 @@
+[package]
+name = "idong-ros2"
+description = "ROS 2 (rclrs) node for the i-Dong sensor"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+idong = { path = "../idong" }
+idong_msgs = { path = "../idong_msgs/msg" }  # generated: path set by colcon
+rclrs = "0.8"
+log.workspace = true

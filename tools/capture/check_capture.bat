@@ -7,8 +7,14 @@ set "ARG2=%~2"
 setlocal enabledelayedexpansion
 title idong100 - check capture
 REM ============================================================
-REM  check_capture.bat - is the idong sensor boot in a USBPcap file?
-REM  Turn 24 rewrite. cmd.exe + JScript run by cscript. No PowerShell.
+REM  check_capture.bat - is the idong sensor session in a USBPcap file?
+REM  Turn 32 rewrite. cmd.exe + JScript run by cscript. No PowerShell.
+REM
+REM  Turn 32 fixes: the ADODB binary reader (VBArray) failed on the
+REM  capture machine ("could not read the first 24 bytes" in every
+REM  report) - reading now goes through a text stream with charset
+REM  iso-8859-1 (1 byte = 1 char), no VBArray at all. The gate now
+REM  knows the observed protocol: 0x0008 version replies "2600"/"2619".
 REM
 REM  Double-click  : scans the newest folder C:\idong_capture\runN
 REM  Drag and drop : drop a .pcap file on this script
@@ -16,11 +22,13 @@ REM  Command line  : check_capture.bat D:\caps\boot.pcap
 REM                   check_capture.bat D:\caps      all .pcap inside
 REM
 REM  It parses the real USBPcap packets, it does not just count bytes:
-REM    PU  50 55 7f 7f   host to sensor, DSP boot framing
-REM    OD  4f 44 7f 7f   sensor to host
-REM    7f 55             MCU download and runtime framing
-REM    "Ready to load program!"   the DSP boot banner
-REM  Gate: PASS = at least 10 PU and 3 OD frames in one file.
+REM    7f 55             MCU download and runtime framing (observed)
+REM    "2600"/"2619"     version replies of the 0x0008 command
+REM    PU/OD 50 55 7f 7f / 4f 44 7f 7f   legacy DLL model, 0 on the wire
+REM    "Ready to load program!"          legacy banner, never observed
+REM  Gate: PASS = a 2600->2500 cold boot with >= 10000 B on ep 02, OR
+REM  a 2500 session with >= 10000 B on ep 02 AND on ep 82 (download +
+REM  echo - the shape of the turn 32 captures).
 REM  Exit codes: 0 PASS, 2 PARTIAL, 1 FAIL, 3 scanner error.
 REM  The window stays open at every exit (user rule, turn 19).
 REM ============================================================
@@ -181,6 +189,7 @@ function newResult(path) {
     return { path: path, err: "", warn: "", size: 0, packets: 0, data: 0,
              firstTs: 0, lastTs: 0, truncated: 0, cam2600: -1, cam2500: -1,
              pu: 0, od: 0, rtOut: 0, rtIn: 0, ready: 0, ep02Bytes: 0, ep82Bytes: 0,
+             v2600: 0, v2619: 0,
              outFrames: {}, inFrames: {}, inBytes: {} };
 }
 
@@ -226,41 +235,59 @@ function processPacket(r, s, off, incl) {             // off = position of the U
         addBytes(r.inBytes, dev, avail);
         if ((ep & 0x7f) === 0x02) { r.ep82Bytes += avail; }
         if (head === OD) { r.od++; if (hasReady(s, d, avail)) { r.ready++; } }
-        else if (head.substr(0, 2) === RT && (ep & 0x7f) === 0x02) { r.rtIn++; }
+        else if (head.substr(0, 2) === RT && (ep & 0x7f) === 0x02) {
+            r.rtIn++;
+            // 0x0008 version reply: 7f 55 08 00 01 00 00 00 "2600"/"2619"
+            if (avail >= 12 && s.charCodeAt(d + 2) === 0x08 &&
+                s.charCodeAt(d + 3) === 0x00 && s.charCodeAt(d + 4) === 0x01) {
+                var ver = s.substr(d + 8, 4);
+                if (ver === "2600") { r.v2600++; }
+                else if (ver === "2619") { r.v2619++; }
+            }
+        }
     }
 }
 
 function scanFile(path) {
-    var r = newResult(path), st, h, s, chunk, carry = "", pos, incl, base = 24, left;
-    try { st = new ActiveXObject("ADODB.Stream"); }
-    catch (e1) { r.err = "ADODB.Stream is not available on this system"; return r; }
+    var r = newResult(path), b, t, h, s, chunk, carry = "", pos, incl, base = 24, left;
+    // Turn 32: the file is read through a TEXT stream with charset
+    // iso-8859-1 (one byte = one char). The old VBArray conversion of
+    // binary Read() results failed on the capture machine (12 of 12
+    // files). No VBArray is used any more.
     try {
-        st.Type = 1;
-        st.Open();
-        st.LoadFromFile(path);
-        r.size = st.Size;
+        b = new ActiveXObject("ADODB.Stream");
+        b.Type = 1;                       // adTypeBinary
+        b.Open();
+        b.LoadFromFile(path);
+        r.size = b.Size;
         if (r.size < 24) {
             r.err = "file is too small (" + r.size + " bytes) - USBPcap did not write a header";
-            st.Close();
+            b.Close();
             return r;
         }
-        h = bin(st.Read(24));
+        t = new ActiveXObject("ADODB.Stream");
+        t.Type = 2;                       // adTypeText
+        t.Charset = "iso-8859-1";         // byte x -> char U+00xx, 1:1
+        t.Open();
+        b.CopyTo(t);
+        b.Close();
+        t.Position = 0;
+        h = t.ReadText(24);
         if (h.length < 24) {
-            r.err = "could not read the first 24 bytes (ADODB/VBArray) - "
-                  + "tell us if this repeats, the file itself is fine";
-            st.Close();
+            r.err = "could not read the first 24 bytes (text stream)";
+            t.Close();
             return r;
         }
         if (h.substr(0, 4) !== PCAP_MAGIC) {
             r.err = "not a USBPcap .pcap file (wrong magic number)";
-            st.Close();
+            t.Close();
             return r;
         }
         if (u32(h, 20) !== 249) { r.warn = "link type " + u32(h, 20) + ", expected 249 (USBPcap)"; }
         for (;;) {                       // read in chunks, never past the end of the stream
-            left = st.Size - st.Position;
+            left = r.size - t.Position;  // char position == byte position
             if (left <= 0) { break; }
-            chunk = bin(st.Read(left < CHUNK ? left : CHUNK));
+            chunk = t.ReadText(left < CHUNK ? left : CHUNK);
             if (chunk.length === 0) { break; }
             s = carry + chunk;
             pos = 0;
@@ -278,10 +305,11 @@ function scanFile(path) {
             base += pos;
             carry = s.substr(pos);
         }
-        st.Close();
+        t.Close();
     } catch (e2) {
         r.err = "read error: " + (e2.message || e2);
-        try { st.Close(); } catch (e3) {}
+        try { t.Close(); } catch (e3) {}
+        try { b.Close(); } catch (e4) {}
         return r;
     }
     if (carry.length > 0) { r.truncated = 1; }
@@ -295,12 +323,14 @@ function verdict(r) {
         if (r.cam2600 >= 0 || r.cam2500 >= 0) { return "ENUM-ONLY"; }
         return "NO-CAMERA";
     }
-    // Turn 28: the real capture proved this firmware downloads the MCU program
-    // as plain blocks on ep 02 with a full echo on ep 82 - only the handshake
-    // frames carry 7f 55. A complete boot therefore shows: BOTH 2600 and 2500
-    // descriptors AND a sizeable data volume on endpoint 02 (the download).
+    // Turn 32: no PU/OD frames exist on the wire (0 in three sessions,
+    // ~2900 records). A capture passes when either
+    //   - a full cold boot: BOTH 2600 and 2500 descriptors + >= 10000 B
+    //     downloaded on ep 02 (the MCU program), or
+    //   - a 2500 session: the 2500 descriptor + >= 10000 B on ep 02 AND
+    //     >= 10000 B on ep 82 (image download + verified echo).
     if (r.cam2600 >= 0 && r.cam2500 >= 0 && r.ep02Bytes >= 10000) { return "PASS"; }
-    if (r.pu >= GATE_PU && r.od >= GATE_OD) { return "PASS"; }
+    if (r.cam2500 >= 0 && r.ep02Bytes >= 10000 && r.ep82Bytes >= 10000) { return "PASS"; }
     return "PARTIAL";
 }
 function rank(v) {                     // lower = better
@@ -368,15 +398,18 @@ function gateLines(out, r) {
         out.push("Note    : 0471:2500 did not appear inside this capture: the MCU download was not completed.");
         out.push("          Have the vendor program running, wait longer before you stop the capture.");
     }
-    out.push("Framing : " + r.pu + " PU frames 50 55 7f 7f (host to sensor), " + r.od +
-             " OD frames 4f 44 7f 7f (sensor to host), " + r.rtOut + " + " + r.rtIn +
-             " frames 7f 55 on endpoint 02 and 82");
+    out.push("Framing : " + r.pu + " PU / " + r.od + " OD frames (legacy DLL model, 0 expected), " +
+             r.rtOut + " + " + r.rtIn + " frames 7f 55 on endpoint 02 and 82");
+    out.push("Version : 0x0008 replies \"2600\" x " + r.v2600 + " (image not loaded), " +
+             "\"2619\" x " + r.v2619 + " (app running)");
+    out.push("Data    : " + fmtSize(r.ep02Bytes) + " host to sensor (ep 02), " + fmtSize(r.ep82Bytes) +
+             " sensor to host (ep 82)");
     out.push("Banner  : \"Ready to load program!\" " + (r.ready > 0 ? "FOUND, " + r.ready + " time(s)" : "not found"));
     if (v === "PASS") {
-        out.push("Verdict : PASS - the sensor boot is in this file (at least " + GATE_PU + " PU and " + GATE_OD + " OD frames,");
-        out.push("          or a full 2600->2500 boot: both descriptors plus at least 10000 bytes on ep 02).");
+        out.push("Verdict : PASS - a complete sensor session is in this file (a cold boot with");
+        out.push("          the download, or a 2500 session with the image download and its echo).");
     } else if (v === "PARTIAL") {
-        out.push("Verdict : PARTIAL - sensor frames are there, but fewer than " + GATE_PU + " PU or " + GATE_OD + " OD.");
+        out.push("Verdict : PARTIAL - sensor frames are there, but no complete session (less than");
         out.push("          Start the capture BEFORE the sensor is plugged in and stop it only after the vendor program is up.");
     } else if (v === "ENUM-ONLY") {
         out.push("Verdict : FAIL - the sensor was enumerated but the vendor software sent no frames.");

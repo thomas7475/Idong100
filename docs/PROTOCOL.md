@@ -186,3 +186,38 @@ descriptors.
 Still unobserved on the wire: the DSP upload, the FPGA upload, and any
 traffic on ep 0x85/0x84 (the camera stream). These need the "full vendor
 session" capture of turn 28's next step.
+## Turn 32: the observed protocol, complete (cap2/cap3/cap4)
+
+Three full-session captures settle it. **The PU/OD model above never
+happens on the wire: 0 PU/OD frames in ~12,000 records. No DSP upload,
+no FPGA upload - ens_code.ldr and A_a_v4.4_BG0313.bit are never sent.**
+The `7F 55` framing carries everything:
+
+- Frame: `7F 55 <cmd u16 LE> <flags> <00> <body>` (one 64-B bulk
+  transfer). H2D body `<00> <alen> <args BE>`, flags 0x02 on table
+  writes. D2H body `<00> <code> <data>`, flags 0x01.
+- Raw 64-B records (no magic): download blocks, image echo, EEPROM data.
+- Boot on 0471:2600: `0x0008->"2600"`, `0x0101 begin(size BE)`, 335 raw
+  blocks, `0x0201 verify(0x8000,size) -> 00 04` + full echo readback,
+  `0x0301 key FE2AC9BBAE11D5C2`, `0x0401 launch` -> re-enumerates as
+  0471:2500 (~4 s).
+- Session on 0471:2500: `0x0008->"2619"`, `0x0107(off,len)` EEPROM read
+  (raw `len` bytes, last = sum checksum; the calibration record
+  (0x0100,121), "000T" (0x0322), "2613" (0x0328)), `0x0104/0x0204`
+  CMOS register tables (56 B + 24 B), `0x0103/0x0203` 8-B chunks (x6),
+  `0x0303` end, polls `0x0003/0x0004/0x0005/0x000d/0x0404/0x040f`,
+  cycle every ~7-10 s. No image/marker stream in any capture.
+- Turn-28 command IDs were big-endian readings of the same bytes:
+  0102<->0x0201, 0103<->0x0301, 0104 ("run")<->0x0401, 0701
+  ("request-frame")<->0x0107, 0f04<->0x040f.
+
+The downloaded image: app_m8051_2611.hex flattened over [0x8000,0xD3A3),
+gap bytes 0x00 - byte-identical to the wire (download and echo), SHA-256
+`5da1565c6704d387081844e712b4be4d521083e21a619df7d6cb11551c2aba9c`.
+Implemented: `idong/src/protocol/runtime.rs` (RuntimeSession,
+golden-replayed in `tests/runtime_replay.rs`), `FirmwareSet::mcu_image()`.
+Full evidence: `research/idong100/agents/14-captures32/FINDINGS.md`.
+
+Open: what starts the camera/marker stream (the vendor app never entered
+that state in 535 s of capture); the role of app_m8051_2500.hex; CMOS
+register semantics.
