@@ -1,2 +1,5 @@
 *.bat text eol=crlf
 *.reg text eol=crlf
+# vendor device files are byte-exact: the driver's SHA-256 pins cover these
+# bytes (the hex files have CRLF line endings), so git must never convert them
+software/firmware/** -text

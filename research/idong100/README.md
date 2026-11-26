@@ -9,6 +9,14 @@ processors — vendor **Toltech / Shenzhen Taishan Sports Technology**
 > on the `research/idong100` branch family and only inside the
 > `research/idong100/` tree. Do not mix the two.
 
+> Turn 40: the tree above is history from round 1. The repository is
+> now `Idong100`, and this research tree sits under `research/` next to
+> `research/analysis/` (extraction and analysis outputs) and
+> `research/scripts/` (the research tools). The driver itself lives in
+> `software/` at the repository root; its vendor device files are in
+> `software/firmware/`. `rust/idong/` in this tree is the frozen turn-10
+> reference crate, not the driver.
+
 ## Goal
 
 Locate any software, firmware, binary, or documentation for the
@@ -26,6 +34,8 @@ onboard stereo processing, marker-coordinate output).
 | `agents/NN-slug/FINDINGS.md` | One directory per research agent (one git branch each) |
 | `agents/NN-slug/artifacts/` | Recovered text snapshots / excerpts (text files only) |
 | `SUMMARY.md` | Consolidated cross-agent findings and recommended next steps |
+| `../analysis/reports/` | Extraction and analysis outputs, among them the turn-12 SHA-256 manifest `all_extracted_sha256.tsv` |
+| `../scripts/` | The research tools: extraction, disassembly, capture parsers, report generators |
 
 ## Branch map
 
