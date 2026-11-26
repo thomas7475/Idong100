@@ -41,3 +41,7 @@ pub mod reenum;
 
 /// udev rule for unprivileged access on Linux (no root requirement).
 pub mod udev;
+
+/// V4L2 video-node discovery - the pure sysfs matcher for the P2.5
+/// Linux video backend (which /dev/videoN is the sensor).
+pub mod v4l2;

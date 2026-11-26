@@ -7,6 +7,12 @@ sensor: every byte sent is a version request (0x0008) or an EEPROM read
 writes, no stream, no EEPROM writes. The only failure mode is a failed
 read.
 
+**Turn 38 update**: this test is step T3 of the full bench ladder
+(`docs/LINUX_TESTS.md`) which continues with the full session (T5,
+`examples/session_full.rs`) and the video bring-up (T6/T7,
+`examples/video.rs`) - same style, same PASS/FAIL output, writes gated
+behind `--cmos`.
+
 ## Why Linux
 
 On Windows the vendor driver stack (xeyez.sys + the engine) claims the

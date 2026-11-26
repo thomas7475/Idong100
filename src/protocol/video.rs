@@ -176,6 +176,47 @@ pub fn split_channels(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
     (a, b)
 }
 
+/// Basic statistics of one raster plane (turn 38) - the PASS/FAIL
+/// summary of the P2.5 stream test: a real scene plane has contrast
+/// (`stddev > 0`); an all-flat plane means no image (uninitialized
+/// sensor, blank stream). Population stddev, `f64` accumulation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlaneStats {
+    pub mean: f64,
+    pub min: u8,
+    pub max: u8,
+    pub stddev: f64,
+}
+
+impl PlaneStats {
+    /// True when the plane carries any contrast at all (not flat).
+    pub fn has_contrast(&self) -> bool {
+        self.min != self.max
+    }
+}
+
+/// Compute [`PlaneStats`] for a plane; an empty plane yields all zeros
+/// (defined, never NaN).
+pub fn plane_stats(p: &[u8]) -> PlaneStats {
+    if p.is_empty() {
+        return PlaneStats { mean: 0.0, min: 0, max: 0, stddev: 0.0 };
+    }
+    let mut min = u8::MAX;
+    let mut max = u8::MIN;
+    let mut sum = 0u64;
+    let mut sq = 0u64;
+    for &v in p {
+        min = min.min(v);
+        max = max.max(v);
+        sum += v as u64;
+        sq += (v as u64) * (v as u64);
+    }
+    let n = p.len() as f64;
+    let mean = sum as f64 / n;
+    let var = (sq as f64 / n - mean * mean).max(0.0);
+    PlaneStats { mean, min, max, stddev: var.sqrt() }
+}
+
 /// Incremental frame assembler over UVC payloads - closes a frame when
 /// the PTS advances (the vendor's own boundary rule), on an EOF-flagged
 /// payload, or on a payload error (frame emitted, flagged dropped).
@@ -384,5 +425,47 @@ impl StreamPollState {
         let mut trailer = [0u8; 8];
         trailer.copy_from_slice(&body[26..34]);
         Ok(StreamPollState { new_frame, frame_no, aux, trailer })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plane_stats_constant_plane_is_flat() {
+        let s = plane_stats(&[0x7f; 1000]);
+        assert_eq!(s.mean, 127.0);
+        assert_eq!((s.min, s.max), (0x7f, 0x7f));
+        assert_eq!(s.stddev, 0.0);
+        assert!(!s.has_contrast());
+    }
+
+    #[test]
+    fn plane_stats_two_value_plane() {
+        // 2 x 0x00 + 2 x 0xff: mean 127.5, population stddev 127.5
+        let s = plane_stats(&[0x00, 0x00, 0xff, 0xff]);
+        assert_eq!(s.mean, 127.5);
+        assert_eq!((s.min, s.max), (0x00, 0xff));
+        assert!((s.stddev - 127.5).abs() < 1e-9);
+        assert!(s.has_contrast());
+    }
+
+    #[test]
+    fn plane_stats_empty_plane_is_defined() {
+        let s = plane_stats(&[]);
+        assert_eq!((s.mean, s.min, s.max, s.stddev), (0.0, 0, 0, 0.0));
+    }
+
+    #[test]
+    fn plane_stats_half_ramp_known_values() {
+        // 0..=15: mean 7.5, mean of squares 1240/16 = 77.5
+        // -> stddev sqrt(77.5 - 7.5^2) = sqrt(21.25)
+        let p: Vec<u8> = (0u16..16).map(|v| v as u8).collect();
+        let s = plane_stats(&p);
+        assert_eq!(s.mean, 7.5);
+        assert_eq!((s.min, s.max), (0, 15));
+        let want = 21.25f64.sqrt();
+        assert!((s.stddev - want).abs() < 1e-9, "stddev {} vs {want}", s.stddev);
     }
 }
