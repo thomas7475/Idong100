@@ -134,10 +134,28 @@ pub const COMMIT_KEY: [u8; 8] = [0xFE, 0x2A, 0xC9, 0xBB, 0xAE, 0x11, 0xD5, 0xC2]
 pub const EEPROM_CALIB_OFFSET: u16 = 0x0100;
 pub const EEPROM_CALIB_LEN: u16 = 121;
 /// EEPROM "code A" (observed read: "000T" + checksum 0xE4).
+/// Turn 33: this is the DEVICE VERSION TAG the vendor engine gates
+/// on - the last letter must be D/S/H/NUL for the v2.6.0.6 connect to
+/// succeed (see [`EDITION_LETTERS`]); the captured unit's "T" is
+/// rejected, which is exactly why the vendor app never left the
+/// "Connecting to idong sensor" screen.
 pub const EEPROM_CODE_A_OFFSET: u16 = 0x0322;
 /// EEPROM "code B" (observed read: "2613" + checksum 0xCC).
 pub const EEPROM_CODE_B_OFFSET: u16 = 0x0328;
 pub const EEPROM_CODE_LEN: u16 = 5;
+/// EEPROM device-ID area (32 ASCII chars + 1 sum-check byte), read by
+/// the engine's `check_device_id` step after the state machine reaches
+/// stage 4. Backup copy at [`EEPROM_DEVICE_ID_BACKUP_OFFSET`]. The
+/// captured unit reads "AB460DC8BA12C6840B49CD5786C329DD" + 0x50 from
+/// both areas (verified against the T24C16 dump).
+pub const EEPROM_DEVICE_ID_OFFSET: u16 = 0x0300;
+pub const EEPROM_DEVICE_ID_BACKUP_OFFSET: u16 = 0x0700;
+pub const EEPROM_DEVICE_ID_LEN: u16 = 33;
+/// Letters the v2.6.0.6 engine accepts in the last byte of the device
+/// version tag (constant "DSHY" at xEyeUSB.dll VA 0x10016034). 'D'
+/// maps to edition 0, 'S'/'H'/NUL to edition 2; anything else makes the
+/// engine close the device and retry the whole connect every 10 s.
+pub const EDITION_LETTERS: [u8; 4] = [b'D', b'S', b'H', 0x00];
 
 /// P2.3-style gate: the flash sequence is capture-verified but has not
 /// yet been replayed against real hardware by this driver.
@@ -466,6 +484,32 @@ impl<'a> RuntimeSession<'a> {
     pub fn read_code_b(&mut self) -> Result<String> {
         Ok(String::from_utf8_lossy(&self.read_eeprom(EEPROM_CODE_B_OFFSET, EEPROM_CODE_LEN)?[..4])
             .to_string())
+    }
+
+    /// Turn 33: the 32-char device ID from EEPROM 0x0300 (backup at
+    /// 0x0700). The 33-byte read carries the byte-sum checksum as its
+    /// last byte - [`Self::read_eeprom`] already verifies it; this
+    /// method adds the engine's backup-area fallback. The captured unit
+    /// answers "AB460DC8BA12C6840B49CD5786C329DD" (checksum 0x50).
+    pub fn read_device_id(&mut self) -> Result<Vec<u8>> {
+        match self.read_eeprom(EEPROM_DEVICE_ID_OFFSET, EEPROM_DEVICE_ID_LEN) {
+            Ok(id) if id.len() == 32 => Ok(id),
+            _ => self.read_eeprom(EEPROM_DEVICE_ID_BACKUP_OFFSET, EEPROM_DEVICE_ID_LEN),
+        }
+    }
+
+    /// Turn 33: would the v2.6.0.6 engine accept this unit's version
+    /// tag? `false` means the vendor app stays at "connecting" forever
+    /// (retrying the connect every 10 s) - the driver does not care,
+    /// but it explains vendor-app behaviour and gates any decision to
+    /// re-tag the EEPROM.
+    pub fn edition_tag_accepted(&mut self) -> Result<bool> {
+        let tag = self.read_eeprom(EEPROM_CODE_A_OFFSET, EEPROM_CODE_LEN)?;
+        // The engine (xEyeUSB.dll 0x10007712) compares the FOURTH byte of
+        // the 4-byte tag ("000T" -> 'T') against each EDITION_LETTERS
+        // entry; match = edition accepted, no match = connect rejected.
+        let letter = tag.get(3).copied().unwrap_or(0);
+        Ok(EDITION_LETTERS.contains(&letter))
     }
 
     /// The observed register-init phase: 0x0104/0x0204 table pairs,

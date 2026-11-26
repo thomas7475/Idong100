@@ -161,3 +161,67 @@ fn observed_frame_shapes_decode() {
     assert!(!f.reply);
     assert_eq!(f.body.len(), 58);
 }
+
+/// Turn 33: the engine-gate reads. The vendor engine (xEyeUSB.dll
+/// 2.6.0.6) reads a 4-byte version tag at EEPROM 0x0322 and compares
+/// its FOURTH byte against "DSHY"/NUL ("000T" -> 'T' -> rejected,
+/// endless "connecting"), and a 32-byte device ID at EEPROM 0x0300
+/// (backup 0x0700) with a trailing byte-sum. The exact values below
+/// come from the captured unit (wire capture 7 + the T24C16 dump).
+#[test]
+fn turn33_engine_gate_reads() {
+    use idong::mock::reply;
+    use idong::protocol::runtime::{
+        EDITION_LETTERS, EEPROM_CODE_A_OFFSET, EEPROM_DEVICE_ID_BACKUP_OFFSET,
+        EEPROM_DEVICE_ID_OFFSET,
+    };
+
+    // device ID: 32 ASCII chars + byte-sum 0x50 (from the T24C16 dump)
+    let id_ascii = b"AB460DC8BA12C6840B49CD5786C329DD";
+    let sum: u8 = id_ascii.iter().fold(0u8, |a, b| a.wrapping_add(*b));
+    assert_eq!(sum, 0x50, "dump-derived checksum");
+    let mut id_read = id_ascii.to_vec();
+    id_read.push(0x50);
+
+    // primary area answers, backup never needed
+    let mut m = MockTransport::new(vec![reply(id_read.clone())]);
+    let mut s = RuntimeSession::new(&mut m);
+    assert_eq!(s.read_device_id().unwrap(), id_ascii);
+
+    // version tag "000T" + 0xE4 -> NOT accepted by the v2.6.0.6 engine
+    let mut m = MockTransport::new(vec![reply(b"000T\xE4".to_vec())]);
+    let mut s = RuntimeSession::new(&mut m);
+    assert!(!s.edition_tag_accepted().unwrap(), "'T' is rejected by DSHY");
+    assert!(!EDITION_LETTERS.contains(&b'T'));
+
+    // "000D" + correct checksum -> accepted
+    let mut m = MockTransport::new(vec![reply(b"000D\xD4".to_vec())]);
+    let mut s = RuntimeSession::new(&mut m);
+    assert!(s.edition_tag_accepted().unwrap());
+
+    // the request bytes are exactly the observed 0x0107 frames
+    let want_tag: [u8; 12] =
+        [0x7f, 0x55, 0x07, 0x01, 0x00, 0x00, 0x00, 0x04, 0x03, 0x22, 0x00, 0x05];
+    assert_eq!(&m.writes[0][..12], &want_tag, "0107 tag request");
+    let want_id: [u8; 12] =
+        [0x7f, 0x55, 0x07, 0x01, 0x00, 0x00, 0x00, 0x04, 0x03, 0x00, 0x00, 0x21];
+    let mut m = MockTransport::new(vec![reply(id_read.clone())]);
+    let mut s = RuntimeSession::new(&mut m);
+    s.read_device_id().unwrap();
+    assert_eq!(&m.writes[0][..12], &want_id, "0107 device-id request");
+
+    // broken checksum in the primary area -> the engine falls back to
+    // the backup area; our read_device_id mirrors that
+    let mut bad = id_read.clone();
+    bad[0] ^= 0xFF;
+    let mut m = MockTransport::new(vec![reply(bad), reply(id_read.clone())]);
+    let mut s = RuntimeSession::new(&mut m);
+    let id = s.read_device_id().expect("device id from backup area");
+    assert_eq!(id, id_ascii);
+    assert_eq!(m.writes.len(), 2, "primary then backup request");
+    // the backup request addresses 0x0700
+    assert_eq!(&m.writes[1][8..12], &[0x07, 0x00, 0x00, 0x21]);
+    assert_eq!(EEPROM_DEVICE_ID_BACKUP_OFFSET, 0x0700);
+    assert_eq!(EEPROM_DEVICE_ID_OFFSET, 0x0300);
+    assert_eq!(EEPROM_CODE_A_OFFSET, 0x0322);
+}

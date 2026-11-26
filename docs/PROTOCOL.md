@@ -221,3 +221,64 @@ Full evidence: `research/idong100/agents/14-captures32/FINDINGS.md`.
 Open: what starts the camera/marker stream (the vendor app never entered
 that state in 535 s of capture); the role of app_m8051_2500.hex; CMOS
 register semantics.
+
+## Turn 33: why the vendor app never left "connecting" (cap7)
+
+Capture 7 (300 s, kit v31, patched DLL) plus a full static analysis of
+the engine closed the last open question. The vendor app RUNS its whole
+sensor session - but its own connect is rejected at the very last check,
+so the UI state machine stays at "detecting sensor" forever.
+
+**The engine's connect chain (xEyeUSB.dll 2.6.0.6, McuManager25):**
+
+1. `AutoPreDetectDevice` -> `CheckSpecialDevice(0, id)` per hardware
+   ID (table @0x10007d98: `0471:0666`, `0668`, `2100`, `2600`,
+   `2500&MI_04`): enumerate + CreateFile each. Return 5/4/3/2 = found
+   (device class), 1 = the 0666 unit is present ("hardware mismatch"
+   -> state-freeze flag), 0 = nothing found.
+2. InitDevice -> `connect`: `xeyezHal_SetFpgaFile` (BitFile from
+   .\xEyeUsb.ini), `SetLensBuffer`, `StartFlow` (the 8051 flash +
+   session init = everything observed on the wire), session init,
+   `GetMcuVersion` ("2619"), edition check.
+3. **The gate (new in v2.6.0.6, absent from v2.5.0.7):** the version
+   loop (3 attempts) calls `xeyezHal_DeviceVerRead(4)` = **`0x0107`
+   EEPROM read at 0x0322, 5 B** ("000T"+0xE4 on this unit) and compares
+   the FOURTH byte against the constant `"DSHY"` at 0x10016034 - 'D',
+   'S', 'H' or 0x00 pass. **This unit's 'T' fails all three
+   attempts** -> close -> retry every 10 s -> the wire shows the tag
+   read 3x at the end of every cycle, and the screen never leaves
+   "正在连接idong感应器". The sensor also spontaneously re-enumerates
+   as the 0471:2600 bootloader every 31-157 s (3x in cap7: t=209.7,
+   t=255.7; also seen in cap2), the engine re-flashes it each time.
+4. After the gate passes (kit idong100_engine33, 1 byte: DLL offset
+   0x16036 'H'->'T'), the state machine needs the device-ID check:
+   message 5 -> `check_device_id` -> `xeyezHal_DeviceIDRead(32)` =
+   `0x0107` EEPROM read at **0x0300, 33 B** (32 ASCII + sum checksum,
+   backup at 0x0700). This unit: "AB460DC8BA12C6840B49CD5786C329DD"
+   +0x50, intact in the T24C16 dump. Then stage -> "running" (state 7).
+
+**The 0471:2500 composite topology (cap7 descriptors, 361-B config):**
+
+- if0 Video Control (0E.01.00), if1 Video Streaming (0E.02.00; alt 0
+  no ep, alt 1 ep 0x85 IN, alt 2 ep 0x85 IN) - the app opens the
+  camera via DirectShow/UVC right after each re-enumeration (75
+  class-interface GET_INFO/MIN/MAX/RES/DEF queries, wValue CS 02..08),
+  but never selects an alt > 0 in any capture so far;
+- if2 Audio Control (01.01.00), if3 Audio Streaming (01.02.00, ep
+  0x84 IN iso 32 B);
+- if4 vendor class (00.00.00): ep 0x02 OUT / 0x82 IN = the 7F 55
+  pipes, ep 0x03 OUT / 0x83 IN (512 B, unused so far).
+- The bootloader (0471:2600) is a single ff.00.00 interface with just
+  ep 0x02/0x82 (32-B config). The launch (0x0401) re-enumerates
+  2600 -> 2500.
+
+**"FPGA blobs" decoded:** the 30fps/*.dat "FPGA" files are NOT
+bitstreams - they are text register tables ("0x06,0x02\r\n0x07,0x81...")
+sent as the observed 0x0103/0x0203 8-B chunks and 0x0104/0x0204 CMOS
+tables. The FPGA/DSP bitstreams are never host-uploaded (factory
+images). Implemented in the driver: `read_device_id()`,
+`edition_tag_accepted()`, `EDITION_LETTERS`, constants in
+`idong/src/protocol/runtime.rs`; golden test `turn33_engine_gate_reads`.
+
+Open: the stream itself (ep 0x85 alt>0 / ep 0x03/0x83, marker records)
+- reachable once the engine-unlock kit runs the app into the lobby.
