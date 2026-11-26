@@ -20,11 +20,17 @@ interface - one box, one cable, no USBPcap needed. A live USB with
 | T5 `session_full` | T3 + CMOS register tables (vendor bytes) | **yes** (`--cmos`) |
 | T6 `video --probe` | nothing (V4L2 queries only) | no |
 | T7 `video` | T5 + V4L2 streaming | **yes** (`--cmos`) |
+| T8 `flash_mcu` | the 8051 firmware upload (the vendor flash itself) | **yes** (`--confirm`) |
 
 All writes are the exact observed vendor bytes: T5/T7 send the same
 register tables the vendor engine sends on every session (volatile
 image-sensor registers - a power cycle clears them; the T24C16A EEPROM
-is never written, the driver has no write path to it at all).
+is never written, the driver has no write path to it at all). T8 sends
+the vendor FLASH itself - which the vendor engine re-runs on EVERY
+bootloader landing (several times per hour by itself): the image lands
+in 8051 RAM, is read back in FULL before the commit key, and a mismatch
+aborts the launch (the mask-ROM bootloader can never be overwritten, so
+a failed flash is always recoverable by simply rerunning it).
 
 ## Step 0 - prepare the box (once, ~15 min)
 
@@ -55,7 +61,8 @@ sudo usermod -aG video $USER    # then log out and back in
 cargo test && cargo test --features usb
 ```
 
-Expected: `82 passed` in the lib (both runs), all integration tests ok.
+Expected: `64 passed` in the lib (both runs, 87 with the integration
+tests + doc-test), all green.
 
 ## T2 - discovery (read-only)
 
@@ -93,7 +100,8 @@ cargo run --features usb --example session_full -- --cmos   # real run
 
 The `--cmos` run sends the CMOS register init (2 tables + 6 chunks +
 end marker, exactly the cap3 bytes), then one poll cycle (6 polls) and
-three 0x0205 stream polls.
+three 0x0205 stream polls. (If the sensor sits in its bootloader: T8
+flashes it from Linux now - no vendor software needed.)
 
 PASS: `PASS: full-session bring-up complete.` - register init answered,
 poll cycle 6/6, calibration still parses. If a step fails with a USB
@@ -138,6 +146,35 @@ Anything else is still valuable: a FAIL with its console output + the
 generated PNGs decides the next move (V4L2 promotion into the crate vs
 the usbfs-ISO backend).
 
+## T8 - THE P2.3 8051 firmware upload (controlled flash replay)
+
+```sh
+# dry run first (read-only: both SHA-256 pins, no device opened):
+cargo run --features usb --example flash_mcu -- --hex <app_m8051_2611.hex>
+# the flash itself (two-key gate: pins + --confirm):
+cargo run --features usb --example flash_mcu -- --hex <app_m8051_2611.hex> --confirm
+```
+
+Get `app_m8051_2611.hex` from the vendor software install folder
+(`xeyez_pc_v2.6.0.6-inst.zip` -> `xeyez_engine/Chs/`; never committed to
+this repo - the loader pins its SHA-256 from the turn-12 manifest).
+
+What it does: waits for the 0471:2600 bootloader window (the sensor
+self-reboots to it every 31-157 s; replug to force it at once), then the
+EXACT cap3 vendor flash: `0x0101` begin, 335 raw 64-B blocks, `0x0201`
+verify + FULL image readback compare, `0x0301` key, `0x0401` launch ->
+re-enumerates as 0471:2500, then proves the runtime (version "2619" +
+the four EEPROM reads).
+
+PASS criteria (all printed): firmware pins hold; bootloader answered
+"2600"; readback matched 21,411 B; re-enumerated as 0471:2500; version
+"2619"; identity + calibration parse.
+
+A mismatched readback ABORTS before key+launch - a partial download is
+never committed, and the bootloader ROM is never at risk. Send the full
+output either way: ONE clean PASS here flips `FLASH_CONFIRMED` in the
+crate and opens the ungated flash path.
+
 ## If something fails - what to collect
 
 ```sh
@@ -164,3 +201,6 @@ captures exactly like we did with USBPcap on Windows.
   real sensor, writes included (P2.4 acceptance).
 - T6/T7: the video plane works through uvcvideo or we learn exactly why
   not (P2.5 acceptance or the P2.5b decision).
+- T8: the driver brings the sensor up from a cold bootloader on its own
+  (P2.3 acceptance) - the complete vendor lifecycle without any vendor
+  software.

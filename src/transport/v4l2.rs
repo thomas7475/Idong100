@@ -21,7 +21,7 @@
 //! `port + ":"`; the colon keeps "2-1" from matching "2-1.3:1.1" - a
 //! sibling on the same hub must NOT match). This module is that
 //! matcher plus the node scan - pure code, unit-tested. The ioctl
-//! layer itself lives in examples/video.rs until the first bench run
+//! layer itself lives in src/examples/video.rs until the first bench run
 //! promotes it into the crate (P2.5 acceptance).
 
 use std::fs;
@@ -91,14 +91,18 @@ pub fn video_nodes() -> Vec<VideoNode> {
 /// `/sys/bus/usb/devices/*/idVendor` + `idProduct`; interface dirs
 /// (`2-1.3:1.1`) and root hubs carry no idVendor and are skipped
 /// naturally.
+///
+/// Turn-39 fix: sysfs idVendor/idProduct are HEX ASCII ("0471", "2500")
+/// - the first bench run matched nothing because the values were parsed
+/// as DECIMAL ("2500" = 2500, not 0x2500 = 9472), so every port list
+/// came back empty and no /dev/video node ever matched.
 pub fn sensor_usb_ports(vid: u16, pid: u16) -> Vec<String> {
     let mut ports = Vec::new();
     let Ok(rd) = fs::read_dir("/sys/bus/usb/devices") else { return ports };
     for e in rd.flatten() {
         let path = e.path();
-        let read_hex = |f: &str| -> Option<u16> {
-            fs::read_to_string(path.join(f)).ok()?.trim().parse::<u16>().ok()
-        };
+        let read_hex =
+            |f: &str| -> Option<u16> { parse_sysfs_hex16(&fs::read_to_string(path.join(f)).ok()?) };
         let (Some(v), Some(p)) = (read_hex("idVendor"), read_hex("idProduct")) else { continue };
         if v == vid && p == pid {
             if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
@@ -109,6 +113,12 @@ pub fn sensor_usb_ports(vid: u16, pid: u16) -> Vec<String> {
     ports.sort();
     ports.dedup();
     ports
+}
+
+/// One sysfs idVendor/idProduct value: plain hex ASCII without prefix
+/// ("0471" -> 0x0471, "2500" -> 0x2500). Pure - unit-testable.
+pub fn parse_sysfs_hex16(s: &str) -> Option<u16> {
+    u16::from_str_radix(s.trim(), 16).ok()
 }
 
 /// Does a video node's USB interface dir (`usb_iface`, e.g. "2-1.3:1.1")
@@ -190,6 +200,26 @@ mod tests {
         let ports2 = vec!["2-1.3".to_string(), "1-2".to_string()];
         let hits2 = sensor_nodes(&nodes, &ports2);
         assert_eq!(hits2.iter().map(|n| n.index).collect::<Vec<_>>(), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn sysfs_hex_ids_parse() {
+        // sysfs idVendor/idProduct are HEX ASCII: the sensor's ids parse
+        // to the crate constants. This is the turn-39 bench fix: the
+        // first video probe parsed them as DECIMAL ("2500" -> 2500),
+        // matched nothing and every port list came back empty.
+        assert_eq!(parse_sysfs_hex16("0471"), Some(0x0471));
+        assert_eq!(parse_sysfs_hex16("2500"), Some(0x2500));
+        assert_eq!(parse_sysfs_hex16("2600"), Some(0x2600));
+        assert_eq!(parse_sysfs_hex16("1d6b"), Some(0x1d6b));
+        // trailing newline (a real sysfs read) and a tidy value agree
+        assert_eq!(parse_sysfs_hex16("0471\n"), Some(0x0471));
+        // the decimal trap the old code fell into: 2500 != 0x2500
+        assert_ne!(parse_sysfs_hex16("2500"), Some(2500));
+        // garbage never matches
+        assert_eq!(parse_sysfs_hex16("0x2500"), None);
+        assert_eq!(parse_sysfs_hex16(""), None);
+        assert_eq!(parse_sysfs_hex16("zz"), None);
     }
 
     #[test]

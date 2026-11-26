@@ -1,38 +1,47 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
-Turn 38, 2026-11-27. The one-file answer to "how far are we, what is
+Turn 39, 2026-11-27. The one-file answer to "how far are we, what is
 left". Status line: **the protocol is fully decoded (every plane
-captured), the single crate implements it all with 82 tests green, and
-the COMPLETE Linux bench ladder is coded - read-only identity (P2.2),
-full session (P2.4), and the video bring-up (P2.5) all ship as
-examples with a step-by-step test plan (`docs/LINUX_TESTS.md`). Running
-T2-T7 on the bench is the next step. No protocol blocker remains.**
+captured), ALL code lives under `src/` (turn 39: lib + examples +
+integration tests, one tree), 87 tests green, and the bench ladder
+T1-T8 passed its first LIVE run on Linux: T1-T5 PASS (identity, session,
+CMOS writes, polls), the video probe (T6) listed the UVC nodes - the
+turn-39 fixes (sysfs hex parse, calibration payload parser) clear the
+two reported FAILs - and the 8051 firmware upload now ships as the T8
+controlled replay (`src/examples/flash_mcu.rs`, two-key consent gate).
+Next: rerun T6/T7 for the video plane, run T8 for the P2.3 flip. No
+protocol blocker remains.**
 
 ## The short version
 
 | Layer | Status |
 | --- | --- |
 | Wire protocol (boot flash, session, EEPROM, CMOS, stream poll, UVC video) | DONE - byte-pinned from 5 captures, turn 32/33/35 |
-| P1 pure core (frames, records, calibration, boot + runtime framing, video assembler) | DONE - 82 tests green, no hardware needed |
-| Single-crate layout (one src/, one Cargo.toml - turn 37) | DONE |
+| P1 pure core (frames, records, calibration, boot + runtime framing, video assembler) | DONE - 87 tests green, no hardware needed |
+| All-code-in-src/ layout (lib + src/examples/ + src/tests/ - turn 39) | DONE - explicit `[[example]]`/`[[test]]` path targets, commands unchanged |
+| Live bench run T1-T5 (turn 39: list/bringup/session_full --cmos) | PASS on the real sensor (Linux, rusb) |
+| Live V4L2 probe T6 (turn 39) | uvcvideo binds 640x480 YUYV on MI_01 - sensor-match fix ships this turn (sysfs hex parse) |
+| Live calibration parse (T3) | fix ships this turn (payload vs wire-record parser - the "need 121, have 120" FAIL) |
 | Session lifecycle incl. self-reboot recovery (`src/session.rs`) | DONE (core) |
 | Reply-timeout fail-fast (`REPLY_EMPTY_BUDGET`, turn 38) | DONE - no more 17-min silent spins |
 | P2.1 transport (rusb discovery + bulk I/O) | CODE DONE - never touched real hardware |
 | Re-enumeration handling (`src/transport/reenum.rs`) | DECISION CORE DONE + unit-tested; rusb loop coded, untested on hardware |
-| P2.2 live read-only bring-up (`examples/bringup.rs`) | CODE DONE - run it as bench step T3 (`docs/LINUX_TESTS.md`) |
-| P2.4 full-session test (`examples/session_full.rs`, turn 38) | CODE DONE - writes gated behind `--cmos`; bench step T5 |
-| P2.5 Linux video bring-up (`examples/video.rs` + `src/transport/v4l2.rs`, turn 38) | CODE DONE - V4L2 UAPI mirror const-asserted + pure sysfs matcher; bench steps T6/T7; promotion into the crate awaits the first PASS |
-| P2.3 flash gate (`FLASH_CONFIRMED`) | CLOSED by evidence, OPEN for hardware replay |
+| P2.2 live read-only bring-up (`src/examples/bringup.rs`) | LIVE PASS (T3, turn 39) - version 2619, device ID, codes read |
+| P2.4 full-session test (`src/examples/session_full.rs`, turn 38) | LIVE PASS (T5 `--cmos`, turn 39) - register init + 6/6 polls |
+| P2.5 Linux video bring-up (`src/examples/video.rs` + `src/transport/v4l2.rs`) | T6 probe ran: uvcvideo sees 640x480 YUYV; the sensor cross-match fix (sysfs hex ids) ships turn 39 - rerun T6/T7 |
+| P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | CODE DONE - two-key consent gate (SHA-256 pins + `--confirm` + `FlashPermit`), waits for the bootloader window, readback abort, reenum proof; `FLASH_CONFIRMED` stays closed until the first T8 PASS |
 | Marker/3D record decoding (xEye3Ddata 10-slot records) | PARSER DONE - never seen on the wire in ANY capture (open) |
 | P4 ROS 2 node (idong-ros2, idong_msgs) | NOT STARTED (needs a ROS install) |
 
 ## Layout (turn 37: single crate)
 
-Everything lives in one crate now - one `src/`, one `Cargo.toml`, one
-version. The rusb transport is a cargo feature:
+Everything lives in one crate now - one `Cargo.toml`, ALL code under
+`src/` (turn 39): the lib in `src/`, the examples in `src/examples/`,
+the integration tests in `src/tests/` (explicit path targets, so the
+commands are unchanged). The rusb transport is a cargo feature:
 
 ```
-cargo test                      # 82 tests, hardware-free, no libusb needed
+cargo test                      # 87 tests, hardware-free, no libusb needed
 cargo test --features usb       # same + compiles the rusb transport
 cargo run --features usb --example list            # T2: discovery
 cargo run --features usb --example bringup         # T3: read-only bring-up
@@ -40,10 +49,12 @@ cargo run --features usb --example probe_bootloader # T4: bootloader probe
 cargo run --features usb --example session_full -- --cmos  # T5: full session
 cargo run --features usb --example video -- --probe       # T6: V4L2 probe
 cargo run --features usb --example video -- --cmos --frames 10  # T7: video
+cargo run --features usb --example flash_mcu -- --hex <hex>   # T8 dry run
+cargo run --features usb --example flash_mcu -- --hex <hex> --confirm  # T8
 ```
 
 The full ladder with PASS criteria and failure collection:
-`docs/LINUX_TESTS.md` (turn 38).
+`docs/LINUX_TESTS.md` (turn 38/39).
 
 ## What exists today
 
@@ -72,10 +83,10 @@ The full ladder with PASS criteria and failure collection:
   video backend: /dev/video* node scan, the sensor cross-match
   (usb port chain <-> video node interface dir) and fourcc formatting;
   unit-tested (the matcher rules, incl. the sibling-trap).
-- `examples/session_full.rs` (NEW turn 38) - the P2.4 test: full vendor
+- `src/examples/session_full.rs` (turn 38) - the P2.4 test: full vendor
   session (EEPROM + CMOS register tables, writes gated behind
   `--cmos`) + one poll cycle + 0x0205 probes.
-- `examples/video.rs` (NEW turn 38) - the P2.5 test: `--probe` (what
+- `src/examples/video.rs` (turn 38) - the P2.5 test: `--probe` (what
   does uvcvideo see) and the full stream run (session + V4L2 mmap
   streaming + 0x0205 at 10 Hz + per-channel PNGs + raw .bin + stats).
   The V4L2 UAPI mirror is const-asserted against the kernel headers
@@ -86,30 +97,45 @@ The full ladder with PASS criteria and failure collection:
   = ~3 s) instead of spinning 1024 x 1 s (~17 min).
 - `src/calib.rs` - T24C16A EEPROM factory calibration parser
   (verified against your 24c16-dump.bin: |T| = 100 mm, R orthonormal)
-  + `parse_calibration_record` for the live session read (turn 37).
+  + `parse_calibration_record` for the live session read (turn 37)
+  + `parse_calibration_payload` (turn 39) for the 120-B payload that
+  `SessionInfo::calibration` actually holds - the first bench run fed
+  it to the 121-B wire-record parser and printed "need 121, have 120".
+- `src/examples/flash_mcu.rs` (NEW turn 39) - the P2.3 8051 firmware
+  upload as a controlled hardware replay: dry run (both SHA-256 pins,
+  no device touched) + `--confirm` run (waits out the 31-157 s
+  bootloader window, the exact cap3 flash with full-image readback
+  abort, key+launch, reenum wait, version + identity proof). Two-key
+  gate: `FirmwareSet::verify_hex` + `mcu_image` pins AND the
+  `FlashPermit` consent token (`FLASH_CONSENT_PHRASE`, unforgeable
+  outside the crate).
+- `src/protocol/runtime.rs` (turn 39) - `FlashPermit` +
+  `flash_mcu_permitted` + `FirmwareSet::verify_hex`; `flash_mcu` itself
+  stays compile-gated (`FLASH_CONFIRMED`) until the first T8 PASS.
 - `src/{marker,records,handle,stream}.rs` - the xEye3Ddata record
   parser, marker model, handle events, reader thread.
 
 ## What is missing, in order
 
-1. **Run the Linux bench ladder** (`docs/LINUX_TESTS.md`, turn 38):
-   T2 discovery -> T3 read-only bring-up (P2.2 acceptance) -> T4
-   bootloader probe -> T5 full session with `--cmos` (P2.4 acceptance)
-   -> T6 V4L2 probe -> T7 the stream test (P2.5 acceptance or the
-   P2.5b decision). ~20 minutes end to end; every step prints
-   PASS/FAIL and what to collect on a FAIL.
-2. **P2.5 promotion**: after T7 PASSes once, promote the video backend
-   from `examples/video.rs` into the crate behind a feature (and wire
-   `VideoSource`/`VideoAssembler` if payload-level access is ever
-   needed). If T6/T7 FAIL on the uvcvideo side, the fallback is P2.5b:
-   raw usbfs ISO on EP 0x85 (rusb has no ISO support - needs the
-   libusb1-sys async API or raw usbfs URB ioctls).
-3. **P2.4b auto-recovery**: `session_full`/`video` currently tell you
+1. **Pull turn 39 and rerun the fixed bench steps** (the turn-38 run
+   hit two now-fixed bugs): T3 `bringup` again (the calibration parse
+   now PASSES - `parse_calibration_payload`), T6 `video --probe` (the
+   sensor ports list is no longer empty - sysfs ids are HEX, not
+   decimal, so the nodes now cross-match: expect `matches sensor:
+   true` on /dev/video0), then T7 the stream test.
+2. **T8 the 8051 firmware upload** (`src/examples/flash_mcu.rs`): dry
+   run + `--confirm` on the real sensor. ONE clean PASS flips
+   `FLASH_CONFIRMED` (P2.3 acceptance) and from then on the driver
+   brings the sensor up from any bootloader landing itself.
+3. **P2.5 promotion**: after T7 PASSes once, promote the video backend
+   from `src/examples/video.rs` into the crate behind a feature (and
+   wire `VideoSource`/`VideoAssembler` if payload-level access is
+   ever needed). If T6/T7 FAIL on the uvcvideo side, the fallback is
+   P2.5b: raw usbfs ISO on EP 0x85 (rusb has no ISO support - needs
+   the libusb1-sys async API or raw usbfs URB ioctls).
+4. **P2.4b auto-recovery**: `session_full`/`video` currently tell you
    to rerun after a self-reboot; wire the existing
    `transport::reenum` waiter into the examples' error path.
-4. **P2.3 flip `FLASH_CONFIRMED`** after ONE controlled hardware flash
-   replay. Optional: the vendor engine re-flashes the MCU on every
-   bootloader landing anyway, so read-only sessions work indefinitely.
 5. **The marker/3D plane**: NOT on the wire in any capture so far.
    The running games receive the 10-slot records over the engine pipes;
    the likely trigger is a command we have not sent or EP 0x03/0x83
@@ -140,6 +166,14 @@ still add value (both optional):
 - The bootloader maxpacket quirk (64 B at high speed) is accepted by
   rusb; transfers must be 64-B on 2600.
 - The sensor self-reboots every 31-157 s (3x in cap7, 1x in cap8) -
-  the session layer expects it; do not power-cycle manually.
+  the session layer expects it; do not power-cycle manually. Every
+  landing shows the bootloader 0471:2600 for a while - T8 can flash
+  from any of them (the example waits the window out for you).
+- The turn-39 bench note: right after a self-reboot the device can sit
+  in the bootloader across replugs until something flashes it; on a
+  pure-Linux bench that something is T8 (no vendor software needed).
+- A `Resource busy` on opening MI_04 once after a re-enumeration was
+  seen on the bench (addr 96) and cleared on rerun - the kernel was
+  still settling the fresh composite device; rerun is the fix.
 - NEVER write the T24C16A EEPROM (factory calibration) - the driver
   has no write path to it at all.

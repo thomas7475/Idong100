@@ -215,7 +215,7 @@ The downloaded image: app_m8051_2611.hex flattened over [0x8000,0xD3A3),
 gap bytes 0x00 - byte-identical to the wire (download and echo), SHA-256
 `5da1565c6704d387081844e712b4be4d521083e21a619df7d6cb11551c2aba9c`.
 Implemented: `src/protocol/runtime.rs` (RuntimeSession,
-golden-replayed in `tests/runtime_replay.rs`), `FirmwareSet::mcu_image()`.
+golden-replayed in `src/tests/runtime_replay.rs`), `FirmwareSet::mcu_image()`.
 Full evidence: `research/idong100/agents/14-captures32/FINDINGS.md`.
 
 Open: what starts the camera/marker stream (the vendor app never entered
@@ -360,7 +360,7 @@ on EP 0x85 @ 52.0 s to the end (82.8 MB, 1358 ISO records, 63960 B each).
 The 0x0205 poll and the video raster are implemented and pinned in
 `src/protocol/video.rs` + `src/protocol/runtime.rs`
 (`poll_stream`, `VideoAssembler`, `ProbeCommit`, `StreamPollState`),
-golden-tested against capture bytes in `tests/video_golden.rs`.
+golden-tested against capture bytes in `src/tests/video_golden.rs`.
 
 **Bootloader recovery confirmed (second full observation):** the
 sensor self-rebooted mid-session (17.8 s) and the host re-ran the

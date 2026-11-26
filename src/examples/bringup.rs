@@ -94,8 +94,11 @@ fn main() {
             verdict(c_ok)
         );
         // the calibration payload is the REC_CALIB blob of the 24c16
-        // dump: parse it with the factory parser (read-only)
-        match idong::calib::parse_calibration_record(&info.calibration) {
+        // dump; the runtime layer already verified the wire checksum,
+        // so parse the 120-B PAYLOAD (turn-39 fix: this used to feed the
+        // 121-B wire-record parser and always failed with
+        // "need 121 bytes, have 120")
+        match idong::calib::parse_calibration_payload(&info.calibration) {
             Ok(cal) => {
                 println!(
                     "      {} calibration parses: baseline {:.1} mm, focal {:.1} px",
@@ -112,8 +115,10 @@ fn main() {
         println!();
         println!("PASS: read-only bring-up complete.");
         println!("next steps:");
-        println!("  - the flash gate P2.3 stays closed until one controlled");
-        println!("    hardware flash replay (docs/BRINGUP.md section 3)");
+        println!("  - the 8051 firmware upload is the P2.3 controlled replay:");
+        println!("    cargo run --features usb --example flash_mcu -- \\");
+        println!("      --hex <app_m8051_2611.hex>          (dry run, pins only)");
+        println!("    ... --confirm                        (the flash itself)");
         println!("  - the video backend is the next code phase (P2.5): V4L2 or");
         println!("    raw usbfs ISO on EP 0x85 - VideoSource is the seam");
         return;

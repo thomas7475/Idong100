@@ -11,17 +11,25 @@
 //! # Safety model
 //!
 //! 1. Nothing in this crate writes to the device except the
-//!    [`protocol::boot::BootUploader`] (the exact vendor upload
-//!    sequence, further gated by [`protocol::boot::BOOT_CONFIRMED`])
-//!    and the documented runtime replies (keep-alive `0xFFE`,
-//!    link-status word `0x11`).
-//! 2. No write-capable code path runs on real hardware before the boot
-//!    upload is byte-confirmed against a USBPcap capture of the vendor
-//!    stack (draft gate P2.3).
+//!    [`protocol::runtime::RuntimeSession::flash_mcu_permitted`]
+//!    controlled bench replay (turn 39: the exact vendor upload
+//!    sequence behind the two-key [`protocol::runtime::FlashPermit`]
+//!    consent gate, with the SHA-256-pinned vendor image and an
+//!    abort-on-mismatch readback), the compile-gated
+//!    [`protocol::boot::BootUploader`] (the historical DLL model,
+//!    never on the wire) and the documented runtime replies
+//!    (keep-alive `0xFFE`, link-status word `0x11`).
+//! 2. The flash path (P2.3) opens only as a controlled hardware
+//!    replay: `src/examples/flash_mcu.rs` verifies the vendor hex
+//!    against its SHA-256 pin, builds the flattened image (pinned
+//!    again), and needs BOTH the exact `FLASH_CONSENT_PHRASE` and the
+//!    human `--confirm` before the first byte leaves the host.
+//!    `FLASH_CONFIRMED` (the ungated `flash_mcu`) stays closed until
+//!    that replay passes once on real hardware.
 //! 3. The T24C16A EEPROM is never written: the parser is read-only.
 //! 4. Firmware files are SHA-256-pinned (the turn-12 manifest) before
 //!    any upload; a mismatch aborts before the first byte leaves the
-//!    host ([`FirmwareSet::verify`]).
+//!    host ([`FirmwareSet::verify`], [`FirmwareSet::verify_hex`]).
 //!
 //! ```no_run
 //! use std::time::Duration;
@@ -54,6 +62,9 @@ pub use calib::{DeviceIdentity, StereoCalib};
 pub use error::{BootStep, IdongError, ProtocolError, Result};
 pub use handle::HandleEvent;
 pub use marker::{Marker, MarkerFrame, Quality};
+/// The controlled P2.3 bench flash gate (turn 39): the two-key consent
+/// token + phrase for the 8051 firmware upload replay.
+pub use protocol::runtime::{FlashPermit, FLASH_CONSENT_PHRASE};
 pub use protocol::video::{ProbeCommit, VideoAssembler, VideoFrame, VideoSource};
 pub use session::{Phase, Session, SessionInfo};
 pub use stream::{StatsSnapshot, StreamStats, Streamer};
@@ -186,6 +197,26 @@ impl FirmwareSet {
         Ok(())
     }
 
+    /// Turn 39: verify ONLY the 8051 hex file against its pinned
+    /// SHA-256 - the one firmware file the MCU flash path sends (the
+    /// DSP `.ldr` and FPGA `.bit` are never host-uploaded on this
+    /// unit, cap2/3/4/8). The flash example pins the raw hex here,
+    /// then the flattened image again inside [`Self::mcu_image`] -
+    /// two independent hashes before the first byte leaves the host.
+    pub fn verify_hex(hex: &[u8]) -> Result<()> {
+        use std::path::PathBuf;
+        let got = Self::sha256hex(hex);
+        let want = Self::SHA256[2];
+        if got != want {
+            return Err(IdongError::FirmwareIntegrity {
+                path: PathBuf::from("app_m8051_2611.hex"),
+                got,
+                want: want.to_string(),
+            });
+        }
+        Ok(())
+    }
+
     fn sha256hex(data: &[u8]) -> String {
         // No external crypto dep in the pure core: SHA-256 implemented
         // inline (FIPS 180-4), used only for the integrity gate.
@@ -267,5 +298,18 @@ mod tests {
             FirmwareSet::sha256hex(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
             "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
         );
+    }
+
+    #[test]
+    fn verify_hex_rejects_a_wrong_blob() {
+        // The turn-39 flash gate pin: anything that is not the exact
+        // vendor hex (here: the NIST "abc" vector bytes) is rejected
+        // with the FirmwareIntegrity error, before any upload call.
+        assert!(matches!(
+            FirmwareSet::verify_hex(b"abc"),
+            Err(IdongError::FirmwareIntegrity { .. })
+        ));
+        // an empty file is rejected too, never silently accepted
+        assert!(FirmwareSet::verify_hex(&[]).is_err());
     }
 }
