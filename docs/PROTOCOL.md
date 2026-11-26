@@ -282,3 +282,57 @@ images). Implemented in the driver: `read_device_id()`,
 
 Open: the stream itself (ep 0x85 alt>0 / ep 0x03/0x83, marker records)
 - reachable once the engine-unlock kit runs the app into the lobby.
+
+## Turn 34: the third gate (license), the driver files, the direct run
+
+Full findings: `research/idong100/agents/16-turn34/FINDINGS.md`.
+Kit: `idong100_engine34` (patch/verify/restore/check_unlock/run_direct/
+check_wire + reference DLLs; md5s in its MANIFEST.txt).
+
+**The connect gate chain, complete:**
+
+1. GATE 1 - version tag "DSHY" vs this unit's "000T" (turn 33, DLL
+   offset 0x16036 H->T).
+2. GATE 2 - device-ID read 0107 @0x0300 (intact on this unit).
+3. GATE 3 - **the license check** (`xEyeRight.dll`): `LocalRight` +
+   `NetRight` (HTTPS `POST /outer/device.action` to `us.i-dong.com`,
+   `deviceID=...&key=...`) -> `MakeFinalResult` -> final result 0x24
+   (1 = authorized) + window message 0x7E8. The server is dead, so a
+   stock install can NEVER be authorized; the engine host
+   (`xeyez.exe`) then refuses to go fully live
+   (`ShowDeviceIDInvalidWindow` = the "sensor not authorized" screen).
+   Turn-34 fix: `MakeFinalResult` file offset 0x927 (VA 0x10001527),
+   the 0x2D-byte guard block -> `xor edx,edx; mov [ecx+0x24],1; jmp`
+   into the vendor's own notify tail (relocation-safe: the vendor
+   `call [USER32!SendMessageA]` keeps its original offset 0x961 and
+   relocation entry).
+
+**The host stack (new facts):** `xeyez.exe` = the engine host
+(window class `xEyezEngine2009`, started by `xEyeService.exe` via
+`xEyezSvStartXeyez.exe` or by `xeyezMonitor.exe` or directly);
+camera clients use named pipes (`xEyeEngine.dll` = the pipe stub:
+`InitxEyeEngine`/`GetxEyePipeData`); the lobby uses TCP 40000
+(`portlobby`, conf/version.xml); `xEyeThirdLens.exe` = the standalone
+camera viewer (imports the pipe stub + `MiddleCameraCalib.dll`).
+The tray states (xEyeSysTrayTip.dll): unknown/stop/need-reinsert/
+**connecting**/handling/matching/pause/lost/hub-lost/video-excep/
+audio-excep/link-excep/noise/**running**; "connecting" = stage 4 with
+the device-ID flag still 0 (stage() reports 1).
+
+**The kernel driver (from the user's install zips):** `xeyez.sys`
+2.5.4.9 = the WinDDK bulkusb sample ported ("BF527 Bulk USB" - the
+sensor DSP is an Analog Devices Blackfin BF527, `ens_code.ldr` is
+its LDR image); x86 + x64; service `XEYEZ`; device
+`\Device\xeyezUsbDriverDev` -> apps open `\\.\xeyezUsbDriverDev`
+and use plain ReadFile/WriteFile (NO custom IOCTLs; EasyUSB.dll is
+the user-mode wrapper); INF binds 2600 / 2500&MI_04 / 2100 / 0668 /
+0666; reads `SOFTWARE\Toltech\xeyez_engine\Location` in kernel
+mode. `A_a_v4.4_BG0313.bit` = Xilinx bitfile, design "work_top.ncd".
+
+**Driver impact:** for a user-mode Rust driver, two options -
+(a) keep the vendor kernel driver and talk to
+`\\.\xeyezUsbDriverDev` with plain reads/writes (documented model
+above), or (b) replace it with WinUSB/libusb and drive the bulk
+endpoints 0x02/0x82 directly. The 0107/0300 device-ID read +
+checksum and the edition letters are already implemented in
+`idong/src/protocol/runtime.rs`.
