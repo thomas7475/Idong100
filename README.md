@@ -1,34 +1,88 @@
-# idong100-rs - Rust driver for the Toltech i-Dong Sensor V2.6
+# idong100 - Rust driver for the Toltech i-Dong Sensor V2.6
 
 Native, idiomatic Rust driver with ROS 2 output for the i-Dong stereo
-camera (USB 0471:2600 bootloader / 0471:2500 runtime). Design contract:
-`docs/IMPLEMENTATION_DRAFT.pdf` (turn 13) in the project downloads.
+camera (USB 0471:2600 bootloader / 0471:2500 runtime). All driver code
+lives under `software/` (turn 40); `research/` holds the work the driver
+grew out of. The design contract is the turn-13 implementation draft
+(`deliverables/idong100_RUST_ROS2_DRIVER_DRAFT.pdf`); the wire facts are
+`software/docs/PROTOCOL.md`.
 
-## Layout (single crate, turn 37)
+## Layout (turn 40)
+
+```
+software/                the driver - run every cargo command from here
+  Cargo.toml             one crate (`idong`), rustfmt.toml
+  src/                   protocol core, session lifecycle, transport
+  src/examples/          the bench and flash examples
+  src/tests/             hardware-free golden replays + firmware_files
+  firmware/              the vendor device files (v2.6.0.6, v2.5.0.7)
+  idong_msgs/            ROS message and service definitions
+  idong-ros2/            ROS 2 lifecycle node
+  docs/                  PROTOCOL, BRINGUP, DRIVER_STATUS, LINUX_TESTS,
+                         CAPTURE_KIT, SOLVE_DIALOG
+research/
+  idong100/              findings per turn, CONTEXT.md, SUMMARY.md
+  analysis/reports/      extraction and analysis outputs
+  scripts/               research tools
+tools/                   Windows bench kits: capture/, kit36/, kit37/
+deliverables/            PDF reports (+ the turn-13 scaffold, historical)
+```
 
 | Path | Duty | Depends on |
 |---|---|---|
-| `src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the pure V4L2 sysfs matcher (`src/transport/v4l2.rs`) | thiserror, log, crossbeam-channel; rusb only with `--features usb` |
-| `src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | libc + png (dev-deps, examples only) |
-| `src/tests/` | golden replays: mock, runtime, video - hardware-free | - |
-| `idong_msgs` | ROS message/service definitions (rosidl, colcon) | rosidl runtime |
-| `idong-ros2` | ROS 2 lifecycle node: params, QoS, diagnostics | rclrs, idong, idong_msgs |
+| `software/src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the pure V4L2 sysfs matcher (`src/transport/v4l2.rs`) + the firmware folder lookup (`src/firmware.rs`) | thiserror, log, crossbeam-channel; rusb only with `--features usb` |
+| `software/src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | libc + png (dev-deps, examples only) |
+| `software/src/tests/` | golden replays: mock, runtime, video, plus `firmware_files` (the shipped vendor files) - hardware-free | - |
+| `software/firmware/` | the vendor device files the driver targets: the three pinned images (`ens_code.ldr`, `A_a_v4.4_BG0313.bit`, `app_m8051_2611.hex`), `app_m8051_2500.hex` and the other MCU images, the vendor file map and register tables; `README.md` + `SHA256SUMS` | - |
+| `software/docs/` | PROTOCOL (wire facts), BRINGUP, LINUX_TESTS, DRIVER_STATUS, CAPTURE_KIT, SOLVE_DIALOG | - |
+| `software/idong_msgs` | ROS message/service definitions (rosidl, colcon) | rosidl runtime |
+| `software/idong-ros2` | ROS 2 lifecycle node: params, QoS, diagnostics | rclrs, idong, idong_msgs |
+| `research/` | `idong100/` findings per turn, `analysis/reports/` outputs (incl. the turn-12 SHA-256 manifest), `scripts/` research tools | - |
+| `tools/` | the Windows bench kits: `capture/`, `kit36/`, `kit37/` (the vendor-software unlock kit) | - |
+| `deliverables/` | the PDF reports | - |
 
-ALL code under `src/` (turn 39): the lib in `src/`, the examples in
-`src/examples/`, the integration tests in `src/tests/` - one tree,
+ALL code under `software/src/` (turn 39): the lib in `src/`, the examples
+in `src/examples/`, the integration tests in `src/tests/` - one tree,
 nothing outside it (explicit `[[example]]`/`[[test]]` path targets keep
 every `cargo run --example ...` command unchanged). One crate, one
-`Cargo.toml`, one version (turn 37: the old
-`idong` + `idong-transport` workspace crates were merged - `src/transport/`
-holds the rusb code behind the `usb` feature so plain `cargo test` stays
-hardware- and libusb-free).
+`Cargo.toml`, one version (turn 37: the old `idong` + `idong-transport`
+workspace crates were merged - `src/transport/` holds the rusb code
+behind the `usb` feature so plain `cargo test` stays hardware- and
+libusb-free). `idong-ros2` and `idong_msgs` are separate colcon packages
+next to the crate.
+
+## Build and test
+
+```
+cd software
+cargo test                                   # 100 tests, hardware-free
+cargo test --features usb                    # the same 100 + the rusb transport
+cargo +nightly fmt --check
+cargo run --features usb --example flash_mcu                # T8 dry run: pins only, no device
+cargo run --features usb --example flash_mcu -- --confirm   # T8: the controlled flash
+```
+
+The bench ladder T2-T8 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+
+## Status (turn 40, 2026-11-26) - repository reorganized
+
+All driver code moved under `software/` (with `git mv`, history kept),
+`analysis/` and `scripts/` under `research/`. The vendor device files
+now ship with the crate in `software/firmware/` - 24 byte-exact files
+from the vendor v2.6.0.6 and v2.5.0.7 packages, checked by
+`SHA256SUMS` and by the new `firmware_files` test against the turn-12
+manifest. `flash_mcu` reads `firmware/v2.6.0.6/app_m8051_2611.hex` by
+default; `--hex <path-or-name>` selects another copy, and the SHA-256
+pins still refuse any other image. 100 tests green in both feature
+states. No protocol change; nothing new was tested on hardware this
+turn.
 
 ## Status (turn 39, 2026-11-27) - live-tested: session PASS, flash ships
 
 **The wire protocol is fully decoded and implemented, and the first
 LIVE bench run (Linux) is in**: T1-T5 PASS on the real sensor (82 green
-before the run; 87 now) - identity EEPROM reads, the full session with
-`--cmos` register writes, 6/6 polls. The run also validated the two
+before the run; 87 at turn 39) - identity EEPROM reads, the full session
+with `--cmos` register writes, 6/6 polls. The run also validated the two
 turn-39 fixes: the calibration payload parser (the "need 121, have
 120" parse FAIL) and the sysfs hex-id cross-match (the video probe's
 empty `sensor usb ports` list - sysfs ids are HEX, not decimal).
@@ -40,7 +94,7 @@ unforgeable `FlashPermit`), the exact cap3 flash with full-image
 readback abort, bootloader-window wait, reenum + runtime proof. Next:
 rerun T6/T7 (video), run T8 (flash) - one clean T8 PASS flips
 `FLASH_CONFIRMED`. Then the marker-record trigger and ROS 2 - see
-`docs/DRIVER_STATUS.md`.
+`software/docs/DRIVER_STATUS.md`.
 
 Unlock kit for the vendor software (lobby/games): `tools/kit37`
 (all three gates: xEyeUSB + xEyeRight + xEyeWarrningUI, with the
@@ -48,9 +102,9 @@ patched DLLs shipped).
 
 ## Status (turn 15, 2026-11-24) - Phase 1 COMPLETE
 
-**P1 (pure core) implemented and green.** `cargo check --workspace`
-clean (0 warnings), 35 tests pass (`cargo test -p idong`), rustfmt
-clean. No hardware required for any test.
+**P1 (pure core) implemented and green.** `cargo check` clean (0
+warnings), 35 tests pass, rustfmt clean. No hardware required for any
+test.
 
 - P0.1 `docs/PROTOCOL.md` - full wire-facts table with citations
 - P1.1 error model + `protocol/mod.rs` constants (every value cited)
@@ -65,16 +119,12 @@ clean. No hardware required for any test.
   backpressure with exact overflow accounting; `FirmwareSet` SHA-256
   pins (verified against FIPS 180-4 vectors)
 - `src/transport/usb.rs` P2.1 read-only implementation: discovery,
-  bulk I/O, retry policy (hardware paths untested - no device attached)
-- Integration: `tests/mock_replay.rs` - boot sequence shape, CRC-fail
-  abort, safety-gate refusal, runtime framing round-trip
+  bulk I/O, retry policy
+- Integration: `src/tests/mock_replay.rs` - boot sequence shape,
+  CRC-fail abort, safety-gate refusal, runtime framing round-trip
 
 `idong-ros2` + `idong_msgs` remain separate colcon packages until P4
-(they need a ROS installation for colcon-ros-cargo). Sandbox note:
-never run full `cargo build` of the whole workspace - not enough RAM;
-`cargo check` and single-bin builds only.
-
-Next: P2 read-only bring-up on hardware, then the P2.3 USBPcap gate.
+(they need a ROS installation for colcon-ros-cargo).
 
 ## Safety rules (hard constraints)
 
@@ -86,22 +136,50 @@ Next: P2 read-only bring-up on hardware, then the P2.3 USBPcap gate.
 
 ## Firmware
 
-NOT redistributed. Users supply vendor v2.6.0.6 files; the
-`FirmwareSet` verifier pins the SHA-256 hashes from the turn-12
-manifest (analysis/reports/all_extracted_sha256.tsv):
+The vendor device files the driver targets ship with the crate in
+`software/firmware/` (turn 40): byte-exact copies from the vendor
+v2.6.0.6 package, plus the two files that differ in v2.5.0.7. Every
+hash is in `software/firmware/SHA256SUMS`
+(`sha256sum -c SHA256SUMS`), provenance, roles and the vendor file map
+are in `software/firmware/README.md`, and `cargo test --test
+firmware_files` re-checks them against the turn-12 manifest
+(`research/analysis/reports/all_extracted_sha256.tsv`) and the pins in
+the crate.
 
-- ens_code.ldr        (Blackfin BF527, 54,420 B)
-- A_a_v4.4_BG0313.bit (Spartan-3 XC3S400, 235,930 B)
-- app_m8051_2611.hex  (8051, 21,362 B records)
+- `v2.6.0.6/ens_code.ldr`         Blackfin BF527 loader image, 54,420 B (pinned)
+- `v2.6.0.6/A_a_v4.4_BG0313.bit`  Xilinx Spartan-3A XC3S400A bitstream, 235,930 B (pinned)
+- `v2.6.0.6/app_m8051_2611.hex`   8051 image, 61,756 B -> 21,411 B flattened (pinned; what `flash_mcu` sends)
+- `v2.6.0.6/app_m8051_2500.hex`   the `[Version2.5]` 8051 image of the same package, 61,031 B
+- `v2.6.0.6/xeyez_v20.hex`, `xeyez_v21.hex`  the `[Version2.0]` / `[Version2.1]` 8051 images
+- `v2.6.0.6/config/`              the vendor file map (`xeyezHal.ini`, `xEyeUsb.ini`) and the register tables
+- `v2.5.0.7/`                     `app_m8051.hex` and `xeyezHal.ini` of the previous package
+
+`flash_mcu` reads `firmware/v2.6.0.6/app_m8051_2611.hex` by default
+(`src/firmware.rs` locates the folder).
+
+## Historical copies (not the driver)
+
+Two frozen snapshots of earlier driver drafts stay where they were
+archived; the driver is only `software/`:
+
+- `research/idong100/rust/idong/` - the turn-10 reference crate (the
+  first Rust draft);
+- `deliverables/idong100-rs-scaffold/` - the turn-13 workspace scaffold
+  (45 files) that the P1 crate grew out of.
 
 ## ROS 2 build
 
 colcon with `colcon-cargo` + `colcon-ros-cargo` plugins; rclrs from
 crates.io (0.8 line); `idong_msgs` generates Rust via
 rosidl_generator_rs. Custom messages: MarkerArray, HandleEvent;
-service: DeviceInfo.
+service: DeviceInfo. Both packages sit next to the crate in
+`software/`; `idong-ros2` reaches the crate by relative path
+(`idong = { path = ".." }`). Plain cargo builds neither.
 
 ## License
 
-MIT for this code. Vendor firmware/licence constraints documented in
-docs/PROTOCOL.md - private interoperability research only.
+MIT for the code in `software/`. The vendor device files under
+`software/firmware/` are not covered by it: they are the vendor's
+property and ship under the vendor's own terms
+(`software/firmware/v2.6.0.6/licence.txt`, summarised in
+`software/firmware/README.md`).

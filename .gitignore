@@ -1,5 +1,7 @@
-/target
+# Rust build output (the crate lives in software/)
+/software/target
 Cargo.lock
-/firmware/*.ldr
-/firmware/*.bit
-/firmware/*.hex
+# colcon workspaces (idong_msgs + idong-ros2) built inside software/
+/software/build
+/software/install
+/software/log
