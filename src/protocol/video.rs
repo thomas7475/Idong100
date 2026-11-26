@@ -40,7 +40,7 @@
 //! 0x02/0x82) - it is a separate isochronous stream. [`VideoSource`]
 //! abstracts it: one `read_transfer` returns one raw ISO transfer (the
 //! concatenated UVC payloads). The mock replays captures; the Linux
-//! implementation (idong-transport, V4L2 `VIDIOC_DQBUF` on the UVC device
+//! implementation (transport::usb, V4L2 `VIDIOC_DQBUF` on the UVC device
 //! or usbfs ISO URBs on interface alt 1) plugs in behind it.
 
 use crate::error::{IdongError, ProtocolError, Result};

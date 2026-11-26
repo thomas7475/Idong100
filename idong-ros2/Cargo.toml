@@ -1,15 +1,19 @@
 [package]
 name = "idong-ros2"
 description = "ROS 2 (rclrs) node for the i-Dong sensor"
-edition.workspace = true
-version.workspace = true
-license.workspace = true
+edition = "2021"
+version = "0.1.0"
+license = "MIT"
+# Not part of the root crate's build (colcon-ros-cargo builds this with the
+# generated message crate); values are concrete because this package is
+# built from its own colcon workspace, not the root one.
+repository = "https://github.com/thomas7475/Idong100"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-idong = { path = "../idong" }
+idong = { path = "../.." }
 idong_msgs = { path = "../idong_msgs/msg" }  # generated: path set by colcon
 rclrs = "0.8"
-log.workspace = true
+log = "0.4"

@@ -27,9 +27,10 @@
 //! use std::time::Duration;
 //! use idong::transport::Transport; // the seam: mock in CI, rusb on the bench
 //!
-//! // A live (or mocked) transport is provided by idong-transport / tests;
+//! // A live (or mocked) transport is provided by transport::usb (feature
+//! // `usb`) or tests;
 //! // the core never opens USB itself.
-//! let mut transport: Box<dyn Transport + Send> = unimplemented!("from idong-transport");
+//! let mut transport: Box<dyn Transport + Send> = unimplemented!("from transport::usb");
 //! let streamer = idong::stream::Streamer::start(transport, 5);
 //! loop {
 //!     let f = streamer.read_frame(Duration::from_millis(500)).expect("frame");
@@ -56,6 +57,11 @@ pub use marker::{Marker, MarkerFrame, Quality};
 pub use protocol::video::{ProbeCommit, VideoAssembler, VideoFrame, VideoSource};
 pub use session::{Phase, Session, SessionInfo};
 pub use stream::{StatsSnapshot, StreamStats, Streamer};
+pub use transport::reenum::{bus_state, BusState, ReenumWaiter, WaitEvent};
+/// Live USB transport types (rusb/libusb). Only present with
+/// `--features usb`; a hardware-free CI build has none of them.
+#[cfg(feature = "usb")]
+pub use transport::usb::{list_devices, DeviceState, UsbDeviceInfo, UsbTransport};
 pub use transport::Transport;
 
 /// Firmware images the user must supply (never redistributed with the

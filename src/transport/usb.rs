@@ -9,13 +9,14 @@
 
 use std::time::Duration;
 
-use idong::protocol::{
+use rusb::{DeviceHandle, UsbContext};
+
+use crate::protocol::{
     EP_IN, EP_OUT, IFACE_VENDOR, IO_RETRIES, IO_RETRY_DELAY, PID_BOOTLOADER, PID_RUNTIME, PID_V10,
     PID_V20, PID_V21, VID,
 };
-use idong::transport::Transport;
-use idong::IdongError;
-use rusb::{DeviceHandle, UsbContext};
+use crate::transport::Transport;
+use crate::IdongError;
 
 /// Older generations, accepted for identification only.
 pub const PID_LEGACY: [u16; 3] = [PID_V21, PID_V20, PID_V10];
@@ -84,7 +85,7 @@ pub struct UsbTransport {
 
 impl UsbTransport {
     /// Open the bootloader (0471:2600, interface 0).
-    pub fn open_bootloader() -> idong::Result<Self> {
+    pub fn open_bootloader() -> crate::Result<Self> {
         Self::open(PID_BOOTLOADER, 0, DeviceState::Bootloader)
     }
 
@@ -92,11 +93,11 @@ impl UsbTransport {
     ///
     /// **Do not** detach the UVC/UAC interfaces' drivers - only the
     /// vendor interface is claimed, leaving video/audio to the OS.
-    pub fn open_runtime() -> idong::Result<Self> {
+    pub fn open_runtime() -> crate::Result<Self> {
         Self::open(PID_RUNTIME, IFACE_VENDOR, DeviceState::Runtime)
     }
 
-    fn open(pid: u16, iface: u8, mode: DeviceState) -> idong::Result<Self> {
+    fn open(pid: u16, iface: u8, mode: DeviceState) -> crate::Result<Self> {
         let ctx = rusb::Context::new().map_err(|e| IdongError::Usb(e.to_string()))?;
         let devices = ctx.devices().map_err(|e| IdongError::Usb(e.to_string()))?;
         let mut found: Option<rusb::Device<rusb::Context>> = None;
@@ -126,7 +127,7 @@ impl UsbTransport {
 
 impl Transport for UsbTransport {
     /// Write to EP 0x02 with the EasyUSB retry policy.
-    fn write(&mut self, buf: &[u8]) -> idong::Result<()> {
+    fn write(&mut self, buf: &[u8]) -> crate::Result<()> {
         let mut last = None;
         for attempt in 0..IO_RETRIES {
             match self.handle.write_bulk(EP_OUT, buf, Duration::from_secs(1)) {
@@ -145,7 +146,7 @@ impl Transport for UsbTransport {
 
     /// Raw bulk read from EP 0x82. A read that times out with zero bytes
     /// returns an empty vec (the reader loop treats that as "no data").
-    fn read(&mut self, max: usize) -> idong::Result<Vec<u8>> {
+    fn read(&mut self, max: usize) -> crate::Result<Vec<u8>> {
         let mut buf = vec![0u8; max];
         match self.handle.read_bulk(EP_IN, &mut buf, Duration::from_secs(1)) {
             Ok(n) => {

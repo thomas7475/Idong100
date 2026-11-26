@@ -24,7 +24,7 @@
 //!
 //! This module is pure orchestration over [`Transport`]; the
 //! re-enumeration itself (watching USB, reopening the new device,
-//! claiming MI_04) is a transport-layer job (`idong-transport`):
+//! claiming MI_04) is a transport-layer job (`transport::reenum`):
 //! [`IdongError::NeedsReenumeration`] is the hand-off signal.
 
 use crate::error::{IdongError, Result};
@@ -158,6 +158,22 @@ impl<'a> Session<'a> {
         let mut next = Self::connect(transport, phase, image, write_risk)?;
         next.info.recoveries = prior.recoveries.saturating_add(1);
         Ok(next)
+    }
+
+    /// The read-only first contact (P2.2 live bring-up): the four
+    /// EEPROM reads of the session init, nothing else.
+    ///
+    /// Every byte this sends on the wire is a read request the vendor
+    /// engine also sends (0x0008 version + 0x0107 EEPROM reads) - no
+    /// CMOS register writes, no polls, no stream. Safe against real
+    /// hardware by construction: the only failure mode is a read.
+    pub fn connect_readonly(transport: &mut dyn Transport) -> Result<SessionInfo> {
+        let mut inner = RuntimeSession::new(&mut *transport);
+        let device_id = String::from_utf8_lossy(&inner.read_device_id()?).to_string();
+        let code_a = inner.read_code_a()?;
+        let code_b = inner.read_code_b()?;
+        let calibration = inner.read_calibration()?;
+        Ok(SessionInfo { device_id, code_a, code_b, calibration, recoveries: 0 })
     }
 
     /// One steady-state poll round (the observed cycle set). Errors
@@ -296,6 +312,42 @@ mod tests {
         assert_eq!(info.calibration.len(), 120);
         // The exact first writes (cap3 session order):
         // device ID read 0107 @0x0300, then code A @0x0322, ...
+        assert_eq!(
+            m.writes[0],
+            vec![0x7F, 0x55, 0x07, 0x01, 0x00, 0x00, 0x00, 0x04, 0x03, 0x00, 0x00, 0x21]
+        );
+        assert_eq!(
+            m.writes[1],
+            vec![0x7F, 0x55, 0x07, 0x01, 0x00, 0x00, 0x00, 0x04, 0x03, 0x22, 0x00, 0x05]
+        );
+    }
+
+    #[test]
+    fn connect_readonly_sends_only_eeprom_reads() {
+        // The P2.2 live bring-up entry point: the cap3 session order
+        // (device ID, code A, code B, calibration) - and NOTHING
+        // after it: no CMOS table writes, no polls.
+        let dev = b"AB460DC8BA12C6840B49CD5786C329DD";
+        let mut id33 = dev.to_vec();
+        id33.push(0x50);
+        let mut calib = vec![0u8; 120];
+        calib.push(calib.iter().fold(0u8, |a, b| a.wrapping_add(*b)));
+        let mut a5 = b"000T".to_vec();
+        a5.push(0xE4);
+        let mut b5 = b"2613".to_vec();
+        b5.push(0xCC);
+        let mut m = MockTransport::new(vec![reply(id33), reply(a5), reply(b5), reply(calib)]);
+        let info = Session::connect_readonly(&mut m).unwrap();
+        assert_eq!(info.device_id, "AB460DC8BA12C6840B49CD5786C329DD");
+        assert_eq!(info.code_a, "000T");
+        assert_eq!(info.code_b, "2613");
+        assert_eq!(info.calibration.len(), 120);
+        // exactly the four 0x0107 read requests, in the observed order -
+        // no 0x0104 / 0x0203 / 0x0103 writes anywhere.
+        assert_eq!(m.writes.len(), 4);
+        for (i, w) in m.writes.iter().enumerate() {
+            assert_eq!(&w[..4], &[0x7F, 0x55, 0x07, 0x01], "write {i} must be 0x0107");
+        }
         assert_eq!(
             m.writes[0],
             vec![0x7F, 0x55, 0x07, 0x01, 0x00, 0x00, 0x00, 0x04, 0x03, 0x00, 0x00, 0x21]

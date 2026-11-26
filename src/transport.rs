@@ -1,8 +1,9 @@
 //! Transport abstraction - the seam that makes CI possible.
 //!
-//! `idong-transport` implements this with rusb; `mock.rs` implements it
-//! with recorded sessions.  The core never touches rusb directly (CI
-//! dependency audit: the `idong` crate has no rusb / rclrs deps).
+//! `transport::usb` (behind the `usb` feature) implements this with
+//! rusb/libusb; `mock.rs` implements it with recorded sessions.  The
+//! core never touches rusb directly (CI dependency audit: plain
+//! `cargo test` runs without libusb installed).
 //!
 //! Read/write are blocking with the caller's timeout policy; the
 //! implementor maps its native errors into [`IdongError::Usb`] strings.
@@ -27,3 +28,16 @@ impl Transport for Box<dyn Transport + Send> {
         (**self).read(max)
     }
 }
+
+/// rusb/libusb implementation (rusb): discovery + bulk I/O.
+/// Feature `usb` - absent from a hardware-free CI build.
+#[cfg(feature = "usb")]
+pub mod usb;
+
+/// Re-enumeration handling: the 2600 -> 2500 swap after a launch or a
+/// self-reboot. Pure decision core here; the rusb poll loop behind the
+/// `usb` feature.
+pub mod reenum;
+
+/// udev rule for unprivileged access on Linux (no root requirement).
+pub mod udev;

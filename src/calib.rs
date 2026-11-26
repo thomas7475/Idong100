@@ -97,7 +97,7 @@ fn record(eeprom: &[u8], off: usize, len: usize) -> Result<&[u8]> {
     Ok(payload)
 }
 
-/// Parse a full 2 KiB dump. Returns the calibration and identity; every
+/// Parse the full 2 KiB dump. Returns the calibration and identity; every
 /// record checksum is verified, the header tag must match, and the
 /// +0x400 mirror copies are cross-checked (mismatch -> warning, primary
 /// used; a mismatch never panics and never blocks the primary data).
@@ -115,20 +115,7 @@ pub fn parse_eeprom(dump: &[u8]) -> Result<(StereoCalib, DeviceIdentity)> {
 
     // --- calibration ---------------------------------------------------
     let cal = record(dump, REC_CALIB, REC_CALIB_LEN)?;
-    let mut f = [0f32; 28];
-    for (i, v) in f.iter_mut().enumerate() {
-        *v = f32::from_le_bytes(cal[i * 4..i * 4 + 4].try_into().unwrap());
-    }
-    let g = |i: usize| f[i] as f64;
-    let calib = StereoCalib {
-        fx: [g(0), g(8)],
-        fy: [g(1), g(9)],
-        cx: [g(2), g(10)],
-        cy: [g(3), g(11)],
-        dist: [[g(4), g(5), g(6), g(7)], [g(12), g(13), g(14), g(15)]],
-        r: [[g(16), g(17), g(18)], [g(19), g(20), g(21)], [g(22), g(23), g(24)]],
-        t: [g(25), g(26), g(27)],
-    };
+    let calib = floats_to_calib(cal);
 
     // --- version + int16 metadata (parsed for completeness) ------------
     let version = record(dump, REC_VERSION, REC_VERSION_LEN)?;
@@ -159,6 +146,43 @@ pub fn parse_eeprom(dump: &[u8]) -> Result<(StereoCalib, DeviceIdentity)> {
             code_b: String::from_utf8_lossy(code_b).into_owned(),
         },
     ))
+}
+
+/// The 28 f32 words of the calibration record, as the struct.
+fn floats_to_calib(cal: &[u8]) -> StereoCalib {
+    let mut f = [0f32; 28];
+    for (i, v) in f.iter_mut().enumerate() {
+        *v = f32::from_le_bytes(cal[i * 4..i * 4 + 4].try_into().unwrap());
+    }
+    let g = |i: usize| f[i] as f64;
+    StereoCalib {
+        fx: [g(0), g(8)],
+        fy: [g(1), g(9)],
+        cx: [g(2), g(10)],
+        cy: [g(3), g(11)],
+        dist: [[g(4), g(5), g(6), g(7)], [g(12), g(13), g(14), g(15)]],
+        r: [[g(16), g(17), g(18)], [g(19), g(20), g(21)], [g(22), g(23), g(24)]],
+        t: [g(25), g(26), g(27)],
+    }
+}
+
+/// Parse the calibration record EXACTLY as the live session read returns
+/// it ([`crate::protocol::runtime::RuntimeSession::read_calibration`]):
+/// 120 B payload + 1 B byte-sum checksum, no 0xFF separator.
+///
+/// The read-only bring-up (P2.2, `examples/bringup.rs`) uses this to
+/// prove the factory calibration round-trips from the real device.
+pub fn parse_calibration_record(rec: &[u8]) -> Result<StereoCalib> {
+    const LEN: usize = REC_CALIB_LEN + 1;
+    if rec.len() != LEN {
+        return Err(ProtocolError::Short { need: LEN, have: rec.len() }.into());
+    }
+    let (payload, chk) = (&rec[..REC_CALIB_LEN], rec[REC_CALIB_LEN]);
+    let expect = payload.iter().fold(0u8, |a, &b| a.wrapping_add(b));
+    if chk != expect {
+        return Err(ProtocolError::BadMagic { magic: chk as u32, expected: expect as u32 }.into());
+    }
+    Ok(floats_to_calib(payload))
 }
 
 /// Build a synthetic dump in the verified layout (used by tests and the
@@ -317,6 +341,26 @@ mod tests {
         e[0] = b'X';
         assert!(parse_eeprom(&e).is_err());
         assert!(parse_eeprom(&e[..1024]).is_err(), "short dump");
+    }
+
+    #[test]
+    fn session_calibration_record_roundtrip() {
+        // The P2.2 live bring-up path: read_calibration returns the
+        // 0x0100 page as [120 B payload][checksum] (121 B, no 0xFF
+        // separator - the separator lives in the dump, not on the wire).
+        let e = build_eeprom(&REFERENCE_CALIB, "AB460DC8BA12C6840B49CD5786C329DD", "000T", "2613");
+        let rec = &e[REC_CALIB..REC_CALIB + REC_CALIB_LEN + 1];
+        assert_eq!(rec.len(), 121);
+        let c = parse_calibration_record(rec).unwrap();
+        assert!((c.fx[0] - REFERENCE_CALIB.fx[0] as f32 as f64).abs() < 1e-2);
+        assert!((c.baseline_mm() - 100.0).abs() < 1e-3);
+        assert!((c.mean_focal_px() - 432.33).abs() < 0.01);
+        // checksum corruption is rejected
+        let mut bad = rec.to_vec();
+        *bad.last_mut().unwrap() ^= 1;
+        assert!(parse_calibration_record(&bad).is_err());
+        // wrong length is rejected
+        assert!(parse_calibration_record(&rec[..120]).is_err());
     }
 
     /// EEPROM write path must not exist (safety rule #4): this is a

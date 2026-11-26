@@ -3,7 +3,8 @@
 //! `BootStep` mirrors the vendor `_InitBlobUpload` sequence one step per
 //! variant so a failure pins the exact state (draft section 6, table 6).
 //! The core crate never depends on `rusb` (CI dependency audit), so the
-//! USB variant is a plain display string; `idong-transport` wraps rusb
+//! USB variant is a plain display string; `transport::usb` (feature `usb`)
+//! wraps rusb
 //! errors into it at the boundary.
 
 use std::path::PathBuf;
