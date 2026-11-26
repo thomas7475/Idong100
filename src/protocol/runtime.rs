@@ -293,6 +293,13 @@ pub const CMOS_REG8_CHUNKS: [&[u8]; 6] = [
     &[0x57, 0x05, 0x06, 0x02, 0x03, 0x01],
 ];
 
+/// Turn 38: how many consecutive zero-byte reads (one transport
+/// timeout each) [`RuntimeSession::read_until_reply`] accepts before it
+/// declares the reply lost. 3 = ~3 s on the live transport. The slowest
+/// observed legitimate reply gap is the 0x0004 poll (~1.2 s), so a
+/// healthy device never trips it (cap2/3/4 replay coverage).
+pub const REPLY_EMPTY_BUDGET: u32 = 3;
+
 /// Runtime session over any [`Transport`] - the observed vendor flow.
 pub struct RuntimeSession<'a> {
     transport: &'a mut dyn Transport,
@@ -344,8 +351,18 @@ impl<'a> RuntimeSession<'a> {
 
     /// Read records until a framed reply for `cmd` arrives; raw records
     /// in between are returned as `RtRecord::Raw` (the readback data).
+    ///
+    /// Turn 38: fail FAST on a device that stopped answering. Zero-byte
+    /// reads (a 1-s transport timeout each) used to be pushed as empty
+    /// raws and the loop spun through all 1024 iterations before the
+    /// timeout error - up to ~17 min of silence, the same hang class
+    /// as the kit-36 `net session` block. Now [`REPLY_EMPTY_BUDGET`]
+    /// consecutive empties abort immediately. The slowest observed
+    /// legitimate gap is the 0x0004 poll (~1.2 s = two empties), so the
+    /// budget of 3 never trips on a healthy device (cap2/3/4 replays).
     fn read_until_reply(&mut self, cmd: u16) -> Result<(RtFrame, Vec<Vec<u8>>)> {
         let mut raws = Vec::new();
+        let mut empties = 0u32;
         for _ in 0..1024 {
             match self.read_record()? {
                 RtRecord::Frame(f) if f.reply && f.cmd == cmd => return Ok((f, raws)),
@@ -353,7 +370,20 @@ impl<'a> RuntimeSession<'a> {
                     // An unexpected framed record is a protocol error.
                     return Err(ProtocolError::BadType { kind: f.cmd, expected: cmd }.into());
                 }
-                RtRecord::Raw(r) => raws.push(r),
+                RtRecord::Raw(r) => {
+                    if r.is_empty() {
+                        empties += 1;
+                        if empties >= REPLY_EMPTY_BUDGET {
+                            return Err(ProtocolError::ReadTimeout(
+                                crate::protocol::RUNTIME_RX_TIMEOUT,
+                            )
+                            .into());
+                        }
+                    } else {
+                        empties = 0;
+                        raws.push(r);
+                    }
+                }
             }
         }
         Err(ProtocolError::ReadTimeout(crate::protocol::RUNTIME_RX_TIMEOUT).into())
@@ -630,6 +660,32 @@ mod tests {
     #[test]
     fn classify_raw_blocks() {
         assert!(matches!(classify(&[0x02, 0xc0, 0xcd, 0x02]), RtRecord::Raw(_)));
+    }
+
+    #[test]
+    fn read_until_reply_fails_fast_on_silence() {
+        // Turn 38: a device that stops answering must trip the empty-read
+        // budget after exactly REPLY_EMPTY_BUDGET zero-byte reads, not
+        // spin through 1024 iterations of the 1-s transport timeout
+        // (the bench-hang class fixed for the kit-36 .bat files too).
+        let mut m = MockTransport::new(vec![]);
+        let mut s = RuntimeSession::new(&mut m);
+        let err = s.poll(CMD_POLL_0003).unwrap_err();
+        assert!(matches!(err, IdongError::Protocol(ProtocolError::ReadTimeout(_))));
+        drop(s);
+        assert_eq!(m.exhausted_reads(), REPLY_EMPTY_BUDGET as usize);
+    }
+
+    #[test]
+    fn read_until_reply_tolerates_the_slow_0004_gap() {
+        // The 0x0004 poll needs ~1.2 s on the real device = up to two
+        // 1-s timeouts before the reply lands - the budget must not
+        // trip on the slowest observed legitimate gap (cap3 replay).
+        let mut script = vec![reply(vec![]), reply(vec![])];
+        script.push(reply(vec![0x7f, 0x55, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00]));
+        let mut m = MockTransport::new(script);
+        let mut s = RuntimeSession::new(&mut m);
+        s.poll(CMD_POLL_0003).unwrap();
     }
 
     #[test]

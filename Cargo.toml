@@ -26,5 +26,11 @@ log = "0.4"
 crossbeam-channel = "0.5"
 rusb = { version = "0.9", optional = true }
 
+# Examples only (examples/video.rs: the V4L2 ioctl layer + PNG output).
+# Plain `cargo test` stays hardware-free - these never enter the lib build.
+[dev-dependencies]
+libc = "0.2"
+png = "0.17"
+
 [profile.release]
 debug = true  # keep symbols for on-device diagnosis

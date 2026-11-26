@@ -8,8 +8,8 @@ camera (USB 0471:2600 bootloader / 0471:2500 runtime). Design contract:
 
 | Path | Duty | Depends on |
 |---|---|---|
-| `src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport | thiserror, log, crossbeam-channel; rusb only with `--features usb` |
-| `examples/` | `list`, `probe_bootloader`, `bringup` (the P2.2 hardware test) - feature `usb` | - |
+| `src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the pure V4L2 sysfs matcher (`src/transport/v4l2.rs`) | thiserror, log, crossbeam-channel; rusb only with `--features usb` |
+| `examples/` | `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2 bring-up on Linux) - feature `usb` | libc + png (dev-deps, examples only) |
 | `tests/` | golden replays: mock, runtime, video - hardware-free | - |
 | `idong_msgs` | ROS message/service definitions (rosidl, colcon) | rosidl runtime |
 | `idong-ros2` | ROS 2 lifecycle node: params, QoS, diagnostics | rclrs, idong, idong_msgs |
@@ -19,7 +19,7 @@ One crate, one `Cargo.toml`, one version (turn 37: the old
 holds the rusb code behind the `usb` feature so plain `cargo test` stays
 hardware- and libusb-free).
 
-## Status (turn 37, 2026-11-27) - single crate + P2.2 bring-up ready
+## Status (turn 38, 2026-11-27) - bench-ready: session + video bring-up
 
 **The wire protocol is fully decoded and implemented.** All planes
 byte-pinned from five captures (turn 32/33/35): bootloader flash
@@ -27,13 +27,15 @@ byte-pinned from five captures (turn 32/33/35): bootloader flash
 checksums, CMOS register tables, polls), the engine gates (device ID,
 edition tag), the 0x0205 stream poll, and the UVC video plane
 (probe/commit, 12-B payload headers, PTS frame closure, two-channel
-raster). `cargo test` (and `--features usb`): 72 green. Turn 36 added
-the session lifecycle with self-reboot recovery; turn 37 merged the
-crates, implemented the re-enumeration watcher (`src/transport/reenum.rs`),
-the read-only bring-up entry point (`Session::connect_readonly`) and
-the hardware test (`examples/bringup.rs`, `docs/BRINGUP.md`). What
-remains: run the bring-up on the real sensor, the video backend, the
-marker-record trigger and ROS 2 - see `docs/DRIVER_STATUS.md`.
+raster). `cargo test` (and `--features usb`): 82 green. Turn 38 added
+the P2.4 full-session test (`examples/session_full.rs`, writes gated
+behind `--cmos`), the P2.5 Linux video bring-up (`examples/video.rs`:
+`--probe` diagnostic + V4L2 mmap streaming + per-channel PNGs; the
+UAPI mirror is const-asserted against the kernel headers), the pure
+sysfs video-node matcher (`src/transport/v4l2.rs`) and the bench
+ladder `docs/LINUX_TESTS.md`. What remains: run T2-T7 of that ladder
+on the real sensor, then the marker-record trigger and ROS 2 - see
+`docs/DRIVER_STATUS.md`.
 
 Unlock kit for the vendor software (lobby/games): `tools/kit37`
 (all three gates: xEyeUSB + xEyeRight + xEyeWarrningUI, with the
