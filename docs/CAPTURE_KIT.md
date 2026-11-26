@@ -1,11 +1,11 @@
 # idong100 USBPcap capture kit - turn 27, 2026-11-25 - Windows 7
 
-> **Turn 36 note:** the ENGINE UNLOCK moved to `tools/kit36` - the one
-> consolidated kit that also ships the finished patched DLLs
-> (patched/xEyeUSB_t33.dll + xEyeRight_t34.dll - the license gate fix
-> behind the "hardware not authorized" box). Apply kit36 BEFORE
-> capturing: `patch_all36.bat` (admin), then `verify_all36.bat`. The
-> capture workflow itself stays the one below.
+> **Turn 37 note:** the ENGINE UNLOCK is `tools/kit37` - the one
+> consolidated kit that also ships the finished patched DLLs for ALL
+> THREE gates (xEyeUSB_t33.dll, xEyeRight_t34.dll + the new
+> xEyeWarrningUI_t37.dll - the "hardware not authorized" box itself).
+> Apply kit37 BEFORE capturing: `patch_all37.bat` (admin), then
+> `verify_all37.bat`. The capture workflow itself stays the one below.
 
 This kit records the complete boot of the idong sensor ("idong Sensor V2.6",
 USB ID 0471:2600 while it waits for its program, 0471:2500 when it runs), so
