@@ -66,7 +66,11 @@ pub struct SessionInfo {
     pub code_a: String,
     /// Version code from EEPROM 0x0328 ("2613").
     pub code_b: String,
-    /// Factory calibration payload (120 B) - parse with [`crate::calib`].
+    /// Factory calibration payload (120 B) - parse with
+    /// [`crate::calib::parse_calibration_payload`] (the runtime layer
+    /// already verified the wire checksum; a 121-B wire record would
+    /// need [`crate::calib::parse_calibration_record`] instead - the
+    /// turn-39 bring-up fix).
     pub calibration: Vec<u8>,
     /// How many bootloader landings this session already recovered
     /// from (each one re-flashed the MCU, exactly like the engine).

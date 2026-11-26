@@ -34,7 +34,7 @@ fn main() {
         }
         idong::BusState::Bootloader => {
             println!();
-            println!("bootloader present - run examples/bringup.rs for the read-only probe");
+            println!("bootloader present - run src/examples/bringup.rs for the read-only probe");
         }
         _ => {}
     }

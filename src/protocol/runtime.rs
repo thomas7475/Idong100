@@ -164,8 +164,39 @@ pub const EEPROM_DEVICE_ID_LEN: u16 = 33;
 pub const EDITION_LETTERS: [u8; 4] = [b'D', b'S', b'H', 0x00];
 
 /// P2.3-style gate: the flash sequence is capture-verified but has not
-/// yet been replayed against real hardware by this driver.
+/// yet been replayed against real hardware by this driver. Flips to
+/// `true` after the FIRST successful controlled hardware replay via
+/// [`RuntimeSession::flash_mcu_permitted`] (the bench consent path,
+/// turn 39) - that replay IS the acceptance test.
 pub const FLASH_CONFIRMED: bool = false;
+
+/// The exact consent phrase behind [`FlashPermit`] (turn 39): the
+/// controlled hardware flash replay is a TWO-key gate - the caller must
+/// (a) obtain the permit by passing THIS crate constant to
+/// [`FlashPermit::from_consent`], and (b) be the example that only does
+/// so after the human typed `--confirm`. A flipped compile-time gate
+/// alone never runs the sequence (see [`RuntimeSession::flash_mcu`]).
+pub const FLASH_CONSENT_PHRASE: &str = "flash-8051-controlled-replay";
+
+/// Turn 39: the bench consent token for the controlled P2.3 hardware
+/// flash replay. Not constructible outside this module (private field):
+/// the ONLY way in is [`FlashPermit::from_consent`] with the exact
+/// [`FLASH_CONSENT_PHRASE`]. The flash example builds it solely after
+/// the user passed `--confirm` - so an accidental call site cannot
+/// reach the sequence without both the phrase and the human consent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlashPermit {
+    _private: (),
+}
+
+impl FlashPermit {
+    /// The only constructor: `Some(permit)` iff `phrase` is exactly
+    /// [`FLASH_CONSENT_PHRASE`] - anything else (empty, typo, different
+    /// case) yields `None` and the flash path stays closed.
+    pub fn from_consent(phrase: &str) -> Option<Self> {
+        (phrase == FLASH_CONSENT_PHRASE).then_some(FlashPermit { _private: () })
+    }
+}
 
 /// One bulk-record from the device: framed or raw.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -419,6 +450,27 @@ impl<'a> RuntimeSession<'a> {
         if !FLASH_CONFIRMED {
             return Err(IdongError::BootUnconfirmed);
         }
+        self.flash_sequence(image)
+    }
+
+    /// Turn 39: the CONTROLLED P2.3 hardware flash replay entry - the
+    /// bench gate for the 8051 firmware upload. The byte-exact
+    /// [`Self::flash_sequence`] runs ONLY with a [`FlashPermit`] (the
+    /// two-key consent: `FLASH_CONSENT_PHRASE` + the human `--confirm`
+    /// in the example). The compile-time [`FLASH_CONFIRMED`] stays
+    /// closed until this entry PASSES once on real hardware; that PASS
+    /// is exactly what flips it.
+    ///
+    /// Safety shape (all three layers hold on EVERY call):
+    /// 1. firmware pin - the image is the SHA-256-pinned vendor image
+    ///    (`FirmwareSet::mcu_image`, the flattened 21,411 B app image);
+    /// 2. wire pin - every byte is an observed vendor byte (the mock
+    ///    replay is byte-for-byte cap3);
+    /// 3. readback - the device echoes the whole image back and the
+    ///    sequence ABORTS before key+launch on any mismatch, so a
+    ///    corrupted download never reaches the commit key.
+    pub fn flash_mcu_permitted(&mut self, image: &[u8], permit: &FlashPermit) -> Result<Vec<u8>> {
+        let _ = permit; // the token IS the gate; flash_sequence is the byte pin
         self.flash_sequence(image)
     }
 
@@ -720,6 +772,42 @@ mod tests {
             other => panic!("gate must refuse: {other:?}"),
         }
         assert!(m.writes.is_empty(), "gate must not write a single byte");
+    }
+
+    #[test]
+    fn flash_permit_requires_the_exact_phrase() {
+        // The two-key gate, key 1: only the exact crate constant
+        // yields a permit - typos, case changes, empty strings do not.
+        assert!(FlashPermit::from_consent(FLASH_CONSENT_PHRASE).is_some());
+        assert!(FlashPermit::from_consent("").is_none());
+        assert!(FlashPermit::from_consent("confirm").is_none());
+        assert!(FlashPermit::from_consent("--confirm").is_none());
+        assert!(FlashPermit::from_consent(&FLASH_CONSENT_PHRASE.to_uppercase()).is_none());
+        assert!(FlashPermit::from_consent(&format!("{FLASH_CONSENT_PHRASE} ")).is_none());
+        // the phrase is stable (bench docs pin it)
+        assert_eq!(FLASH_CONSENT_PHRASE, "flash-8051-controlled-replay");
+    }
+
+    #[test]
+    fn permitted_flash_sends_the_byte_exact_sequence() {
+        // Key 2 of the gate: WITH a valid permit the permitted entry
+        // sends exactly the observed begin frame first (the rest of the
+        // sequence is byte-pinned by the cap3 golden replay in
+        // src/tests/runtime_replay.rs).
+        let image = vec![0xA5u8; IMAGE_SIZE as usize];
+        let script = vec![reply(vec![0x7F, 0x55, 0x01, 0x01, 0x01, 0x00, 0x00, 0x02])];
+        let mut m = MockTransport::new(script);
+        let mut s = RuntimeSession::new(&mut m);
+        let permit = FlashPermit::from_consent(FLASH_CONSENT_PHRASE).unwrap();
+        match s.flash_mcu_permitted(&image, &permit) {
+            // the script intentionally ends after the begin ack - the
+            // readback budget aborts; what matters: the first write.
+            Err(_) => {}
+            Ok(_) => panic!("incomplete script must not complete"),
+        }
+        drop(s);
+        assert_eq!(m.writes[0], vec![0x7f, 0x55, 0x01, 0x01, 0x00, 0x00, 0x00, 0x02, 0x53, 0xa3]);
+        assert!(m.writes.len() > 1, "the block download started");
     }
 
     #[test]

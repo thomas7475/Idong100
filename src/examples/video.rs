@@ -14,7 +14,7 @@
 //!                    Linux see of the sensor's video interface?".
 //! * `--cmos`         consent to the CMOS register writes on MI_04 (the
 //!                    observed vendor session init, the same 17 writes
-//!                    as examples/session_full). Without it the stream
+//!                    as src/examples/session_full.rs). Without it the stream
 //!                    is attempted without any session - still a valid
 //!                    experiment (the result is informative either way).
 //! * `--device PATH`  use this /dev/videoN instead of the sysfs
@@ -638,7 +638,7 @@ mod bench {
                 Ok(idong::Phase::Runtime) => {}
                 Ok(_) => {
                     println!("      FAIL: device not in runtime phase - run the vendor software");
-                    println!("      once (or examples/bringup), then rerun");
+                    println!("      once (or src/examples/flash_mcu.rs), then rerun");
                     std::process::exit(1);
                 }
                 Err(e) => {
@@ -702,12 +702,43 @@ mod bench {
                         std::process::exit(1);
                     }
                     _ => {
-                        println!("      FAIL: multiple nodes matched the sensor:");
-                        for n in hits {
-                            println!("        {}  iface {:?}", n.dev.display(), n.usb_iface);
+                        // Turn-39: a composite sensor exposes SEVERAL nodes
+                        // on the same interface (the bench run showed
+                        // video0 capture + video1 metadata, both "1-2:1.0")
+                        // - pick the one that can actually capture. The
+                        // query is the same read-only QUERYCAP --probe
+                        // does; no streaming, no USB writes.
+                        println!(
+                            "      several nodes matched the sensor (iface {:?}):",
+                            hits[0].usb_iface
+                        );
+                        let mut pick: Option<&idong::transport::v4l2::VideoNode> = None;
+                        for n in &hits {
+                            let caps = V4l2Dev::open(&n.dev).ok().map(|d| {
+                                if d.caps.capabilities & uapi::CAP_DEVICE_CAPS != 0 {
+                                    d.caps.device_caps
+                                } else {
+                                    d.caps.capabilities
+                                }
+                            });
+                            let is_capture =
+                                caps.map(|c| c & uapi::CAP_VIDEO_CAPTURE != 0).unwrap_or(false);
+                            println!("        {}  capture={}", n.dev.display(), is_capture);
+                            if is_capture {
+                                pick = Some(n);
+                            }
                         }
-                        println!("      pick one with --device /dev/videoN");
-                        std::process::exit(1);
+                        match pick {
+                            Some(n) => {
+                                println!("      PASS: the capture node is {}", n.dev.display());
+                                n.dev.clone()
+                            }
+                            None => {
+                                println!("      FAIL: no matched node can capture;");
+                                println!("      pick one manually: --device /dev/videoN");
+                                std::process::exit(1);
+                            }
+                        }
                     }
                 }
             }

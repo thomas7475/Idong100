@@ -9,32 +9,37 @@ camera (USB 0471:2600 bootloader / 0471:2500 runtime). Design contract:
 | Path | Duty | Depends on |
 |---|---|---|
 | `src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the pure V4L2 sysfs matcher (`src/transport/v4l2.rs`) | thiserror, log, crossbeam-channel; rusb only with `--features usb` |
-| `examples/` | `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2 bring-up on Linux) - feature `usb` | libc + png (dev-deps, examples only) |
-| `tests/` | golden replays: mock, runtime, video - hardware-free | - |
+| `src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | libc + png (dev-deps, examples only) |
+| `src/tests/` | golden replays: mock, runtime, video - hardware-free | - |
 | `idong_msgs` | ROS message/service definitions (rosidl, colcon) | rosidl runtime |
 | `idong-ros2` | ROS 2 lifecycle node: params, QoS, diagnostics | rclrs, idong, idong_msgs |
 
-One crate, one `Cargo.toml`, one version (turn 37: the old
+ALL code under `src/` (turn 39): the lib in `src/`, the examples in
+`src/examples/`, the integration tests in `src/tests/` - one tree,
+nothing outside it (explicit `[[example]]`/`[[test]]` path targets keep
+every `cargo run --example ...` command unchanged). One crate, one
+`Cargo.toml`, one version (turn 37: the old
 `idong` + `idong-transport` workspace crates were merged - `src/transport/`
 holds the rusb code behind the `usb` feature so plain `cargo test` stays
 hardware- and libusb-free).
 
-## Status (turn 38, 2026-11-27) - bench-ready: session + video bring-up
+## Status (turn 39, 2026-11-27) - live-tested: session PASS, flash ships
 
-**The wire protocol is fully decoded and implemented.** All planes
-byte-pinned from five captures (turn 32/33/35): bootloader flash
-(0008/0101/64-B blocks/0201/0301/0401), session (EEPROM reads with
-checksums, CMOS register tables, polls), the engine gates (device ID,
-edition tag), the 0x0205 stream poll, and the UVC video plane
-(probe/commit, 12-B payload headers, PTS frame closure, two-channel
-raster). `cargo test` (and `--features usb`): 82 green. Turn 38 added
-the P2.4 full-session test (`examples/session_full.rs`, writes gated
-behind `--cmos`), the P2.5 Linux video bring-up (`examples/video.rs`:
-`--probe` diagnostic + V4L2 mmap streaming + per-channel PNGs; the
-UAPI mirror is const-asserted against the kernel headers), the pure
-sysfs video-node matcher (`src/transport/v4l2.rs`) and the bench
-ladder `docs/LINUX_TESTS.md`. What remains: run T2-T7 of that ladder
-on the real sensor, then the marker-record trigger and ROS 2 - see
+**The wire protocol is fully decoded and implemented, and the first
+LIVE bench run (Linux) is in**: T1-T5 PASS on the real sensor (82 green
+before the run; 87 now) - identity EEPROM reads, the full session with
+`--cmos` register writes, 6/6 polls. The run also validated the two
+turn-39 fixes: the calibration payload parser (the "need 121, have
+120" parse FAIL) and the sysfs hex-id cross-match (the video probe's
+empty `sensor usb ports` list - sysfs ids are HEX, not decimal).
+Turn 39 also moved ALL code under `src/` (lib + `src/examples/` +
+`src/tests/`, one tree) and shipped the 8051 firmware upload as the
+P2.3 controlled replay (`src/examples/flash_mcu.rs`): dry-run pins
+(both SHA-256s) + a two-key consent gate (`--confirm` + the
+unforgeable `FlashPermit`), the exact cap3 flash with full-image
+readback abort, bootloader-window wait, reenum + runtime proof. Next:
+rerun T6/T7 (video), run T8 (flash) - one clean T8 PASS flips
+`FLASH_CONFIRMED`. Then the marker-record trigger and ROS 2 - see
 `docs/DRIVER_STATUS.md`.
 
 Unlock kit for the vendor software (lobby/games): `tools/kit37`

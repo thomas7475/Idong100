@@ -170,7 +170,7 @@ fn floats_to_calib(cal: &[u8]) -> StereoCalib {
 /// it ([`crate::protocol::runtime::RuntimeSession::read_calibration`]):
 /// 120 B payload + 1 B byte-sum checksum, no 0xFF separator.
 ///
-/// The read-only bring-up (P2.2, `examples/bringup.rs`) uses this to
+/// The read-only bring-up (P2.2, `src/examples/bringup.rs`) uses this to
 /// prove the factory calibration round-trips from the real device.
 pub fn parse_calibration_record(rec: &[u8]) -> Result<StereoCalib> {
     const LEN: usize = REC_CALIB_LEN + 1;
@@ -181,6 +181,21 @@ pub fn parse_calibration_record(rec: &[u8]) -> Result<StereoCalib> {
     let expect = payload.iter().fold(0u8, |a, &b| a.wrapping_add(b));
     if chk != expect {
         return Err(ProtocolError::BadMagic { magic: chk as u32, expected: expect as u32 }.into());
+    }
+    Ok(floats_to_calib(payload))
+}
+
+/// Parse the 120-B calibration PAYLOAD of a live session (turn-39 fix:
+/// [`crate::protocol::runtime::RuntimeSession::read_eeprom`] already
+/// consumed and verified the wire checksum and returns the payload
+/// alone - `SessionInfo::calibration` is 120 B, NOT the 121-B wire
+/// record, so [`parse_calibration_record`] must not be fed it).
+///
+/// The checksum gate lives in the runtime layer for every EEPROM
+/// read; this parser only decodes the verified payload.
+pub fn parse_calibration_payload(payload: &[u8]) -> Result<StereoCalib> {
+    if payload.len() != REC_CALIB_LEN {
+        return Err(ProtocolError::Short { need: REC_CALIB_LEN, have: payload.len() }.into());
     }
     Ok(floats_to_calib(payload))
 }
@@ -361,6 +376,29 @@ mod tests {
         assert!(parse_calibration_record(&bad).is_err());
         // wrong length is rejected
         assert!(parse_calibration_record(&rec[..120]).is_err());
+    }
+
+    #[test]
+    fn session_payload_parser_matches_record_parser() {
+        // Turn-39 bench fix: the first live bring-up printed
+        // "need 121 bytes, have 120" because the example fed the
+        // 120-B payload to the 121-B wire-record parser. The payload
+        // parser decodes exactly what SessionInfo::calibration holds
+        // (read_eeprom verified the checksum already) and agrees with
+        // the record parser on the same bytes.
+        let e = build_eeprom(&REFERENCE_CALIB, "AB460DC8BA12C6840B49CD5786C329DD", "000T", "2613");
+        let payload = &e[REC_CALIB..REC_CALIB + REC_CALIB_LEN];
+        assert_eq!(payload.len(), 120);
+        let by_payload = parse_calibration_payload(payload).unwrap();
+        let by_record =
+            parse_calibration_record(&e[REC_CALIB..REC_CALIB + REC_CALIB_LEN + 1]).unwrap();
+        assert_eq!(by_payload, by_record);
+        assert!((by_payload.baseline_mm() - 100.0).abs() < 1e-3);
+        assert!((by_payload.mean_focal_px() - 432.33).abs() < 0.01);
+        // a wire record (121 B) fed to the payload parser is rejected,
+        // not mis-parsed - and vice versa
+        assert!(parse_calibration_payload(&e[REC_CALIB..REC_CALIB + 121]).is_err());
+        assert!(parse_calibration_payload(&payload[..119]).is_err());
     }
 
     /// EEPROM write path must not exist (safety rule #4): this is a

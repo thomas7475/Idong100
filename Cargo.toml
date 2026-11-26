@@ -10,6 +10,12 @@ repository = "https://github.com/thomas7475/Idong100"
 # one src/ tree with ONE version to manage. The transport needs libusb,
 # so it is a cargo feature; plain `cargo test` stays hardware-free.
 #
+# Turn 39: ALL code lives under src/ - the lib in `src/`, the examples in
+# `src/examples/`, the integration tests in `src/tests/` (one tree to
+# manage, nothing outside it). Cargo reaches them through the explicit
+# `[[example]]` / `[[test]]` path targets below, so the commands are
+# unchanged: `cargo run --features usb --example bringup` etc.
+#
 # idong-ros2 / idong_msgs remain separate colcon packages (excluded here;
 # they are built by colcon-ros-cargo with the generated message crate).
 
@@ -26,11 +32,59 @@ log = "0.4"
 crossbeam-channel = "0.5"
 rusb = { version = "0.9", optional = true }
 
-# Examples only (examples/video.rs: the V4L2 ioctl layer + PNG output).
+# Examples only (src/examples/video.rs: the V4L2 ioctl layer + PNG output).
 # Plain `cargo test` stays hardware-free - these never enter the lib build.
 [dev-dependencies]
 libc = "0.2"
 png = "0.17"
+
+# ---- examples (src/examples/, turn 39 - explicit paths) ----
+# Every example compiles in BOTH feature states (the usb ones print a
+# build hint without the feature), so none sets required-features.
+[[example]]
+name = "list"
+path = "src/examples/list.rs"
+
+[[example]]
+name = "probe_bootloader"
+path = "src/examples/probe_bootloader.rs"
+
+[[example]]
+name = "bringup"
+path = "src/examples/bringup.rs"
+
+[[example]]
+name = "session_full"
+path = "src/examples/session_full.rs"
+
+[[example]]
+name = "video"
+path = "src/examples/video.rs"
+
+[[example]]
+name = "flash_mcu"
+path = "src/examples/flash_mcu.rs"
+
+[[example]]
+name = "mcu_image"
+path = "src/examples/mcu_image.rs"
+
+[[example]]
+name = "dump_frames"
+path = "src/examples/dump_frames.rs"
+
+# ---- integration tests (src/tests/, turn 39 - explicit paths) ----
+[[test]]
+name = "mock_replay"
+path = "src/tests/mock_replay.rs"
+
+[[test]]
+name = "runtime_replay"
+path = "src/tests/runtime_replay.rs"
+
+[[test]]
+name = "video_golden"
+path = "src/tests/video_golden.rs"
 
 [profile.release]
 debug = true  # keep symbols for on-device diagnosis

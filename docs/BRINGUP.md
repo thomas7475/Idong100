@@ -9,9 +9,13 @@ read.
 
 **Turn 38 update**: this test is step T3 of the full bench ladder
 (`docs/LINUX_TESTS.md`) which continues with the full session (T5,
-`examples/session_full.rs`) and the video bring-up (T6/T7,
-`examples/video.rs`) - same style, same PASS/FAIL output, writes gated
+`src/examples/session_full.rs`) and the video bring-up (T6/T7,
+`src/examples/video.rs`) - same style, same PASS/FAIL output, writes gated
 behind `--cmos`.
+
+**Turn 39 update**: the 8051 firmware upload now ships as the P2.3
+controlled replay (`src/examples/flash_mcu.rs`, bench step T8) behind a
+two-key consent gate - see `docs/LINUX_TESTS.md`.
 
 ## Why Linux
 
@@ -136,10 +140,10 @@ request, nothing else.
 
 ## What this deliberately does NOT do
 
-- flash the MCU: the flash sequence is byte-pinned and mock-tested, but
-  the `FLASH_CONFIRMED` gate stays closed until one controlled
-  hardware replay (P2.3) - and it is not needed, the vendor engine
-  re-flashes on every bootloader landing anyway;
+- flash the MCU: `bringup` never flashes. The flash itself is the P2.3
+  controlled replay (`src/examples/flash_mcu.rs`, two-key gate:
+  SHA-256-pinned vendor hex + `--confirm`) - the ungated `flash_mcu`
+  stays closed until that replay passes once on hardware;
 - the CMOS register writes (0x0104/0x0203/0x0103), the poll cycle and
   the stream poll: all mock-verified, all write-capable, all gated
   behind later phases;

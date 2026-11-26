@@ -42,7 +42,7 @@ fn main() {
     }
     let Some(runtime) = devices.iter().find(|d| d.pid == idong::protocol::PID_RUNTIME) else {
         println!("      no runtime device 0471:2500 - run the vendor software once");
-        println!("      (or examples/bringup) to flash the MCU, then rerun this");
+        println!("      (or src/examples/flash_mcu.rs) to flash the MCU, then rerun this");
         std::process::exit(1);
     };
     println!("      PASS: runtime device present (bus {}, addr {})", runtime.bus, runtime.address);
