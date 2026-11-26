@@ -8,15 +8,18 @@
 //! device (50 fps), the oldest frame is evicted and the overflow
 //! counter increments. Stats live behind atomics, lock-free to read.
 
-use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver as StopRx, Sender as StopTx, TryRecvError};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
+
 use crate::error::{IdongError, ProtocolError, Result};
 use crate::marker::MarkerFrame;
-use crate::protocol::{self, cmd::RuntimeClient, frames::FrameDecoder, records};
+use crate::protocol::cmd::RuntimeClient;
+use crate::protocol::frames::FrameDecoder;
+use crate::protocol::{self, records};
 use crate::transport::Transport;
 
 /// Stream statistics (all monotonic atomics, lock-free read).

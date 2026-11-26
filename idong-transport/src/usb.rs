@@ -9,13 +9,13 @@
 
 use std::time::Duration;
 
-use rusb::{DeviceHandle, UsbContext};
-use idong::protocol::{IO_RETRIES, IO_RETRY_DELAY};
 use idong::protocol::{
-    EP_IN, EP_OUT, IFACE_VENDOR, PID_BOOTLOADER, PID_RUNTIME, PID_V10, PID_V20, PID_V21, VID,
+    EP_IN, EP_OUT, IFACE_VENDOR, IO_RETRIES, IO_RETRY_DELAY, PID_BOOTLOADER, PID_RUNTIME, PID_V10,
+    PID_V20, PID_V21, VID,
 };
 use idong::transport::Transport;
 use idong::IdongError;
+use rusb::{DeviceHandle, UsbContext};
 
 /// Older generations, accepted for identification only.
 pub const PID_LEGACY: [u16; 3] = [PID_V21, PID_V20, PID_V10];
@@ -69,13 +69,7 @@ pub fn list_devices() -> Vec<UsbDeviceInfo> {
         let serial = desc
             .serial_number_string_index()
             .and_then(|i| d.open().ok().and_then(|h| h.read_string_descriptor_ascii(i).ok()));
-        out.push(UsbDeviceInfo {
-            bus: d.bus_number(),
-            address: d.address(),
-            pid,
-            state,
-            serial,
-        });
+        out.push(UsbDeviceInfo { bus: d.bus_number(), address: d.address(), pid, state, serial });
     }
     out
 }

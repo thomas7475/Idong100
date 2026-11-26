@@ -45,6 +45,7 @@ pub mod handle;
 pub mod marker;
 pub mod mock;
 pub mod protocol;
+pub mod session;
 pub mod stream;
 pub mod transport;
 
@@ -52,9 +53,10 @@ pub use calib::{DeviceIdentity, StereoCalib};
 pub use error::{BootStep, IdongError, ProtocolError, Result};
 pub use handle::HandleEvent;
 pub use marker::{Marker, MarkerFrame, Quality};
+pub use protocol::video::{ProbeCommit, VideoAssembler, VideoFrame, VideoSource};
+pub use session::{Phase, Session, SessionInfo};
 pub use stream::{StatsSnapshot, StreamStats, Streamer};
 pub use transport::Transport;
-pub use protocol::video::{ProbeCommit, VideoAssembler, VideoFrame, VideoSource};
 
 /// Firmware images the user must supply (never redistributed with the
 /// crate - safety rule: users bring their own vendor files).

@@ -10,8 +10,7 @@
 //! 3. the safety gate itself: `run()` refuses without confirmation;
 //! 4. runtime framing: 7F 55 with byte-swapped u16 arg.
 
-use idong::mock::Scripted;
-use idong::mock::{reply, MockTransport};
+use idong::mock::{reply, MockTransport, Scripted};
 use idong::protocol::boot::{blob_crc, BootInfo, BootUploader, BOOT_CONFIRMED};
 use idong::protocol::cmd::{Cmd, CmdPacket};
 use idong::protocol::frames::Frame;

@@ -7,7 +7,7 @@
 //! the vendor stack put on the wire.
 
 use idong::protocol::video::{
-    split_channels, ProbeCommit, StreamPollState, VideoAssembler, UvcHeader, RASTER_STRIDE,
+    split_channels, ProbeCommit, StreamPollState, UvcHeader, VideoAssembler, RASTER_STRIDE,
 };
 
 /// Capture offset 52.02 s, ISO transfer #1, payloads #1-#3: the 12-B UVC
@@ -236,8 +236,7 @@ fn probe_commit_golden() {
 fn device_clock_matches_measured_rate() {
     // 1,920,000 clock units per frame; the measured steady-state rate is
     // 8.0 fps -> the device clock is 15.36 MHz (a standard crystal).
-    let frame_period_s =
-        1_920_000f64 / idong::protocol::video::DEVICE_CLOCK_HZ as f64;
+    let frame_period_s = 1_920_000f64 / idong::protocol::video::DEVICE_CLOCK_HZ as f64;
     assert!((frame_period_s - 0.125).abs() < 1e-6);
     // and 8.0 fps is exactly 1 / 0.125.
     assert!((1.0 / frame_period_s - 8.0).abs() < 1e-3);

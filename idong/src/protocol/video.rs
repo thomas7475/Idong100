@@ -215,8 +215,7 @@ impl VideoAssembler {
         };
         self.payloads += 1;
 
-        let pts_change =
-            matches!(self.pending_pts, Some(prev) if hdr.pts != prev);
+        let pts_change = matches!(self.pending_pts, Some(prev) if hdr.pts != prev);
         let close = pts_change || hdr.is_eof() || hdr.is_error();
 
         let out = if close && !self.pending.is_empty() {
@@ -247,11 +246,7 @@ impl VideoAssembler {
     /// the final packet of the record is short). Each split is fed to
     /// [`Self::push_payload`]; the function returns every frame that
     /// completes.
-    pub fn push_capture_transfer(
-        &mut self,
-        transfer: &[u8],
-        stride: usize,
-    ) -> Vec<VideoFrame> {
+    pub fn push_capture_transfer(&mut self, transfer: &[u8], stride: usize) -> Vec<VideoFrame> {
         let mut out = Vec::new();
         if stride == 0 {
             self.errors += 1;
@@ -331,9 +326,8 @@ impl ProbeCommit {
     /// The device's commit SET_CUR body as captured (26 B): identical
     /// except `dwMaxPayloadTransferSize = 0x000003c2 = 962`.
     pub const DEVICE_COMMIT: [u8; 26] = [
-        0x00, 0x00, 0x01, 0x01, 0x15, 0x16, 0x05, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0x09, 0x00,
-        0xc2, 0x03, 0x00, 0x00,
+        0x00, 0x00, 0x01, 0x01, 0x15, 0x16, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x60, 0x09, 0x00, 0xc2, 0x03, 0x00, 0x00,
     ];
 
     /// Parse a probe/commit body (26 B); `None` = too short.
@@ -381,10 +375,7 @@ impl StreamPollState {
     /// Parse from a cmd-0x0205 reply body (58 B after the 6-B header).
     pub fn parse(body: &[u8]) -> Result<StreamPollState> {
         if body.len() < 34 {
-            return Err(IdongError::Protocol(ProtocolError::Short {
-                need: 34,
-                have: body.len(),
-            }));
+            return Err(IdongError::Protocol(ProtocolError::Short { need: 34, have: body.len() }));
         }
         let new_frame = body[1] == 0x04;
         let frame_no = u32::from_le_bytes([body[2], body[3], body[4], body[5]]);
