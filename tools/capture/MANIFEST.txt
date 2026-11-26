@@ -1,5 +1,14 @@
 MANIFEST - idong100 phase 2 USBPcap capture kit, turn 28, 2026-11-25
 
+>>> SUPERSEDED by tools/kit36 (turn 36, 2026-11-27): the ONE consolidated
+>>> kit - it ships the PATCHED DLLs as files (patched/ + ref/), the
+>>> patch/verify/restore scripts (patch_all36/verify_all36/
+>>> restore_all36/run_direct36) AND the capture tools below. The engine34
+>>> scripts in THIS folder could not work from the repo alone: their
+>>> reference DLLs (xEyeUSB\, xEyeRight\ subfolders) were never committed -
+>>> kit36 fixes exactly that. This folder stays as the historical archive.
+
+
 Inside the Windows 7 (VM or PC) that has the sensor, in this order:
   1. software\USBPcapSetup-1.5.4.0.exe   install, then RESTART Windows
   2. test_usbpcap.bat                    is USBPcap installed and recording?

@@ -13,6 +13,24 @@ camera (USB 0471:2600 bootloader / 0471:2500 runtime). Design contract:
 | `idong_msgs` | ROS message/service definitions (rosidl) | rosidl runtime |
 | `idong-ros2` | ROS 2 lifecycle node: params, QoS, diagnostics | rclrs, idong, idong_msgs |
 
+## Status (turn 36, 2026-11-27) - protocol complete + session layer
+
+**The wire protocol is fully decoded and implemented.** All planes
+byte-pinned from five captures (turn 32/33/35): bootloader flash
+(0008/0101/64-B blocks/0201/0301/0401), session (EEPROM reads with
+checksums, CMOS register tables, polls), the engine gates (device ID,
+edition tag), the 0x0205 stream poll, and the UVC video plane
+(probe/commit, 12-B payload headers, PTS frame closure, two-channel
+raster). `cargo test -p idong`: 64 green (41 unit + 18 golden replay +
+5 integration). NEW turn 36: `src/session.rs` - the lifecycle layer
+with self-reboot recovery (the sensor re-enumerates as 0471:2600 every
+31-157 s; the vendor engine re-flashes on every landing - so does the
+driver). What remains is hardware bring-up, the video backend, the
+marker-record trigger and ROS 2 - see `docs/DRIVER_STATUS.md`.
+
+Unlock kit for the vendor software (lobby/games): `tools/kit36`
+(ships the finished patched DLLs + the patch/verify/restore scripts).
+
 ## Status (turn 15, 2026-11-24) - Phase 1 COMPLETE
 
 **P1 (pure core) implemented and green.** `cargo check --workspace`

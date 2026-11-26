@@ -35,6 +35,11 @@ pub enum IdongError {
     /// transcript of the vendor stack (draft P2.3).
     #[error("boot sequence unconfirmed (USBPcap gate P2.3): refusing to write")]
     BootUnconfirmed,
+    /// The launch command was accepted; the device re-enumerates as
+    /// 0471:2500. Drop this transport, open the new device, reconnect
+    /// (the self-reboot recovery path uses the same signal).
+    #[error("device launched: re-enumerating as 0471:2500 - reopen and reconnect")]
+    NeedsReenumeration,
 }
 
 impl IdongError {

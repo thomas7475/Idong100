@@ -118,6 +118,12 @@ pub const CMD_POLL_0004: u16 = 0x0004;
 pub const CMD_POLL_0005: u16 = 0x0005;
 /// Session poll.
 pub const CMD_POLL_000D: u16 = 0x000d;
+/// Turn 35: **stream-state poll** - sent at ~30 Hz while video streams
+/// on EP 0x85 (2,963 requests in the 120-s xEyeThirdLens capture). Empty
+/// request body; the reply is a fixed 64-B record whose body carries the
+/// video frame counter - see [`crate::protocol::video::StreamPollState`]
+/// and [`RuntimeSession::poll_stream`].
+pub const CMD_STREAM_POLL: u16 = 0x0205;
 
 /// Image load address inside the 8051 (verify args, every capture).
 pub const IMAGE_BASE: u16 = 0x8000;
@@ -556,6 +562,31 @@ impl<'a> RuntimeSession<'a> {
         self.write_frame(&req)?;
         self.read_until_reply(cmd)?;
         Ok(())
+    }
+
+    /// Turn 35: the stream-state poll (cmd `0x0205`), sent at ~30 Hz while
+    /// video streams on EP 0x85. The reply is a fixed 64-B record:
+    ///
+    /// ```text
+    /// 7F 55 05 02 01 00 | 00 <code> <frame_no LE u32> <aux 4> ... zeros ...
+    ///                    | <trailer: FF FF FF 00 1F 00 05 00 (new) / 04 00>
+    /// ```
+    ///
+    /// `code` 0x04 = a new frame is ready (the 4-B arg = frame number,
+    /// little-endian, +1 per new video frame); 0x00 = no new frame (the
+    /// frame counter is still present). Observed wire pair (capture
+    /// offsets 0.02 s / 0.08 s):
+    ///
+    /// ```text
+    /// OUT: 7f 55 05 02 00 00 00 00
+    /// IN : 7f 55 05 02 01 00 00 04 1b 6d 00 00 00 6e 23 cb 00 ... ff ff ff 00 1f 00 05 00 ...
+    /// IN : 7f 55 05 02 01 00 00 00 1b 6f 00 00 00 ... (code 00 = empty)
+    /// ```
+    pub fn poll_stream(&mut self) -> Result<crate::protocol::video::StreamPollState> {
+        let req = RtFrame::request(CMD_STREAM_POLL, 0, &[])?;
+        self.write_frame(&req)?;
+        let (rep, _) = self.read_until_reply(CMD_STREAM_POLL)?;
+        crate::protocol::video::StreamPollState::parse(&rep.body)
     }
 }
 

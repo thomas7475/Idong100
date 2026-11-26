@@ -1,16 +1,28 @@
-//! `_InitBlobUpload` state machine (decoded from xEyeUSB.dll).
+//! DISPROVEN ON THE WIRE (turn 32) - kept as the historical DLL-side
+//! decode. See `session.rs` for the real lifecycle.
 //!
-//! Sequence: TX DSP-start -> RX type 2 "Ready to load program!" ->
-//! TX type 2 packet-count+CRC -> TX type-3 64 B packets (6 s each) ->
-//! RX type 3 CRC result (abort on mismatch) -> device-ID exchange
-//! (300 ms x 10) -> TX type 7 DSP reset. Staging order of the three
-//! firmware images is open item #1 - resolved at the P2.3 USBPcap gate.
+//! This module encodes the `_InitBlobUpload` state machine decoded
+//! from xEyeUSB.dll BEFORE any live capture existed. The captures then
+//! settled it (cap2/3/4: 0 PU/OD frames in ~12,000 records; cap8: the
+//! complete boot twice): the PU/OD framing NEVER appears on the wire,
+//! the DSP (`.ldr`) and FPGA (`.bit`) images are NEVER host-uploaded
+//! (factory images), and the real flash of the 8051 MCU runs over the
+//! `7F 55` runtime framing on the SAME endpoints: 0x0008 version,
+//! 0x0101 begin, raw 64-B blocks, 0x0201 verify + echo readback,
+//! 0x0301 key, 0x0401 launch - implemented in
+//! [`super::runtime::RuntimeSession::flash_sequence`] and orchestrated
+//! by [`crate::session::Session`].
+//!
+//! The code below stays for two reasons: it documents what the vendor
+//! DLL believed the sequence to be (the strings in the binary are real),
+//! and its safety gate shape is the ancestor of the live gates. Nothing
+//! in the driver calls `run()` on hardware.
 //!
 //! Safety: `run()` refuses to execute unless (a) the caller passes the
-//! write-risk flag AND (b) [`BOOT_CONFIRMED`] is flipped after a USBPcap
-//! transcript of the vendor stack byte-confirms the sequence (draft
-//! P2.3). Until then it returns [`IdongError::BootUnconfirmed`] - the
-//! state machine is exercised over the MockTransport in unit tests only.
+//! write-risk flag AND (b) [`BOOT_CONFIRMED`] is flipped (it never was,
+//! and never will be - the sequence it guards does not exist on the
+//! wire). The real flash gate lives in `runtime.rs`
+//! (`FLASH_CONFIRMED`).
 
 use super::frames::{Frame, FrameDecoder};
 use super::{

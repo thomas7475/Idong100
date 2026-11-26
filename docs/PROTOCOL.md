@@ -282,3 +282,97 @@ images). Implemented in the driver: `read_device_id()`,
 
 Open: the stream itself (ep 0x85 alt>0 / ep 0x03/0x83, marker records)
 - reachable once the engine-unlock kit runs the app into the lobby.
+
+## Turn 34: the third gate (license), the driver files, the direct run
+
+Full findings: `research/idong100/agents/16-turn34/FINDINGS.md`.
+Kit: `idong100_engine34` (patch/verify/restore/check_unlock/run_direct/
+check_wire + reference DLLs; md5s in its MANIFEST.txt).
+
+**The connect gate chain, complete:**
+
+1. GATE 1 - version tag "DSHY" vs this unit's "000T" (turn 33, DLL
+   offset 0x16036 H->T).
+2. GATE 2 - device-ID read 0107 @0x0300 (intact on this unit).
+3. GATE 3 - **the license check** (`xEyeRight.dll`): `LocalRight` +
+   `NetRight` (HTTPS `POST /outer/device.action` to `us.i-dong.com`,
+   `deviceID=...&key=...`) -> `MakeFinalResult` -> final result 0x24
+   (1 = authorized) + window message 0x7E8. The server is dead, so a
+   stock install can NEVER be authorized; the engine host
+   (`xeyez.exe`) then refuses to go fully live
+   (`ShowDeviceIDInvalidWindow` = the "sensor not authorized" screen).
+   Turn-34 fix: `MakeFinalResult` file offset 0x927 (VA 0x10001527),
+   the 0x2D-byte guard block -> `xor edx,edx; mov [ecx+0x24],1; jmp`
+   into the vendor's own notify tail (relocation-safe: the vendor
+   `call [USER32!SendMessageA]` keeps its original offset 0x961 and
+   relocation entry).
+
+**The host stack (new facts):** `xeyez.exe` = the engine host
+(window class `xEyezEngine2009`, started by `xEyeService.exe` via
+`xEyezSvStartXeyez.exe` or by `xeyezMonitor.exe` or directly);
+camera clients use named pipes (`xEyeEngine.dll` = the pipe stub:
+`InitxEyeEngine`/`GetxEyePipeData`); the lobby uses TCP 40000
+(`portlobby`, conf/version.xml); `xEyeThirdLens.exe` = the standalone
+camera viewer (imports the pipe stub + `MiddleCameraCalib.dll`).
+The tray states (xEyeSysTrayTip.dll): unknown/stop/need-reinsert/
+**connecting**/handling/matching/pause/lost/hub-lost/video-excep/
+audio-excep/link-excep/noise/**running**; "connecting" = stage 4 with
+the device-ID flag still 0 (stage() reports 1).
+
+**The kernel driver (from the user's install zips):** `xeyez.sys`
+2.5.4.9 = the WinDDK bulkusb sample ported ("BF527 Bulk USB" - the
+sensor DSP is an Analog Devices Blackfin BF527, `ens_code.ldr` is
+its LDR image); x86 + x64; service `XEYEZ`; device
+`\Device\xeyezUsbDriverDev` -> apps open `\\.\xeyezUsbDriverDev`
+and use plain ReadFile/WriteFile (NO custom IOCTLs; EasyUSB.dll is
+the user-mode wrapper); INF binds 2600 / 2500&MI_04 / 2100 / 0668 /
+0666; reads `SOFTWARE\Toltech\xeyez_engine\Location` in kernel
+mode. `A_a_v4.4_BG0313.bit` = Xilinx bitfile, design "work_top.ncd".
+
+**Driver impact:** for a user-mode Rust driver, two options -
+(a) keep the vendor kernel driver and talk to
+`\\.\xeyezUsbDriverDev` with plain reads/writes (documented model
+above), or (b) replace it with WinUSB/libusb and drive the bulk
+endpoints 0x02/0x82 directly. The 0107/0300 device-ID read +
+checksum and the edition letters are already implemented in
+`idong/src/protocol/runtime.rs`.
+
+## Video plane (turn 35, the xEyeThirdLens capture)
+
+Input: `idong_capture.7z` run1 (120 s, 16,293 packets) - the first
+capture reaching the video phase. Sensor timeline: 2500 session with
+0x0205 polls -> self-reboot to 2600 @ 17.8 s -> the host re-runs the
+FULL boot sequence (0008/0101 + 335 blocks/0201/0301/0401) @ 35.2 s ->
+2500 re-enum @ 42.1 s -> UVC negotiation @ 51.8 s -> isochronous video
+on EP 0x85 @ 52.0 s to the end (82.8 MB, 1358 ISO records, 63960 B each).
+
+| Item | Value | Source |
+|---|---|---|
+| UVC probe/commit | fmt 1, frame 1, interval 333333 (30 fps), dwMaxVideoFrameSize 614400 = 640x480x2, commit payload 962 | SET_CUR cs 01/02 if 1, capture 51.83-51.88 s |
+| streaming EP | 0x85 IN, isochronous; NO SET_INTERFACE alt>0 observed | capture 52.02 s+ |
+| UVC payload header | 12 B: `[len=0x0c][flags 0x8c/0x8d][pts LE u32][scr 6 B]`; flags = EOH|SCR|PTS(+FID) | every payload |
+| payload size | <= 2400 B image data; ISO record = up to 27 payloads, 2412 B apart (last one short, 1236 B) | record walk |
+| PTS | constant within a frame; +1,920,000 per frame; device clock 15.36 MHz -> 125 ms -> 8.0 fps steady state | 546 FID transitions over 68 s |
+| raster | 1280-B rows = 640 px x 2 byte-interleaved channels; row-to-row corr 0.998 (A) / 0.97 (B); planes mutually uncorrelated | correlation analysis |
+| channels | A (even bytes) = the scene image (a room + hand is visible when rendered); B (odd bytes) = a second, low-contrast channel, range 104-154 peaked at 128 | rendered PNGs |
+| stream poll | cmd 0x0205 on the vendor interface at ~30 Hz; 64-B reply: code 04 = new frame with 4-B LE frame counter, code 00 = empty; trailer `FF FF FF 00 1F 00 05/04 00` | 2963 OUT/2961 IN @ 0-13.3 s |
+
+The 0x0205 poll and the video raster are implemented and pinned in
+`idong/src/protocol/video.rs` + `idong/src/protocol/runtime.rs`
+(`poll_stream`, `VideoAssembler`, `ProbeCommit`, `StreamPollState`),
+golden-tested against capture bytes in `idong/tests/video_golden.rs`.
+
+**Bootloader recovery confirmed (second full observation):** the
+sensor self-rebooted mid-session (17.8 s) and the host re-ran the
+complete turn-32 boot (0008 "2600" -> 0101 `<00 02 53 A3>` -> 335 raw
+64-B blocks -> 0201 verify + echo -> 0301 key -> 0401 launch). The
+engine re-programs the flash on EVERY bootloader landing (observed in
+cap2 x2, cap3, cap4, and now cap8) - it never tries to boot the
+existing image first. The engine recovers automatically.
+
+**Driver impact:** the video plane is a standard UVC interface - on
+Linux the video flows through V4L2 (or usbfs ISO) while the vendor
+bulk interface (ep 0x02/0x82) carries the control/poll protocol. The
+Rust driver's `VideoSource` seam models this: one `read_payload` =
+one ISO packet (header + data); `VideoAssembler` closes frames on PTS
+advances exactly like the vendor's DirectShow filter.
