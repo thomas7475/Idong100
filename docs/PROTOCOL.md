@@ -1,7 +1,7 @@
 # PROTOCOL.md - wire facts (P0.1 deliverable)
 
 Every row cites its source (DLL + RVA where known). Constants here are
-encoded verbatim into `idong/src/protocol/mod.rs` - the Rust module is
+encoded verbatim into `src/protocol/mod.rs` - the Rust module is
 the executable form of this table.
 
 ## USB identity
@@ -214,7 +214,7 @@ The `7F 55` framing carries everything:
 The downloaded image: app_m8051_2611.hex flattened over [0x8000,0xD3A3),
 gap bytes 0x00 - byte-identical to the wire (download and echo), SHA-256
 `5da1565c6704d387081844e712b4be4d521083e21a619df7d6cb11551c2aba9c`.
-Implemented: `idong/src/protocol/runtime.rs` (RuntimeSession,
+Implemented: `src/protocol/runtime.rs` (RuntimeSession,
 golden-replayed in `tests/runtime_replay.rs`), `FirmwareSet::mcu_image()`.
 Full evidence: `research/idong100/agents/14-captures32/FINDINGS.md`.
 
@@ -278,7 +278,7 @@ sent as the observed 0x0103/0x0203 8-B chunks and 0x0104/0x0204 CMOS
 tables. The FPGA/DSP bitstreams are never host-uploaded (factory
 images). Implemented in the driver: `read_device_id()`,
 `edition_tag_accepted()`, `EDITION_LETTERS`, constants in
-`idong/src/protocol/runtime.rs`; golden test `turn33_engine_gate_reads`.
+`src/protocol/runtime.rs`; golden test `turn33_engine_gate_reads`.
 
 Open: the stream itself (ep 0x85 alt>0 / ep 0x03/0x83, marker records)
 - reachable once the engine-unlock kit runs the app into the lobby.
@@ -335,7 +335,7 @@ mode. `A_a_v4.4_BG0313.bit` = Xilinx bitfile, design "work_top.ncd".
 above), or (b) replace it with WinUSB/libusb and drive the bulk
 endpoints 0x02/0x82 directly. The 0107/0300 device-ID read +
 checksum and the edition letters are already implemented in
-`idong/src/protocol/runtime.rs`.
+`src/protocol/runtime.rs`.
 
 ## Video plane (turn 35, the xEyeThirdLens capture)
 
@@ -358,9 +358,9 @@ on EP 0x85 @ 52.0 s to the end (82.8 MB, 1358 ISO records, 63960 B each).
 | stream poll | cmd 0x0205 on the vendor interface at ~30 Hz; 64-B reply: code 04 = new frame with 4-B LE frame counter, code 00 = empty; trailer `FF FF FF 00 1F 00 05/04 00` | 2963 OUT/2961 IN @ 0-13.3 s |
 
 The 0x0205 poll and the video raster are implemented and pinned in
-`idong/src/protocol/video.rs` + `idong/src/protocol/runtime.rs`
+`src/protocol/video.rs` + `src/protocol/runtime.rs`
 (`poll_stream`, `VideoAssembler`, `ProbeCommit`, `StreamPollState`),
-golden-tested against capture bytes in `idong/tests/video_golden.rs`.
+golden-tested against capture bytes in `tests/video_golden.rs`.
 
 **Bootloader recovery confirmed (second full observation):** the
 sensor self-rebooted mid-session (17.8 s) and the host re-ran the
