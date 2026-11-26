@@ -13,6 +13,7 @@ pub mod cmd;
 pub mod frames;
 pub mod records;
 pub mod runtime;
+pub mod video;
 
 use std::time::Duration;
 

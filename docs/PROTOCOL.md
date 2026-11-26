@@ -336,3 +336,43 @@ above), or (b) replace it with WinUSB/libusb and drive the bulk
 endpoints 0x02/0x82 directly. The 0107/0300 device-ID read +
 checksum and the edition letters are already implemented in
 `idong/src/protocol/runtime.rs`.
+
+## Video plane (turn 35, the xEyeThirdLens capture)
+
+Input: `idong_capture.7z` run1 (120 s, 16,293 packets) - the first
+capture reaching the video phase. Sensor timeline: 2500 session with
+0x0205 polls -> self-reboot to 2600 @ 17.8 s -> the host re-runs the
+FULL boot sequence (0008/0101 + 335 blocks/0201/0301/0401) @ 35.2 s ->
+2500 re-enum @ 42.1 s -> UVC negotiation @ 51.8 s -> isochronous video
+on EP 0x85 @ 52.0 s to the end (82.8 MB, 1358 ISO records, 63960 B each).
+
+| Item | Value | Source |
+|---|---|---|
+| UVC probe/commit | fmt 1, frame 1, interval 333333 (30 fps), dwMaxVideoFrameSize 614400 = 640x480x2, commit payload 962 | SET_CUR cs 01/02 if 1, capture 51.83-51.88 s |
+| streaming EP | 0x85 IN, isochronous; NO SET_INTERFACE alt>0 observed | capture 52.02 s+ |
+| UVC payload header | 12 B: `[len=0x0c][flags 0x8c/0x8d][pts LE u32][scr 6 B]`; flags = EOH|SCR|PTS(+FID) | every payload |
+| payload size | <= 2400 B image data; ISO record = up to 27 payloads, 2412 B apart (last one short, 1236 B) | record walk |
+| PTS | constant within a frame; +1,920,000 per frame; device clock 15.36 MHz -> 125 ms -> 8.0 fps steady state | 546 FID transitions over 68 s |
+| raster | 1280-B rows = 640 px x 2 byte-interleaved channels; row-to-row corr 0.998 (A) / 0.97 (B); planes mutually uncorrelated | correlation analysis |
+| channels | A (even bytes) = the scene image (a room + hand is visible when rendered); B (odd bytes) = a second, low-contrast channel, range 104-154 peaked at 128 | rendered PNGs |
+| stream poll | cmd 0x0205 on the vendor interface at ~30 Hz; 64-B reply: code 04 = new frame with 4-B LE frame counter, code 00 = empty; trailer `FF FF FF 00 1F 00 05/04 00` | 2963 OUT/2961 IN @ 0-13.3 s |
+
+The 0x0205 poll and the video raster are implemented and pinned in
+`idong/src/protocol/video.rs` + `idong/src/protocol/runtime.rs`
+(`poll_stream`, `VideoAssembler`, `ProbeCommit`, `StreamPollState`),
+golden-tested against capture bytes in `idong/tests/video_golden.rs`.
+
+**Bootloader recovery confirmed (second full observation):** the
+sensor self-rebooted mid-session (17.8 s) and the host re-ran the
+complete turn-32 boot (0008 "2600" -> 0101 `<00 02 53 A3>` -> 335 raw
+64-B blocks -> 0201 verify + echo -> 0301 key -> 0401 launch). The
+engine re-programs the flash on EVERY bootloader landing (observed in
+cap2 x2, cap3, cap4, and now cap8) - it never tries to boot the
+existing image first. The engine recovers automatically.
+
+**Driver impact:** the video plane is a standard UVC interface - on
+Linux the video flows through V4L2 (or usbfs ISO) while the vendor
+bulk interface (ep 0x02/0x82) carries the control/poll protocol. The
+Rust driver's `VideoSource` seam models this: one `read_payload` =
+one ISO packet (header + data); `VideoAssembler` closes frames on PTS
+advances exactly like the vendor's DirectShow filter.

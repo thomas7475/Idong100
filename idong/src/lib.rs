@@ -54,6 +54,7 @@ pub use handle::HandleEvent;
 pub use marker::{Marker, MarkerFrame, Quality};
 pub use stream::{StatsSnapshot, StreamStats, Streamer};
 pub use transport::Transport;
+pub use protocol::video::{ProbeCommit, VideoAssembler, VideoFrame, VideoSource};
 
 /// Firmware images the user must supply (never redistributed with the
 /// crate - safety rule: users bring their own vendor files).
