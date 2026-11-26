@@ -68,8 +68,16 @@ call [USER32!SendMessageA]; ret`). No absolute address is
 introduced: the vendor's `call [0x10004130]` keeps its original file
 offset 0x961 and therefore its existing relocation entry. Every call
 of MakeFinalResult (every 500 ms) now reports "authorized" and fires
-the vendor's own success notification. Emulation of all states:
-vendor -> t34, t34 -> noop, t34_v25 -> noop, foreign -> refused.
+the vendor's own success notification. Emulation (unicorn x86, section-mapped, IAT resolved to a stdcall
+fake) of all four states:
+- t34 (v2.6):  result=1, notification (hwnd, 0x7E8, 0, 0), clean ret
+- t34 (v2.5):  result=1, notification (hwnd, 0x7E8, 0, 0), clean ret
+- vendor v2.6: result=0, no notification
+- vendor v2.5: result=0, no notification
+ALL FOUR PASS. Instruction trace of the patched function:
+xor edx,edx; mov [ecx+0x24],1; jmp; push 0; push 0; push 0x7E8;
+push [ecx+0x1EC]; call [USER32!SendMessageA]; ret - exactly the
+vendor's success path.
 
 ## The engine state machine (why "connecting" is the stuck state)
 
