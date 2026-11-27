@@ -68,6 +68,10 @@ name = "session_full"
 path = "src/examples/session_full.rs"
 
 [[example]]
+name = "records"
+path = "src/examples/records.rs"
+
+[[example]]
 name = "video"
 path = "src/examples/video.rs"
 

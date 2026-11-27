@@ -1,0 +1,51 @@
+### /tmp/dlls/xEyeUSB.dll RVA 0xf660  
+0000f660  55                   push ebp
+0000f661  8bec                 mov ebp, esp
+0000f663  51                   push ecx
+0000f664  8b4508               mov eax, dword ptr [ebp + 8]
+0000f667  8a885c020000         mov cl, byte ptr [eax + 0x25c]
+0000f66d  884dff               mov byte ptr [ebp - 1], cl
+0000f670  0fb655ff             movzx edx, byte ptr [ebp - 1]
+0000f674  81e280000000         and edx, 0x80
+0000f67a  743b                 je 0x1000f6b7
+0000f67c  0fb645ff             movzx eax, byte ptr [ebp - 1]
+0000f680  83e010               and eax, 0x10
+0000f683  7506                 jne 0x1000f68b
+0000f685  c645fd01             mov byte ptr [ebp - 3], 1
+0000f689  eb04                 jmp 0x1000f68f  ; ->0xf68f
+0000f68b  c645fd00             mov byte ptr [ebp - 3], 0
+0000f68f  0fb64dff             movzx ecx, byte ptr [ebp - 1]
+0000f693  83e120               and ecx, 0x20
+0000f696  7506                 jne 0x1000f69e
+0000f698  c645fc01             mov byte ptr [ebp - 4], 1
+0000f69c  eb04                 jmp 0x1000f6a2  ; ->0xf6a2
+0000f69e  c645fc00             mov byte ptr [ebp - 4], 0
+0000f6a2  0fb655ff             movzx edx, byte ptr [ebp - 1]
+0000f6a6  83e208               and edx, 8
+0000f6a9  7506                 jne 0x1000f6b1
+0000f6ab  c645fe01             mov byte ptr [ebp - 2], 1
+0000f6af  eb04                 jmp 0x1000f6b5  ; ->0xf6b5
+0000f6b1  c645fe00             mov byte ptr [ebp - 2], 0
+0000f6b5  eb0c                 jmp 0x1000f6c3  ; ->0xf6c3
+0000f6b7  c645fd00             mov byte ptr [ebp - 3], 0
+0000f6bb  c645fc00             mov byte ptr [ebp - 4], 0
+0000f6bf  c645fe00             mov byte ptr [ebp - 2], 0
+0000f6c3  0fb645fd             movzx eax, byte ptr [ebp - 3]
+0000f6c7  8b4d0c               mov ecx, dword ptr [ebp + 0xc]
+0000f6ca  898178030000         mov dword ptr [ecx + 0x378], eax
+0000f6d0  0fb655fc             movzx edx, byte ptr [ebp - 4]
+0000f6d4  8b450c               mov eax, dword ptr [ebp + 0xc]
+0000f6d7  89907c030000         mov dword ptr [eax + 0x37c], edx
+0000f6dd  0fb64dfe             movzx ecx, byte ptr [ebp - 2]
+0000f6e1  8b550c               mov edx, dword ptr [ebp + 0xc]
+0000f6e4  898a80030000         mov dword ptr [edx + 0x380], ecx
+0000f6ea  0fb645ff             movzx eax, byte ptr [ebp - 1]
+0000f6ee  83e001               and eax, 1
+0000f6f1  8b4d0c               mov ecx, dword ptr [ebp + 0xc]
+0000f6f4  8981b0030000         mov dword ptr [ecx + 0x3b0], eax
+0000f6fa  8b550c               mov edx, dword ptr [ebp + 0xc]
+0000f6fd  c782b403000000000000 mov dword ptr [edx + 0x3b4], 0
+0000f707  8be5                 mov esp, ebp
+0000f709  5d                   pop ebp
+0000f70a  c3                   ret 
+

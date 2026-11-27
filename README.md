@@ -55,14 +55,43 @@ next to the crate.
 
 ```
 cd software
-cargo test                                   # 111 tests, hardware-free
+cargo test                                   # 119 tests, hardware-free
 cargo test --features usb                    # the same + the rusb transport + the ioctl engines
 cargo +nightly fmt --check
 cargo run --features usb --example flash_mcu                # T8 dry run: pins only, no device
 cargo run --features usb --example flash_mcu -- --confirm   # T8: the controlled flash
+cargo run --features usb --example records -- --cmos        # T12: the record-plane verdict
 ```
 
-The bench ladder T2-T10 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+The bench ladder T2-T12 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+
+## Status (turn 46, 2026-11-27) - P3a: the marker/record plane decoded
+
+The last open plane fell: the marker/record stream, decoded from the
+vendor stack itself (the v2.6.0.6 engine DLLs re-extracted from
+`xeyez_Lobby.dat` and disassembled - evidence:
+`research/idong100/agents/20-turn46/FINDINGS.md`). It is a THIRD
+protocol layer - the PU/OD framing on the **second MI_04 bulk pair,
+EP 0x83 IN / EP 0x03 OUT** (the "unused" endpoints of every capture;
+pinned by EasyUSB pipe calibration: the 7F 55 session = write pipe 0 /
+read pipe 1 = the USBPcap-proven EP 0x02/0x82, usbCom reads pipe 2 /
+writes pipe 3). The exchange: the device announces each record with a
+64-B OD **type-0xF0** frame, the host reads a **640-B raw record**
+(OD-magic trailer @+0x27C, status byte @+0x25C) and answers with a
+64-B PU **type-7** ACK whose payload the vendor classifier computes
+from the previous record. Open item #4 fell with it: **x/y/z f64 @
+slot +0x08/+0x10/+0x18, quality @+0x24, smallest z = the active
+marker** (`TransUSB2Pipe` + the best-marker loop of `GetADataFromUSB`)
+- and the deeper finding: those coordinates are HOST-computed
+(`classifying.dll!ClassifyAndTrack` classifies the raw blob record;
+the marker record is a host-side structure). New in the crate:
+`protocol::ens` (the wire-plane model, all constants cited),
+`transport::usb::{read_bulk_ep, write_bulk_ep}`, the T12 bench example
+`records` (session init -> the ENS probe - the vendor `0x10640`
+equivalent - -> the handshake loop with raw dumps). If the probe
+finds no stream, the vendor runs the `ens_code.ldr` upload state
+machine on the same pair first - the last unpinned wire format, one
+kit-37 game capture away. 119 tests green in both feature states.
 
 ## Status (turn 45, 2026-11-27) - P2.6: the rate question, one command
 

@@ -11,9 +11,15 @@ use super::protocol::{QUALITY_GREEN, QUALITY_RED, QUALITY_YELLOW};
 /// One tracked reflective marker in the device coordinate frame.
 ///
 /// Coordinate system: X right, Y up, Z along the optical axis away from
-/// the sensor (right-handed, device frame; orientation confirmation
-/// pending open item #4 - the values are the device's millimetre
-/// output).
+/// the sensor (right-handed, device frame; orientation confirmed turn
+/// 46: the vendor `GetADataFromUSB` best-marker loop selects the
+/// smallest z - the NEAREST marker is the active one - and stores the
+/// winning slot's x/y/z qwords as the manager's marker position).
+///
+/// The values are millimetres. NOTE (turn 46): these coordinates are
+/// HOST-computed in the vendor stack (`classifying.dll!ClassifyAndTrack`
+/// classifies the 640-B wire record of EP 0x83); the device itself
+/// sends raw blob data ([`crate::protocol::ens::WireRecord`]).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Marker {
     /// Slot index inside the record (0..=9 observed; chip: up to 15).
@@ -22,12 +28,11 @@ pub struct Marker {
     pub x_mm: f32,
     /// Vertical position, millimetres.
     pub y_mm: f32,
-    /// Depth from the sensor bar, millimetres.
+    /// Depth from the sensor bar, millimetres (the nearest-marker
+    /// selection key: smallest z wins).
     pub z_mm: f32,
-    /// Vendor quality/age value (slot+0x24); >= 50 = tracked.
+    /// Vendor quality value (slot+0x24); >= 50 = tracked.
     pub quality: i32,
-    /// Gate value from slot+0x18 (timestamp or distance gate - item #4).
-    pub age: f64,
 }
 
 /// Link-quality classification (vendor traffic-light semantics).

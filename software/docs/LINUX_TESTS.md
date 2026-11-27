@@ -303,6 +303,41 @@ What the numbers will decide (the A/B matrix):
 | cadence 5.0/4.0 steps WITH drops 0 and packet errors 0 | the device itself paces frames at ~2 fps despite the commit - firmware behavior, documented and lived with |
 | packet errors nonzero (proto/overflow/ilseq) | bus-level signal integrity - try another cable/port before believing any rate |
 
+## T12 - THE P3a record-plane bench (records --cmos, turn 46)
+
+```
+cargo run --features usb --example records -- --cmos
+cargo run --features usb --example records -- --cmos --frames 25 --out recdir
+```
+
+The marker/record plane, decoded turn 46 from the vendor stack (full
+evidence: `research/idong100/agents/20-turn46/FINDINGS.md`): the PU/OD
+framing on the SECOND MI_04 bulk pair - the device announces every
+record with a 64-B OD **type-0xF0** frame on **EP 0x83**, the host
+reads the **640-B raw record** (OD magic trailer at +0x27C, status byte
+at +0x25C) and answers with a 64-B PU **type-7** ACK on **EP 0x03**.
+(The 7F 55 session stays on EP 0x02/0x82 - EasyUSB pipe calibration.)
+
+What the run does: session init (register tables + polls, exactly
+T5 --cmos) -> the ENS probe (the vendor `0x10640`: read 64 B from
+EP 0x83 ten times at 100 ms, expect a type-0xF0 OD frame) -> on
+success the handshake loop (announce -> record -> zero-payload type-7
+ACK; our ACK carries no classifier output, so `--frames 25` runs ~1 s
+of the stream) with raw dumps in `--out`.
+
+The verdict matrix:
+
+| observation | verdict |
+| --- | --- |
+| VERDICT A: type-0xF0 answers, records read, trailer OK | the record plane streams spontaneously after the session init - dump the blob records, the classifier-input layout is the next decode |
+| 64 B arrive but not OD/0xF0 | something else lives on EP 0x83 - send the hex head printed by the run |
+| VERDICT B: silence for all 10 probes (read-only, no writes happened) | the runtime `ens_code.ldr` upload must run first - the ONE capture with the kit-37 unlocked app in a running game pins its wire bytes (T12 decides whether that capture is needed at all) |
+| records stop mid-run | check the self-reboot window (31-157 s); rerun on a fresh landing (the run is short on purpose) |
+
+PASS criteria: VERDICT A with `records N/N` and raw dumps, or VERDICT B
+recorded as the capture request (both are decisive outcomes - that is
+the point of the probe).
+
 ## T8 - THE P2.3 8051 firmware upload (controlled flash replay)
 
 ```sh
@@ -375,3 +410,6 @@ captures exactly like we did with USBPcap on Windows.
 - T8: the driver brings the sensor up from a cold bootloader on its own
   (P2.3 acceptance) - the complete vendor lifecycle without any vendor
   software.
+- T12: the record plane (P3a) - either the marker records stream and we
+  hold the raw blob data, or the one remaining unpinned wire format (the
+  runtime `ens_code.ldr` upload) is isolated as the single capture ask.

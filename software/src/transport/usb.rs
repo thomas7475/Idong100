@@ -123,6 +123,41 @@ impl UsbTransport {
     pub fn state(&self) -> DeviceState {
         self.mode
     }
+
+    // ---- record plane (turn 46): raw MI_04 bulk I/O on arbitrary
+    //      endpoints. The 7F 55 session keeps EP 0x02/0x82 through the
+    //      `Transport` trait; the runtime record plane runs on the
+    //      second bulk pair EP 0x83 IN / EP 0x03 OUT (EasyUSB pipe
+    //      calibration - see protocol::ens). ----
+
+    /// Raw bulk read from an MI_04 IN endpoint (e.g.
+    /// [`crate::protocol::EP_RECORD_IN`]). A read that times out with
+    /// zero bytes returns an empty vec - the ens probe treats that as
+    /// "no record frame yet".
+    pub fn read_bulk_ep(
+        &mut self,
+        ep: u8,
+        len: usize,
+        timeout: Duration,
+    ) -> crate::Result<Vec<u8>> {
+        let mut buf = vec![0u8; len];
+        match self.handle.read_bulk(ep, &mut buf, timeout) {
+            Ok(n) => {
+                buf.truncate(n);
+                Ok(buf)
+            }
+            Err(rusb::Error::Timeout) => Ok(Vec::new()),
+            Err(e) => Err(IdongError::Usb(e.to_string())),
+        }
+    }
+
+    /// Raw bulk write to an MI_04 OUT endpoint (e.g.
+    /// [`crate::protocol::EP_RECORD_OUT`]) - the type-7 record ACKs.
+    /// Single attempt, no retry: the usbCom loop writes its command
+    /// once per record.
+    pub fn write_bulk_ep(&mut self, ep: u8, buf: &[u8], timeout: Duration) -> crate::Result<usize> {
+        self.handle.write_bulk(ep, buf, timeout).map_err(|e| IdongError::Usb(e.to_string()))
+    }
 }
 
 impl Transport for UsbTransport {

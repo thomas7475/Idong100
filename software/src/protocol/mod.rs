@@ -10,6 +10,7 @@
 
 pub mod boot;
 pub mod cmd;
+pub mod ens;
 pub mod frames;
 pub mod records;
 pub mod runtime;
@@ -107,6 +108,41 @@ pub const MARKER_TRAILER: usize = 0x48;
 pub const MARKER_RECORD_MIN: usize = 0x3bc;
 /// Slot quality gate: slot+0x24 (i32) >= 50 -> tracked.
 pub const QUALITY_GATE: i32 = 50;
+
+// ---- Runtime record plane (turn 46: xEyeUSB.dll usbCom worker @RVA 0x11770,
+//      ens subsystem @0xeb00-0x10900, all disassembled - see docs/PROTOCOL.md
+//      "Runtime record plane") ----
+/// Vendor bulk pair the record plane runs on: the 7F 55 session stays on
+/// EP 0x02/0x82 (calibrated: EasyUSB write pipe 0 / read pipe 1, the
+/// USBPcap-proven pair), and usbCom + the ens loader use read pipe 2 /
+/// write pipe 3 -> the second MI_04 bulk pair (512 B maxpacket).
+pub const EP_RECORD_IN: u8 = 0x83;
+pub const EP_RECORD_OUT: u8 = 0x03;
+/// OD frame type announcing one record is ready (u16 @ status +4).
+pub const TYPE_RECORD_READY: u16 = 0x00f0;
+/// PU frame type of the per-record ACK/command the host sends
+/// (built in the usbCom loop, payload filled by classifying.dll).
+pub const TYPE_RECORD_CMD: u16 = 0x0007;
+/// Length of the OD status frame and the PU type-7 command frame (64 B).
+pub const RECORD_FRAME_LEN: usize = 64;
+/// Length of one raw wire record (0x280 B, usbCom loop @0x11c7b).
+pub const RECORD_WIRE_LEN: usize = 0x280;
+/// Wire-record trailer: the OD magic dword ends every record
+/// (usbCom loop @0x11d13, checked at record +0x27C).
+pub const RECORD_TRAILER_OFF: usize = 0x27c;
+/// Status byte inside the wire record (f660 transform @0xf667).
+pub const RECORD_STATUS_OFF: usize = 0x25c;
+/// Startup probe: read RECORD_FRAME_LEN from EP 0x83 expecting an OD
+/// type-0xF0 frame, 0x64 ms timeout, up to 10 tries (probe @RVA 0x10640,
+/// called from usbCom @0x11886). No frame within budget -> the runtime
+/// ens_code.ldr upload state machine (@RVA 0xf790) would run first.
+pub const ENS_PROBE_TRIES: u8 = 10;
+pub const ENS_PROBE_TIMEOUT: Duration = Duration::from_millis(100);
+/// The xEye3Ddata host element the wire record eventually becomes in
+/// the vendor stack (queue "Data2Class", element size 0x3F0; the 0x280-B
+/// wire record itself carries raw blob data, the marker x/y/z are
+/// host-computed by classifying.dll - turn 46 finding).
+pub const RECORD_ELEMENT_LEN: usize = 0x3f0;
 
 // ---- Stream config defaults (xEye.ini / xEyeUsb.ini) ----
 /// xEyeFrame=50 (USBComFPS=35 transport polling).

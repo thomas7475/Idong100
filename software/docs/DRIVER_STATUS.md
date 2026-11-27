@@ -1,36 +1,41 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
-Turn 45, 2026-11-27. The one-file answer to "how far are we, what is
-left". Status line: **the protocol is fully decoded (every plane
-captured and now FULLY ASSEMBLED), the driver lives under `software/`
-of the repository, 111 tests green, and the bench ladder is complete:
-T1-T10 all PASS - T9 (raw usbfs-ISO) and T7 (uvcvideo STREAMON, the
-former "dead end" - state-dependent after all) both captured real
-frames on the turn-44 bench day, and T10 (`--recover`) makes the run
-self-healing: the sensor's documented 31-157 s self-reboot is absorbed
-by an automatic re-flash + resume, exactly the vendor engine's own
-babysitting job. The video backends are PROMOTED into the crate
-(`transport::v4l2_stream`, `transport::usbfs_iso`, behind the `usb`
-feature - the example is the bench script on top of them), and the
-turn-44 bench exposed + fixed a real assembler bug: the EOF-flagged
-final payload of every frame carries the frame's tail (612000 + 2400
-= exactly 614400 B under one PTS) - `VideoAssembler` now closes the
-frame WITH that payload's data. Turn 45 (P2.6) makes the one open
-video question - 2.1 fps delivered on ISO vs ~25 fps produced through
-uvcvideo, same hour - decidable in ONE bench command: both capture
-loops are now measure-first (requeue/resubmit BEFORE any per-frame
-host work; the old order starved the ring during PNG writes, and the
-1/5/5/4/4 PTS cadence of the turn-44 runs is exactly that starvation
-signature), drop accounting counts frames the device made but our
-loop missed (V4L2 buffer-seq gaps / ISO PTS gaps, pure +
-unit-tested), the ISO ring classifies its packet errors
-(proto/overflow/ilseq), `--rate N` measures N frames with the ring
-never starved and prints the full rate table (host wall rate, PTS
-cadence, device drops), and a GET_CUR(probe) after the ISO
-negotiation reports what the firmware actually settled on. What
-remains: the marker/3D record plane (needs one capture with a RUNNING
-GAME - the trigger command is unknown) and P4 ROS 2 (needs a ROS
-install).**
+Turn 46, 2026-11-27. The one-file answer to "how far are we, what is
+left". Status line: **the protocol is fully decoded - including the
+last open plane: turn 46 decoded the marker/record stream from the
+vendor stack (xEyeUSB.dll `usbCom` worker + the `ens` subsystem,
+re-extracted from `xeyez_Lobby.dat` and disassembled - full evidence:
+`research/idong100/agents/20-turn46/FINDINGS.md`). The record plane is
+a THIRD protocol layer: the PU/OD framing on the second MI_04 bulk
+pair **EP 0x83 IN / EP 0x03 OUT** (EasyUSB pipe calibration: the 7F 55
+session = write pipe 0 / read pipe 1 = the USBPcap-proven EP
+0x02/0x82, so usbCom's read pipe 2 / write pipe 3 are 0x83/0x03 - the
+"unused" endpoints of every capture). The device announces each
+record with a 64-B OD **type-0xF0** frame on EP 0x83, the host reads
+the **640-B raw record** (OD magic trailer @+0x27C, status byte
+@+0x25C) and answers with a 64-B PU **type-7** ACK on EP 0x03 whose
+payload the vendor classifier computes from the PREVIOUS record.
+Open item #4 is RESOLVED (`TransUSB2Pipe` @RVA 0x25e0 + the
+best-marker loop of `GetADataFromUSB`: **x/y/z f64 @ slot
++0x08/+0x10/+0x18, quality i32 @ +0x24, smallest z = the active
+marker**) - and the deeper finding: the x/y/z are HOST-computed
+(`classifying.dll!ClassifyAndTrack` classifies the 640-B blob record;
+the marker record is a host-side structure). What starts the stream:
+a startup probe (read 64 B from EP 0x83 x 10 @ 100 ms, expect
+0xF0 - `0x10640`) - if nothing answers, the vendor runs the
+`ens_code.ldr` upload state machine on the SAME pair first (the PU/OD
+traffic never seen in any capture, because the license gates kept the
+app out of the game state). The T12 bench example makes this decidable
+in ONE command: `cargo run --features usb --example records --
+--cmos`. 119 tests green, both feature states, nightly fmt clean.**
+Everything else stands as of turn 45: T1-T10 all PASS (the bench
+ladder complete, `--recover` absorbs the 31-157 s self-reboot), the
+video backends promoted into the crate, P2.6's `--rate N` measures
+the fps question cleanly (the turn-44 2.1-fps gap was our own ring
+starvation). What remains: the T11 rate run + the T12 record-plane
+verdict (both are one-command bench runs), the `ens_code.ldr` wire
+bytes IF T12 says the stream needs the runtime upload (one kit-37
+game capture pins them), and P4 ROS 2 (needs a ROS install).**
 
 ## The short version
 
@@ -54,7 +59,7 @@ install).**
 | Video frame assembly (`protocol::video::VideoAssembler`) | the turn-44 bench fixed the EOF order: the final payload's data belongs to its own frame (was: split into 612000 + 2400 B under one PTS); golden + bench-shape tests green |
 | P2.4b self-reboot recovery (`video --recover`) | DONE (turn 44): wait bootloader landing -> re-flash the pinned image (ungated `FLASH_CONFIRMED` path) -> wait renum -> re-init -> resume; `session_full` points at it |
 | P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | ACCEPTED - T8 PASS x2 on the turn-41 bench (readback matched, launched, identity intact); `FLASH_CONFIRMED` = true since turn 42 |
-| Marker/3D record decoding (xEye3Ddata 10-slot records) | PARSER DONE - never seen on the wire in ANY capture (open) |
+| Marker/3D record plane (P3a, turn 46) | WIRE PLANE DECODED: PU/OD on EP 0x83/0x03 - type-0xF0 announce, 640-B raw record (OD trailer @+0x27C, status @+0x25C), type-7 ACK; open item #4 RESOLVED (x/y/z f64 @ slot +0x08/+0x10/+0x18, quality @+0x24) - the values are HOST-computed (classifying.dll SVM); `protocol::ens` + the T12 bench example ready; the `ens_code.ldr` upload state machine (the startup fallback) is the remaining unpinned wire format |
 | P4 ROS 2 node (idong-ros2, idong_msgs) | NOT STARTED (needs a ROS install) |
 
 ## Layout (turn 40: everything under `software/`)
@@ -81,6 +86,7 @@ cargo run --features usb --example video -- --probe       # T6: V4L2 probe
 cargo run --features usb --example video -- --cmos --frames 10  # T7: video
 cargo run --features usb --example flash_mcu                   # T8 dry run
 cargo run --features usb --example flash_mcu -- --confirm      # T8
+cargo run --features usb --example records -- --cmos          # T12: record plane
 ```
 
 `flash_mcu` reads `firmware/v2.6.0.6/app_m8051_2611.hex` by default
@@ -179,8 +185,22 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
   ungated path is open since the turn-41 double PASS
   (`FLASH_CONFIRMED` = true, flipped turn 42) - the consent-gated
   example stays the recommended interactive path.
+- `src/protocol/ens.rs` (NEW turn 46) - the runtime record plane: the
+  64-B OD type-0xF0 `StatusFrame`, the 640-B `WireRecord` (OD trailer
+  @+0x27C, status byte @+0x25C + the f660 flag decode, blob stats for
+  the bench), the 64-B PU type-7 `Type7Command` (zero ACK + payload
+  builder), all constants with disassembly citations.
+- `src/examples/records.rs` (NEW turn 46) - the T12 record-plane bench:
+  session init (--cmos) -> the ENS probe (the vendor `0x10640`: 64 B
+  from EP 0x83 x 10 @ 100 ms, expect type 0xF0) -> on success the
+  handshake loop (announce -> 640-B record -> type-7 ACK) with raw
+  dumps + per-record stats; VERDICT A/B printed with the exact next
+  step.
 - `src/{marker,records,handle,stream}.rs` - the xEye3Ddata record
-  parser, marker model, handle events, reader thread.
+  parser (x/y/z/quality offsets RESOLVED turn 46 - the values are
+  host-computed by the vendor SVM; `nearest_marker` mirrors the
+  vendor's smallest-z selection), marker model, handle events, reader
+  thread.
 
 ## What is missing, in order
 
@@ -196,14 +216,21 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
    accounting, packet-error classes, GET_CUR(probe) dump. Read the
    verdict matrix in `docs/LINUX_TESTS.md` T11: `device drops : 0`
    with a flat cadence = the true production rate, whatever it is.
-2. **The marker/3D plane**: NOT on the wire in any capture so far.
-   The running games receive the 10-slot records over the engine pipes;
-   the likely trigger is a command we have not sent or EP 0x03/0x83
-   (512-B vendor endpoints, unused in every capture). A capture with a
-   RUNNING GAME decides (the lobby unlock kit 37 makes the game
-   runnable on Windows). The parser exists and is tested. Channel B
-   of the video plane is NOT the marker plane (near-128 chroma, no
-   image - the turn-44 bench).
+2. **The marker/3D plane - decoded (turn 46), now ONE bench verdict.**
+   The wire plane is fully understood (PU/OD on EP 0x83/0x03: 64-B
+   type-0xF0 announce -> 640-B raw record -> 64-B type-7 ACK; the
+   xEye3Ddata x/y/z are HOST-computed by the vendor SVM). What the
+   vendor does when the startup probe finds NO stream: the
+   `ens_code.ldr` upload state machine on the same endpoint pair -
+   the never-captured PU/OD traffic. The T12 run decides which world
+   we are in:
+   `cargo run --features usb --example records -- --cmos`
+   VERDICT A: records flow -> dump + decode the blob layout (the
+   classifier input). VERDICT B: silence -> the ldr upload is needed
+   first; ONE capture with the kit-37 unlocked app in a running game
+   pins its wire bytes (the games' record stream runs while that
+   capture is taken), and the driver replays it like `flash_mcu`
+   replays the hex.
 3. **P4 ROS 2 node** (idong-ros2 + idong_msgs): lifecycle node,
    parameters, QoS, diagnostics - blocked on a ROS 2 install, design
    already in the draft
@@ -225,8 +252,11 @@ For the driver core: **no** - boot, session, EEPROM, CMOS, stream
 poll and the video plane are all byte-pinned. Two captures would
 still add value (both optional):
 
-- a capture with a RUNNING GAME (marker records / EP 0x03/0x83
-  traffic) - decides missing #5;
+- a capture with a RUNNING GAME - only needed if the T12 record-plane
+  run returns VERDICT B (no type-0xF0 stream): it pins the
+  `ens_code.ldr` runtime-upload state machine wire bytes (the PU/OD
+  traffic on EP 0x03/0x83 that no capture ever saw, because the
+  license gates kept the app out of the game state);
 - a capture of the lobby actually passing the hardware test with the
   kit-37 patch applied (validates the unlock end-to-end and shows the
   MC-calibration exchange).
