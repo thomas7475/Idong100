@@ -1,0 +1,1603 @@
+### dsp_reset @ RVA 0x114c0
+000114c0  55                 push ebp
+000114c1  8bec               mov ebp, esp
+000114c3  81ece8020000       sub esp, 0x2e8
+000114c9  a1a8c20110         mov eax, dword ptr [0x1001c2a8]
+000114ce  33c5               xor eax, ebp
+000114d0  8945f0             mov dword ptr [ebp - 0x10], eax
+000114d3  c745f400000000     mov dword ptr [ebp - 0xc], 0
+000114da  c78564fdffff64000000 mov dword ptr [ebp - 0x29c], 0x64
+000114e4  c78568fdffff00000000 mov dword ptr [ebp - 0x298], 0
+000114ee  c745fc00000000     mov dword ptr [ebp - 4], 0
+000114f5  8d8570fdffff       lea eax, [ebp - 0x290]
+000114fb  89851cfdffff       mov dword ptr [ebp - 0x2e4], eax
+00011501  8d8d20fdffff       lea ecx, [ebp - 0x2e0]
+00011507  894df8             mov dword ptr [ebp - 8], ecx
+0001150a  8d9570fdffff       lea edx, [ebp - 0x290]
+00011510  89956cfdffff       mov dword ptr [ebp - 0x294], edx
+00011516  b801000000         mov eax, 1
+0001151b  85c0               test eax, eax
+0001151d  0f842d020000       je 0x10011750
+00011523  6a40               push 0x40
+00011525  6a00               push 0
+00011527  8d8d70fdffff       lea ecx, [ebp - 0x290]
+0001152d  51                 push ecx
+0001152e  e831190000         call 0x10012e64  ; ->0x12e64
+00011533  83c40c             add esp, 0xc
+00011536  68f4010000         push 0x1f4
+0001153b  6a40               push 0x40
+0001153d  8d9570fdffff       lea edx, [ebp - 0x290]
+00011543  52                 push edx
+00011544  6a02               push 2
+00011546  e873240000         call 0x100139be  ; ->0x139be
+0001154b  83c410             add esp, 0x10
+0001154e  898518fdffff       mov dword ptr [ebp - 0x2e8], eax
+00011554  83bd18fdffff40     cmp dword ptr [ebp - 0x2e8], 0x40
+0001155b  7443               je 0x100115a0
+0001155d  682c860110         push 0x1001862c
+00011562  e819f6ffff         call 0x10010b80  ; ->0x10b80
+00011567  83c404             add esp, 4
+0001156a  8b45f4             mov eax, dword ptr [ebp - 0xc]
+0001156d  3b8564fdffff       cmp eax, dword ptr [ebp - 0x29c]
+00011573  7e16               jle 0x1001158b
+00011575  6848860110         push 0x10018648  ; "exit for err"
+0001157a  e801f6ffff         call 0x10010b80  ; ->0x10b80
+0001157f  83c404             add esp, 4
+00011582  33c0               xor eax, eax
+00011584  e9cc010000         jmp 0x10011755  ; ->0x11755
+00011589  eb09               jmp 0x10011594  ; ->0x11594
+0001158b  8b4df4             mov ecx, dword ptr [ebp - 0xc]
+0001158e  83c101             add ecx, 1
+00011591  894df4             mov dword ptr [ebp - 0xc], ecx
+00011594  c78568fdffff00000000 mov dword ptr [ebp - 0x298], 0
+0001159e  eb07               jmp 0x100115a7  ; ->0x115a7
+000115a0  c745f400000000     mov dword ptr [ebp - 0xc], 0
+000115a7  8b951cfdffff       mov edx, dword ptr [ebp - 0x2e4]
+000115ad  813a4f447f7f       cmp dword ptr [edx], 0x7f7f444f
+000115b3  0f856affffff       jne 0x10011523
+000115b9  8b851cfdffff       mov eax, dword ptr [ebp - 0x2e4]
+000115bf  0fb74804           movzx ecx, word ptr [eax + 4]
+000115c3  81f9f0000000       cmp ecx, 0xf0
+000115c9  0f8554ffffff       jne 0x10011523
+000115cf  68e8030000         push 0x3e8
+000115d4  6880020000         push 0x280
+000115d9  8d9570fdffff       lea edx, [ebp - 0x290]
+000115df  52                 push edx
+000115e0  6a02               push 2
+000115e2  e8d7230000         call 0x100139be  ; ->0x139be
+000115e7  83c410             add esp, 0x10
+000115ea  898518fdffff       mov dword ptr [ebp - 0x2e8], eax
+000115f0  81bd18fdffff80020000 cmp dword ptr [ebp - 0x2e8], 0x280
+000115fa  7424               je 0x10011620
+000115fc  6858860110         push 0x10018658
+00011601  e87af5ffff         call 0x10010b80  ; ->0x10b80
+00011606  83c404             add esp, 4
+00011609  c78568fdffff00000000 mov dword ptr [ebp - 0x298], 0
+00011613  6a0a               push 0xa
+00011615  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+0001161b  e9f6feffff         jmp 0x10011516  ; ->0x11516
+00011620  83bd68fdffff01     cmp dword ptr [ebp - 0x298], 1
+00011627  0f8eaa000000       jle 0x100116d7
+0001162d  6a40               push 0x40
+0001162f  68ff070000         push 0x7ff
+00011634  8d8520fdffff       lea eax, [ebp - 0x2e0]
+0001163a  50                 push eax
+0001163b  e8b0efffff         call 0x100105f0  ; ->0x105f0
+00011640  83c40c             add esp, 0xc
+00011643  83f801             cmp eax, 1
+00011646  740d               je 0x10011655
+00011648  6868860110         push 0x10018668
+0001164d  e82ef5ffff         call 0x10010b80  ; ->0x10b80
+00011652  83c404             add esp, 4
+00011655  68f4010000         push 0x1f4
+0001165a  6a40               push 0x40
+0001165c  68ee070000         push 0x7ee
+00011661  8d8d70fdffff       lea ecx, [ebp - 0x290]
+00011667  51                 push ecx
+00011668  e823efffff         call 0x10010590  ; ->0x10590
+0001166d  83c410             add esp, 0x10
+00011670  898518fdffff       mov dword ptr [ebp - 0x2e8], eax
+00011676  83bd18fdffffff     cmp dword ptr [ebp - 0x2e8], -1
+0001167d  750f               jne 0x1001168e
+0001167f  6880860110         push 0x10018680
+00011684  e8f7f4ffff         call 0x10010b80  ; ->0x10b80
+00011689  83c404             add esp, 4
+0001168c  eb2a               jmp 0x100116b8  ; ->0x116b8
+0001168e  83bd18fdfffffe     cmp dword ptr [ebp - 0x2e8], -2
+00011695  750f               jne 0x100116a6
+00011697  6898860110         push 0x10018698
+0001169c  e8dff4ffff         call 0x10010b80  ; ->0x10b80
+000116a1  83c404             add esp, 4
+000116a4  eb12               jmp 0x100116b8  ; ->0x116b8
+000116a6  68b4860110         push 0x100186b4  ; "Get DSP Reset ACK OK"
+000116ab  e8d0f4ffff         call 0x10010b80  ; ->0x10b80
+000116b0  83c404             add esp, 4
+000116b3  e998000000         jmp 0x10011750  ; ->0x11750
+000116b8  837dfc05           cmp dword ptr [ebp - 4], 5
+000116bc  7e09               jle 0x100116c7
+000116be  33c0               xor eax, eax
+000116c0  e990000000         jmp 0x10011755  ; ->0x11755
+000116c5  eb09               jmp 0x100116d0  ; ->0x116d0
+000116c7  8b55fc             mov edx, dword ptr [ebp - 4]
+000116ca  83c201             add edx, 1
+000116cd  8955fc             mov dword ptr [ebp - 4], edx
+000116d0  e941feffff         jmp 0x10011516  ; ->0x11516
+000116d5  eb0f               jmp 0x100116e6  ; ->0x116e6
+000116d7  8b8568fdffff       mov eax, dword ptr [ebp - 0x298]
+000116dd  83c001             add eax, 1
+000116e0  898568fdffff       mov dword ptr [ebp - 0x298], eax
+000116e6  6a40               push 0x40
+000116e8  6a00               push 0
+000116ea  8d8d20fdffff       lea ecx, [ebp - 0x2e0]
+000116f0  51                 push ecx
+000116f1  e86e170000         call 0x10012e64  ; ->0x12e64
+000116f6  83c40c             add esp, 0xc
+000116f9  8b55f8             mov edx, dword ptr [ebp - 8]
+000116fc  c70250557f7f       mov dword ptr [edx], 0x7f7f5550
+00011702  8b45f8             mov eax, dword ptr [ebp - 8]
+00011705  66c740040700       mov word ptr [eax + 4], 7
+0001170b  68e8030000         push 0x3e8
+00011710  6a40               push 0x40
+00011712  8d8d20fdffff       lea ecx, [ebp - 0x2e0]
+00011718  51                 push ecx
+00011719  6a03               push 3
+0001171b  e898220000         call 0x100139b8  ; ->0x139b8
+00011720  83c410             add esp, 0x10
+00011723  85c0               test eax, eax
+00011725  7d24               jge 0x1001174b
+00011727  68cc860110         push 0x100186cc
+0001172c  e84ff4ffff         call 0x10010b80  ; ->0x10b80
+00011731  83c404             add esp, 4
+00011734  c78568fdffff00000000 mov dword ptr [ebp - 0x298], 0
+0001173e  6a0a               push 0xa
+00011740  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+00011746  e9cbfdffff         jmp 0x10011516  ; ->0x11516
+0001174b  e9c6fdffff         jmp 0x10011516  ; ->0x11516
+00011750  b801000000         mov eax, 1
+00011755  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+00011758  33cd               xor ecx, ebp
+0001175a  e805160000         call 0x10012d64  ; ->0x12d64
+0001175f  8be5               mov esp, ebp
+00011761  5d                 pop ebp
+00011762  c3                 ret 
+00011763  cc                 int3 
+00011764  cc                 int3 
+00011765  cc                 int3 
+00011766  cc                 int3 
+00011767  cc                 int3 
+00011768  cc                 int3 
+00011769  cc                 int3 
+0001176a  cc                 int3 
+0001176b  cc                 int3 
+0001176c  cc                 int3 
+0001176d  cc                 int3 
+0001176e  cc                 int3 
+0001176f  cc                 int3 
+00011770  55                 push ebp
+00011771  8bec               mov ebp, esp
+00011773  81ec0c0f0000       sub esp, 0xf0c
+00011779  a1a8c20110         mov eax, dword ptr [0x1001c2a8]
+0001177e  33c5               xor eax, ebp
+00011780  8945f0             mov dword ptr [ebp - 0x10], eax
+00011783  56                 push esi
+00011784  57                 push edi
+00011785  e846fcfeff         call 0x100013d0  ; ->0x13d0
+0001178a  8bc8               mov ecx, eax
+0001178c  e86ffcfeff         call 0x10001400  ; ->0x1400
+00011791  85c0               test eax, eax
+00011793  741c               je 0x100117b1
+00011795  68e0860110         push 0x100186e0
+0001179a  ff1530500110       call dword ptr [0x10015030]  ; KERNEL32.dll!OutputDebugStringA
+000117a0  6a00               push 0
+000117a2  e8a90f0000         call 0x10012750  ; ->0x12750
+000117a7  83c404             add esp, 4
+000117aa  33c0               xor eax, eax
+000117ac  e90c0c0000         jmp 0x100123bd  ; ->0x123bd
+000117b1  6804870110         push 0x10018704  ; "classifying.dll"
+000117b6  ff157c500110       call dword ptr [0x1001507c]  ; KERNEL32.dll!LoadLibraryA
+000117bc  8985acf9ffff       mov dword ptr [ebp - 0x654], eax
+000117c2  83bdacf9ffff00     cmp dword ptr [ebp - 0x654], 0
+000117c9  751d               jne 0x100117e8
+000117cb  6814870110         push 0x10018714
+000117d0  ff1530500110       call dword ptr [0x10015030]  ; KERNEL32.dll!OutputDebugStringA
+000117d6  6a00               push 0
+000117d8  e8730f0000         call 0x10012750  ; ->0x12750
+000117dd  83c404             add esp, 4
+000117e0  83c8ff             or eax, 0xffffffff
+000117e3  e9d50b0000         jmp 0x100123bd  ; ->0x123bd
+000117e8  6834870110         push 0x10018734  ; "SetLensParam"
+000117ed  8b85acf9ffff       mov eax, dword ptr [ebp - 0x654]
+000117f3  50                 push eax
+000117f4  ff1578500110       call dword ptr [0x10015078]  ; KERNEL32.dll!GetProcAddress
+000117fa  8985dcfaffff       mov dword ptr [ebp - 0x524], eax
+00011800  6844870110         push 0x10018744  ; "SetStaticPoint_Param"
+00011805  8b8dacf9ffff       mov ecx, dword ptr [ebp - 0x654]
+0001180b  51                 push ecx
+0001180c  ff1578500110       call dword ptr [0x10015078]  ; KERNEL32.dll!GetProcAddress
+00011812  89850cfaffff       mov dword ptr [ebp - 0x5f4], eax
+00011818  685c870110         push 0x1001875c  ; "ClassifyAndTrack"
+0001181d  8b95acf9ffff       mov edx, dword ptr [ebp - 0x654]
+00011823  52                 push edx
+00011824  ff1578500110       call dword ptr [0x10015078]  ; KERNEL32.dll!GetProcAddress
+0001182a  8985f8f9ffff       mov dword ptr [ebp - 0x608], eax
+00011830  83bddcfaffff00     cmp dword ptr [ebp - 0x524], 0
+00011837  7412               je 0x1001184b
+00011839  83bdf8f9ffff00     cmp dword ptr [ebp - 0x608], 0
+00011840  7409               je 0x1001184b
+00011842  83bd0cfaffff00     cmp dword ptr [ebp - 0x5f4], 0
+00011849  751d               jne 0x10011868
+0001184b  6870870110         push 0x10018770
+00011850  ff1530500110       call dword ptr [0x10015030]  ; KERNEL32.dll!OutputDebugStringA
+00011856  6a00               push 0
+00011858  e8f30e0000         call 0x10012750  ; ->0x12750
+0001185d  83c404             add esp, 4
+00011860  83c8ff             or eax, 0xffffffff
+00011863  e9550b0000         jmp 0x100123bd  ; ->0x123bd
+00011868  6a01               push 1
+0001186a  e8e10e0000         call 0x10012750  ; ->0x12750
+0001186f  83c404             add esp, 4
+00011872  6a00               push 0
+00011874  e857baffff         call 0x1000d2d0  ; ->0xd2d0
+00011879  83c404             add esp, 4
+0001187c  c785ecfaffff00000000 mov dword ptr [ebp - 0x514], 0
+00011886  e8b5edffff         call 0x10010640  ; ->0x10640
+0001188b  8985ecfaffff       mov dword ptr [ebp - 0x514], eax
+00011891  83bdecfaffff00     cmp dword ptr [ebp - 0x514], 0
+00011898  7513               jne 0x100118ad
+0001189a  6898870110         push 0x10018798  ; "ens_code.ldr"
+0001189f  e8ecdeffff         call 0x1000f790  ; ->0xf790
+000118a4  83c404             add esp, 4
+000118a7  8985ecfaffff       mov dword ptr [ebp - 0x514], eax
+000118ad  68e8030000         push 0x3e8
+000118b2  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+000118b8  6a05               push 5
+000118ba  e811baffff         call 0x1000d2d0  ; ->0xd2d0
+000118bf  83c404             add esp, 4
+000118c2  6a78               push 0x78
+000118c4  8b85ecfaffff       mov eax, dword ptr [ebp - 0x514]
+000118ca  83c008             add eax, 8
+000118cd  50                 push eax
+000118ce  8d8d50faffff       lea ecx, [ebp - 0x5b0]
+000118d4  51                 push ecx
+000118d5  e882160000         call 0x10012f5c  ; ->0x12f5c
+000118da  83c408             add esp, 8
+000118dd  d90504890110       fld dword ptr [0x10018904]
+000118e3  d91c24             fstp dword ptr [esp]
+000118e6  83ec78             sub esp, 0x78
+000118e9  b91e000000         mov ecx, 0x1e
+000118ee  8db550faffff       lea esi, [ebp - 0x5b0]
+000118f4  8bfc               mov edi, esp
+000118f6  f3a5               rep movsd dword ptr es:[edi], dword ptr [esi]
+000118f8  ff95dcfaffff       call dword ptr [ebp - 0x524]
+000118fe  83c478             add esp, 0x78
+00011901  d90500890110       fld dword ptr [0x10018900]
+00011907  d91c24             fstp dword ptr [esp]
+0001190a  51                 push ecx
+0001190b  d90500890110       fld dword ptr [0x10018900]
+00011911  d91c24             fstp dword ptr [esp]
+00011914  51                 push ecx
+00011915  d90500890110       fld dword ptr [0x10018900]
+0001191b  d91c24             fstp dword ptr [esp]
+0001191e  51                 push ecx
+0001191f  d905fc880110       fld dword ptr [0x100188fc]
+00011925  d91c24             fstp dword ptr [esp]
+00011928  51                 push ecx
+00011929  d905fc880110       fld dword ptr [0x100188fc]
+0001192f  d91c24             fstp dword ptr [esp]
+00011932  51                 push ecx
+00011933  d905fc880110       fld dword ptr [0x100188fc]
+00011939  d91c24             fstp dword ptr [esp]
+0001193c  51                 push ecx
+0001193d  d905f8880110       fld dword ptr [0x100188f8]
+00011943  d91c24             fstp dword ptr [esp]
+00011946  51                 push ecx
+00011947  d905f8880110       fld dword ptr [0x100188f8]
+0001194d  d91c24             fstp dword ptr [esp]
+00011950  68e8030000         push 0x3e8
+00011955  68e8030000         push 0x3e8
+0001195a  68e8030000         push 0x3e8
+0001195f  ff950cfaffff       call dword ptr [ebp - 0x5f4]
+00011965  83c42c             add esp, 0x2c
+00011968  c685f0faffff00     mov byte ptr [ebp - 0x510], 0
+0001196f  687f020000         push 0x27f
+00011974  6a00               push 0
+00011976  8d95f1faffff       lea edx, [ebp - 0x50f]
+0001197c  52                 push edx
+0001197d  e8e2140000         call 0x10012e64  ; ->0x12e64
+00011982  83c40c             add esp, 0xc
+00011985  c68568f9ffff00     mov byte ptr [ebp - 0x698], 0
+0001198c  6a3f               push 0x3f
+0001198e  6a00               push 0
+00011990  8d8569f9ffff       lea eax, [ebp - 0x697]
+00011996  50                 push eax
+00011997  e8c8140000         call 0x10012e64  ; ->0x12e64
+0001199c  83c40c             add esp, 0xc
+0001199f  c685b0f9ffff00     mov byte ptr [ebp - 0x650], 0
+000119a6  6a3f               push 0x3f
+000119a8  6a00               push 0
+000119aa  8d8db1f9ffff       lea ecx, [ebp - 0x64f]
+000119b0  51                 push ecx
+000119b1  e8ae140000         call 0x10012e64  ; ->0x12e64
+000119b6  83c40c             add esp, 0xc
+000119b9  c745f400000000     mov dword ptr [ebp - 0xc], 0
+000119c0  c7851cfaffff64000000 mov dword ptr [ebp - 0x5e4], 0x64
+000119ca  8d951cfaffff       lea edx, [ebp - 0x5e4]
+000119d0  52                 push edx
+000119d1  e85ab8ffff         call 0x1000d230  ; ->0xd230
+000119d6  83c404             add esp, 4
+000119d9  68a8870110         push 0x100187a8  ; ".\xEyeUsb.ini"
+000119de  6a00               push 0
+000119e0  68b8870110         push 0x100187b8  ; "DebugShow"
+000119e5  68c4870110         push 0x100187c4  ; "Config"
+000119ea  ff1580500110       call dword ptr [0x10015080]  ; KERNEL32.dll!GetPrivateProfileIntA
+000119f0  85c0               test eax, eax
+000119f2  7415               je 0x10011a09
+000119f4  b801000000         mov eax, 1
+000119f9  85c0               test eax, eax
+000119fb  740c               je 0x10011a09
+000119fd  c78504f1ffff01000000 mov dword ptr [ebp - 0xefc], 1
+00011a07  eb0a               jmp 0x10011a13  ; ->0x11a13
+00011a09  c78504f1ffff00000000 mov dword ptr [ebp - 0xefc], 0
+00011a13  8a8d04f1ffff       mov cl, byte ptr [ebp - 0xefc]
+00011a19  888d23faffff       mov byte ptr [ebp - 0x5dd], cl
+00011a1f  8d9524faffff       lea edx, [ebp - 0x5dc]
+00011a25  52                 push edx
+00011a26  e805dbffff         call 0x1000f530  ; ->0xf530
+00011a2b  83c404             add esp, 4
+00011a2e  68cc870110         push 0x100187cc  ; "Data2Class"
+00011a33  ff157c530110       call dword ptr [0x1001537c]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00011a39  8bc8               mov ecx, eax
+00011a3b  ff1580530110       call dword ptr [0x10015380]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00011a41  8985fcf9ffff       mov dword ptr [ebp - 0x604], eax
+00011a47  68d8870110         push 0x100187d8  ; "Data2USB"
+00011a4c  ff157c530110       call dword ptr [0x1001537c]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00011a52  8bc8               mov ecx, eax
+00011a54  ff1580530110       call dword ptr [0x10015380]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00011a5a  8985ccfaffff       mov dword ptr [ebp - 0x534], eax
+00011a60  83bdfcf9ffff00     cmp dword ptr [ebp - 0x604], 0
+00011a67  7528               jne 0x10011a91
+00011a69  83bdccfaffff00     cmp dword ptr [ebp - 0x534], 0
+00011a70  751f               jne 0x10011a91
+00011a72  68e4870110         push 0x100187e4  ; "usbCom:ListPointerNull"
+00011a77  e804f1ffff         call 0x10010b80  ; ->0x10b80
+00011a7c  83c404             add esp, 4
+00011a7f  6a00               push 0
+00011a81  e8ca0c0000         call 0x10012750  ; ->0x12750
+00011a86  83c404             add esp, 4
+00011a89  83c8ff             or eax, 0xffffffff
+00011a8c  e92c090000         jmp 0x100123bd  ; ->0x123bd
+00011a91  8d85d0faffff       lea eax, [ebp - 0x530]
+00011a97  50                 push eax
+00011a98  ff151c510110       call dword ptr [0x1001511c]  ; KERNEL32.dll!QueryPerformanceFrequency
+00011a9e  dfadd0faffff       fild qword ptr [ebp - 0x530]
+00011aa4  dd9de0faffff       fstp qword ptr [ebp - 0x520]
+00011aaa  8d8dd0faffff       lea ecx, [ebp - 0x530]
+00011ab0  51                 push ecx
+00011ab1  ff1590500110       call dword ptr [0x10015090]  ; KERNEL32.dll!QueryPerformanceCounter
+00011ab7  8b95d0faffff       mov edx, dword ptr [ebp - 0x530]
+00011abd  8955f8             mov dword ptr [ebp - 8], edx
+00011ac0  8b85d4faffff       mov eax, dword ptr [ebp - 0x52c]
+00011ac6  8945fc             mov dword ptr [ebp - 4], eax
+00011ac9  d9ee               fldz 
+00011acb  dd9d00faffff       fstp qword ptr [ebp - 0x600]
+00011ad1  b901000000         mov ecx, 1
+00011ad6  85c9               test ecx, ecx
+00011ad8  0f84d3080000       je 0x100123b1
+00011ade  8d95d0faffff       lea edx, [ebp - 0x530]
+00011ae4  52                 push edx
+00011ae5  ff1590500110       call dword ptr [0x10015090]  ; KERNEL32.dll!QueryPerformanceCounter
+00011aeb  8b85d0faffff       mov eax, dword ptr [ebp - 0x530]
+00011af1  8945f8             mov dword ptr [ebp - 8], eax
+00011af4  8b8dd4faffff       mov ecx, dword ptr [ebp - 0x52c]
+00011afa  894dfc             mov dword ptr [ebp - 4], ecx
+00011afd  e8cef8feff         call 0x100013d0  ; ->0x13d0
+00011b02  8bc8               mov ecx, eax
+00011b04  e8f7f8feff         call 0x10001400  ; ->0x1400
+00011b09  85c0               test eax, eax
+00011b0b  7417               je 0x10011b24
+00011b0d  e8aef9ffff         call 0x100114c0  ; ->0x114c0
+00011b12  68fc870110         push 0x100187fc  ; "out usb_com thread for power!"
+00011b17  e864f0ffff         call 0x10010b80  ; ->0x10b80
+00011b1c  83c404             add esp, 4
+00011b1f  e98d080000         jmp 0x100123b1  ; ->0x123b1
+00011b24  e8f70b0000         call 0x10012720  ; ->0x12720
+00011b29  83f802             cmp eax, 2
+00011b2c  7512               jne 0x10011b40
+00011b2e  681c880110         push 0x1001881c  ; "pause"
+00011b33  e848f0ffff         call 0x10010b80  ; ->0x10b80
+00011b38  83c404             add esp, 4
+00011b3b  e971080000         jmp 0x100123b1  ; ->0x123b1
+00011b40  8d9568f9ffff       lea edx, [ebp - 0x698]
+00011b46  8995f0f9ffff       mov dword ptr [ebp - 0x610], edx
+00011b4c  e87ff8feff         call 0x100013d0  ; ->0x13d0
+00011b51  8bc8               mov ecx, eax
+00011b53  e8a8f8feff         call 0x10001400  ; ->0x1400
+00011b58  85c0               test eax, eax
+00011b5a  7417               je 0x10011b73
+00011b5c  e85ff9ffff         call 0x100114c0  ; ->0x114c0
+00011b61  6824880110         push 0x10018824  ; "out usb_com thread for power!"
+00011b66  e815f0ffff         call 0x10010b80  ; ->0x10b80
+00011b6b  83c404             add esp, 4
+00011b6e  e908010000         jmp 0x10011c7b  ; ->0x11c7b
+00011b73  6a40               push 0x40
+00011b75  6a00               push 0
+00011b77  8d8568f9ffff       lea eax, [ebp - 0x698]
+00011b7d  50                 push eax
+00011b7e  e8e1120000         call 0x10012e64  ; ->0x12e64
+00011b83  83c40c             add esp, 0xc
+00011b86  68f4010000         push 0x1f4
+00011b8b  6a40               push 0x40
+00011b8d  8d8d68f9ffff       lea ecx, [ebp - 0x698]
+00011b93  51                 push ecx
+00011b94  6a02               push 2
+00011b96  e8231e0000         call 0x100139be  ; ->0x139be
+00011b9b  83c410             add esp, 0x10
+00011b9e  8985f4f9ffff       mov dword ptr [ebp - 0x60c], eax
+00011ba4  83bdf4f9ffff40     cmp dword ptr [ebp - 0x60c], 0x40
+00011bab  0f8489000000       je 0x10011c3a
+00011bb1  6844880110         push 0x10018844
+00011bb6  e8c5efffff         call 0x10010b80  ; ->0x10b80
+00011bbb  83c404             add esp, 4
+00011bbe  8b55f4             mov edx, dword ptr [ebp - 0xc]
+00011bc1  3b951cfaffff       cmp edx, dword ptr [ebp - 0x5e4]
+00011bc7  7e2b               jle 0x10011bf4
+00011bc9  685c880110         push 0x1001885c  ; "exit for err"
+00011bce  e8adefffff         call 0x10010b80  ; ->0x10b80
+00011bd3  83c404             add esp, 4
+00011bd6  6a02               push 2
+00011bd8  e8d3b6ffff         call 0x1000d2b0  ; ->0xd2b0
+00011bdd  83c404             add esp, 4
+00011be0  6a00               push 0
+00011be2  e8690b0000         call 0x10012750  ; ->0x12750
+00011be7  83c404             add esp, 4
+00011bea  83c8ff             or eax, 0xffffffff
+00011bed  e9cb070000         jmp 0x100123bd  ; ->0x123bd
+00011bf2  eb11               jmp 0x10011c05  ; ->0x11c05
+00011bf4  8b45f4             mov eax, dword ptr [ebp - 0xc]
+00011bf7  83c001             add eax, 1
+00011bfa  8945f4             mov dword ptr [ebp - 0xc], eax
+00011bfd  6a64               push 0x64
+00011bff  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+00011c05  e886b5ffff         call 0x1000d190  ; ->0xd190
+00011c0a  83f801             cmp eax, 1
+00011c0d  7429               je 0x10011c38
+00011c0f  686c880110         push 0x1001886c  ; "exit for disconnect"
+00011c14  e867efffff         call 0x10010b80  ; ->0x10b80
+00011c19  83c404             add esp, 4
+00011c1c  6a01               push 1
+00011c1e  e88db6ffff         call 0x1000d2b0  ; ->0xd2b0
+00011c23  83c404             add esp, 4
+00011c26  6a00               push 0
+00011c28  e8230b0000         call 0x10012750  ; ->0x12750
+00011c2d  83c404             add esp, 4
+00011c30  83c8ff             or eax, 0xffffffff
+00011c33  e985070000         jmp 0x100123bd  ; ->0x123bd
+00011c38  eb07               jmp 0x10011c41  ; ->0x11c41
+00011c3a  c745f400000000     mov dword ptr [ebp - 0xc], 0
+00011c41  8b8df0f9ffff       mov ecx, dword ptr [ebp - 0x610]
+00011c47  81394f447f7f       cmp dword ptr [ecx], 0x7f7f444f
+00011c4d  7511               jne 0x10011c60
+00011c4f  8b95f0f9ffff       mov edx, dword ptr [ebp - 0x610]
+00011c55  0fb74204           movzx eax, word ptr [edx + 4]
+00011c59  3df0000000         cmp eax, 0xf0
+00011c5e  740c               je 0x10011c6c
+00011c60  6a0f               push 0xf
+00011c62  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+00011c68  eb04               jmp 0x10011c6e  ; ->0x11c6e
+00011c6a  eb02               jmp 0x10011c6e  ; ->0x11c6e
+00011c6c  eb0d               jmp 0x10011c7b  ; ->0x11c7b
+00011c6e  b901000000         mov ecx, 1
+00011c73  85c9               test ecx, ecx
+00011c75  0f85d1feffff       jne 0x10011b4c
+00011c7b  68e8030000         push 0x3e8
+00011c80  6880020000         push 0x280
+00011c85  8d95f0faffff       lea edx, [ebp - 0x510]
+00011c8b  52                 push edx
+00011c8c  6a02               push 2
+00011c8e  e82b1d0000         call 0x100139be  ; ->0x139be
+00011c93  83c410             add esp, 0x10
+00011c96  8985f4f9ffff       mov dword ptr [ebp - 0x60c], eax
+00011c9c  81bdf4f9ffff80020000 cmp dword ptr [ebp - 0x60c], 0x280
+00011ca6  741a               je 0x10011cc2
+00011ca8  6880880110         push 0x10018880
+00011cad  e8ceeeffff         call 0x10010b80  ; ->0x10b80
+00011cb2  83c404             add esp, 4
+00011cb5  6a0a               push 0xa
+00011cb7  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+00011cbd  e90ffeffff         jmp 0x10011ad1  ; ->0x11ad1
+00011cc2  68e8030000         push 0x3e8
+00011cc7  6a40               push 0x40
+00011cc9  8d85b0f9ffff       lea eax, [ebp - 0x650]
+00011ccf  50                 push eax
+00011cd0  6a03               push 3
+00011cd2  e8e11c0000         call 0x100139b8  ; ->0x139b8
+00011cd7  83c410             add esp, 0x10
+00011cda  85c0               test eax, eax
+00011cdc  7d1a               jge 0x10011cf8
+00011cde  6890880110         push 0x10018890
+00011ce3  e898eeffff         call 0x10010b80  ; ->0x10b80
+00011ce8  83c404             add esp, 4
+00011ceb  6a0a               push 0xa
+00011ced  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+00011cf3  e9d9fdffff         jmp 0x10011ad1  ; ->0x11ad1
+00011cf8  6880020000         push 0x280
+00011cfd  8d8df0faffff       lea ecx, [ebp - 0x510]
+00011d03  51                 push ecx
+00011d04  8d9570fdffff       lea edx, [ebp - 0x290]
+00011d0a  52                 push edx
+00011d0b  e84c120000         call 0x10012f5c  ; ->0x12f5c
+00011d10  83c40c             add esp, 0xc
+00011d13  817dec4f447f7f     cmp dword ptr [ebp - 0x14], 0x7f7f444f
+00011d1a  741e               je 0x10011d3a
+00011d1c  8b45ec             mov eax, dword ptr [ebp - 0x14]
+00011d1f  50                 push eax
+00011d20  68a4880110         push 0x100188a4
+00011d25  e856eeffff         call 0x10010b80  ; ->0x10b80
+00011d2a  83c408             add esp, 8
+00011d2d  6a0a               push 0xa
+00011d2f  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+00011d35  e997fdffff         jmp 0x10011ad1  ; ->0x11ad1
+00011d3a  68f0030000         push 0x3f0
+00011d3f  6a00               push 0
+00011d41  8d8de0f3ffff       lea ecx, [ebp - 0xc20]
+00011d47  51                 push ecx
+00011d48  e817110000         call 0x10012e64  ; ->0x12e64
+00011d4d  83c40c             add esp, 0xc
+00011d50  8d95e0f3ffff       lea edx, [ebp - 0xc20]
+00011d56  52                 push edx
+00011d57  8d8570fdffff       lea eax, [ebp - 0x290]
+00011d5d  50                 push eax
+00011d5e  e8fdd8ffff         call 0x1000f660  ; ->0xf660
+00011d63  83c408             add esp, 8
+00011d66  6a40               push 0x40
+00011d68  6a00               push 0
+00011d6a  8d8db0f9ffff       lea ecx, [ebp - 0x650]
+00011d70  51                 push ecx
+00011d71  e8ee100000         call 0x10012e64  ; ->0x12e64
+00011d76  83c40c             add esp, 0xc
+00011d79  8d95b0f9ffff       lea edx, [ebp - 0x650]
+00011d7f  899560f9ffff       mov dword ptr [ebp - 0x6a0], edx
+00011d85  8b8560f9ffff       mov eax, dword ptr [ebp - 0x6a0]
+00011d8b  c70050557f7f       mov dword ptr [eax], 0x7f7f5550
+00011d91  8b8d60f9ffff       mov ecx, dword ptr [ebp - 0x6a0]
+00011d97  66c741040700       mov word ptr [ecx + 4], 7
+00011d9d  8b9560f9ffff       mov edx, dword ptr [ebp - 0x6a0]
+00011da3  c6420a00           mov byte ptr [edx + 0xa], 0
+00011da7  8a8523faffff       mov al, byte ptr [ebp - 0x5dd]
+00011dad  50                 push eax
+00011dae  6a00               push 0
+00011db0  8b8d60f9ffff       mov ecx, dword ptr [ebp - 0x6a0]
+00011db6  83c10c             add ecx, 0xc
+00011db9  51                 push ecx
+00011dba  8d9508f1ffff       lea edx, [ebp - 0xef8]
+00011dc0  52                 push edx
+00011dc1  81ec80020000       sub esp, 0x280
+00011dc7  b9a0000000         mov ecx, 0xa0
+00011dcc  8db570fdffff       lea esi, [ebp - 0x290]
+00011dd2  8bfc               mov edi, esp
+00011dd4  f3a5               rep movsd dword ptr es:[edi], dword ptr [esi]
+00011dd6  ff95f8f9ffff       call dword ptr [ebp - 0x608]
+00011ddc  81c490020000       add esp, 0x290
+00011de2  c785d4f7ffff00000000 mov dword ptr [ebp - 0x82c], 0
+00011dec  eb0f               jmp 0x10011dfd  ; ->0x11dfd
+00011dee  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011df4  83c001             add eax, 1
+00011df7  8985d4f7ffff       mov dword ptr [ebp - 0x82c], eax
+00011dfd  83bdd4f7ffff0a     cmp dword ptr [ebp - 0x82c], 0xa
+00011e04  0f8de0030000       jge 0x100121ea
+00011e0a  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011e10  6bc948             imul ecx, ecx, 0x48
+00011e13  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00011e19  6bd258             imul edx, edx, 0x58
+00011e1c  dd840d10f1ffff     fld qword ptr [ebp + ecx - 0xef0]
+00011e23  dd9c15e8f3ffff     fstp qword ptr [ebp + edx - 0xc18]
+00011e2a  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011e30  6bc048             imul eax, eax, 0x48
+00011e33  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011e39  6bc958             imul ecx, ecx, 0x58
+00011e3c  dd840518f1ffff     fld qword ptr [ebp + eax - 0xee8]
+00011e43  dd9c0df0f3ffff     fstp qword ptr [ebp + ecx - 0xc10]
+00011e4a  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00011e50  6bd248             imul edx, edx, 0x48
+00011e53  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011e59  6bc058             imul eax, eax, 0x58
+00011e5c  dd841520f1ffff     fld qword ptr [ebp + edx - 0xee0]
+00011e63  dd9c05f8f3ffff     fstp qword ptr [ebp + eax - 0xc08]
+00011e6a  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011e70  6bc948             imul ecx, ecx, 0x48
+00011e73  0fb6940d29f1ffff   movzx edx, byte ptr [ebp + ecx - 0xed7]
+00011e7b  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011e81  6bc058             imul eax, eax, 0x58
+00011e84  89940504f4ffff     mov dword ptr [ebp + eax - 0xbfc], edx
+00011e8b  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011e91  6bc948             imul ecx, ecx, 0x48
+00011e94  0fb6940d28f1ffff   movzx edx, byte ptr [ebp + ecx - 0xed8]
+00011e9c  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011ea2  6bc058             imul eax, eax, 0x58
+00011ea5  89940500f4ffff     mov dword ptr [ebp + eax - 0xc00], edx
+00011eac  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011eb2  6bc948             imul ecx, ecx, 0x48
+00011eb5  0fb6940d2af1ffff   movzx edx, byte ptr [ebp + ecx - 0xed6]
+00011ebd  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011ec3  6bc058             imul eax, eax, 0x58
+00011ec6  89940508f4ffff     mov dword ptr [ebp + eax - 0xbf8], edx
+00011ecd  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011ed3  6bc948             imul ecx, ecx, 0x48
+00011ed6  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00011edc  6bd258             imul edx, edx, 0x58
+00011edf  8a840d2bf1ffff     mov al, byte ptr [ebp + ecx - 0xed5]
+00011ee6  88841510f4ffff     mov byte ptr [ebp + edx - 0xbf0], al
+00011eed  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011ef3  6bc948             imul ecx, ecx, 0x48
+00011ef6  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00011efc  6bd258             imul edx, edx, 0x58
+00011eff  8a840d2cf1ffff     mov al, byte ptr [ebp + ecx - 0xed4]
+00011f06  88841511f4ffff     mov byte ptr [ebp + edx - 0xbef], al
+00011f0d  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011f13  6bc948             imul ecx, ecx, 0x48
+00011f16  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00011f1c  6bd258             imul edx, edx, 0x58
+00011f1f  d9840d3cf1ffff     fld dword ptr [ebp + ecx - 0xec4]
+00011f26  d99c1520f4ffff     fstp dword ptr [ebp + edx - 0xbe0]
+00011f2d  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011f33  6bc048             imul eax, eax, 0x48
+00011f36  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011f3c  6bc958             imul ecx, ecx, 0x58
+00011f3f  668b940538f1ffff   mov dx, word ptr [ebp + eax - 0xec8]
+00011f47  6689940d1cf4ffff   mov word ptr [ebp + ecx - 0xbe4], dx
+00011f4f  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011f55  6bc048             imul eax, eax, 0x48
+00011f58  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011f5e  6bc958             imul ecx, ecx, 0x58
+00011f61  8a940541f1ffff     mov dl, byte ptr [ebp + eax - 0xebf]
+00011f68  88940d25f4ffff     mov byte ptr [ebp + ecx - 0xbdb], dl
+00011f6f  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011f75  6bc048             imul eax, eax, 0x48
+00011f78  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011f7e  6bc958             imul ecx, ecx, 0x58
+00011f81  668b940536f1ffff   mov dx, word ptr [ebp + eax - 0xeca]
+00011f89  6689940d1af4ffff   mov word ptr [ebp + ecx - 0xbe6], dx
+00011f91  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011f97  6bc048             imul eax, eax, 0x48
+00011f9a  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011fa0  6bc958             imul ecx, ecx, 0x58
+00011fa3  8a940542f1ffff     mov dl, byte ptr [ebp + eax - 0xebe]
+00011faa  88940d26f4ffff     mov byte ptr [ebp + ecx - 0xbda], dl
+00011fb1  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011fb7  6bc048             imul eax, eax, 0x48
+00011fba  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011fc0  6bc958             imul ecx, ecx, 0x58
+00011fc3  668b94053af1ffff   mov dx, word ptr [ebp + eax - 0xec6]
+00011fcb  6689940d1ef4ffff   mov word ptr [ebp + ecx - 0xbe2], dx
+00011fd3  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011fd9  6bc048             imul eax, eax, 0x48
+00011fdc  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00011fe2  6bc958             imul ecx, ecx, 0x58
+00011fe5  8a940543f1ffff     mov dl, byte ptr [ebp + eax - 0xebd]
+00011fec  88940d27f4ffff     mov byte ptr [ebp + ecx - 0xbd9], dl
+00011ff3  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00011ff9  6bc048             imul eax, eax, 0x48
+00011ffc  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00012002  6bc958             imul ecx, ecx, 0x58
+00012005  8a940540f1ffff     mov dl, byte ptr [ebp + eax - 0xec0]
+0001200c  88940d24f4ffff     mov byte ptr [ebp + ecx - 0xbdc], dl
+00012013  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+00012019  6bc048             imul eax, eax, 0x48
+0001201c  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00012022  6bc958             imul ecx, ecx, 0x58
+00012025  668b940534f1ffff   mov dx, word ptr [ebp + eax - 0xecc]
+0001202d  6689940d18f4ffff   mov word ptr [ebp + ecx - 0xbe8], dx
+00012035  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+0001203b  6bc048             imul eax, eax, 0x48
+0001203e  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00012044  6bc958             imul ecx, ecx, 0x58
+00012047  668b940530f1ffff   mov dx, word ptr [ebp + eax - 0xed0]
+0001204f  6689940d14f4ffff   mov word ptr [ebp + ecx - 0xbec], dx
+00012057  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+0001205d  6bc048             imul eax, eax, 0x48
+00012060  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00012066  6bc958             imul ecx, ecx, 0x58
+00012069  668b940532f1ffff   mov dx, word ptr [ebp + eax - 0xece]
+00012071  6689940d16f4ffff   mov word ptr [ebp + ecx - 0xbea], dx
+00012079  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+0001207f  6bc048             imul eax, eax, 0x48
+00012082  8b8dd4f7ffff       mov ecx, dword ptr [ebp - 0x82c]
+00012088  6bc958             imul ecx, ecx, 0x58
+0001208b  d9840550f1ffff     fld dword ptr [ebp + eax - 0xeb0]
+00012092  d99c0d34f4ffff     fstp dword ptr [ebp + ecx - 0xbcc]
+00012099  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+0001209f  6bd248             imul edx, edx, 0x48
+000120a2  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+000120a8  6bc058             imul eax, eax, 0x58
+000120ab  668b8c154cf1ffff   mov cx, word ptr [ebp + edx - 0xeb4]
+000120b3  66898c0530f4ffff   mov word ptr [ebp + eax - 0xbd0], cx
+000120bb  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+000120c1  6bd248             imul edx, edx, 0x48
+000120c4  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+000120ca  6bc058             imul eax, eax, 0x58
+000120cd  8a8c1555f1ffff     mov cl, byte ptr [ebp + edx - 0xeab]
+000120d4  888c0539f4ffff     mov byte ptr [ebp + eax - 0xbc7], cl
+000120db  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+000120e1  6bd248             imul edx, edx, 0x48
+000120e4  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+000120ea  6bc058             imul eax, eax, 0x58
+000120ed  668b8c154af1ffff   mov cx, word ptr [ebp + edx - 0xeb6]
+000120f5  66898c052ef4ffff   mov word ptr [ebp + eax - 0xbd2], cx
+000120fd  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00012103  6bd248             imul edx, edx, 0x48
+00012106  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+0001210c  6bc058             imul eax, eax, 0x58
+0001210f  8a8c1556f1ffff     mov cl, byte ptr [ebp + edx - 0xeaa]
+00012116  888c053af4ffff     mov byte ptr [ebp + eax - 0xbc6], cl
+0001211d  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00012123  6bd248             imul edx, edx, 0x48
+00012126  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+0001212c  6bc058             imul eax, eax, 0x58
+0001212f  668b8c154ef1ffff   mov cx, word ptr [ebp + edx - 0xeb2]
+00012137  66898c0532f4ffff   mov word ptr [ebp + eax - 0xbce], cx
+0001213f  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00012145  6bd248             imul edx, edx, 0x48
+00012148  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+0001214e  6bc058             imul eax, eax, 0x58
+00012151  8a8c1557f1ffff     mov cl, byte ptr [ebp + edx - 0xea9]
+00012158  888c053bf4ffff     mov byte ptr [ebp + eax - 0xbc5], cl
+0001215f  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00012165  6bd248             imul edx, edx, 0x48
+00012168  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+0001216e  6bc058             imul eax, eax, 0x58
+00012171  8a8c1554f1ffff     mov cl, byte ptr [ebp + edx - 0xeac]
+00012178  888c0538f4ffff     mov byte ptr [ebp + eax - 0xbc8], cl
+0001217f  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+00012185  6bd248             imul edx, edx, 0x48
+00012188  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+0001218e  6bc058             imul eax, eax, 0x58
+00012191  668b8c1548f1ffff   mov cx, word ptr [ebp + edx - 0xeb8]
+00012199  66898c052cf4ffff   mov word ptr [ebp + eax - 0xbd4], cx
+000121a1  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+000121a7  6bd248             imul edx, edx, 0x48
+000121aa  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+000121b0  6bc058             imul eax, eax, 0x58
+000121b3  668b8c1544f1ffff   mov cx, word ptr [ebp + edx - 0xebc]
+000121bb  66898c0528f4ffff   mov word ptr [ebp + eax - 0xbd8], cx
+000121c3  8b95d4f7ffff       mov edx, dword ptr [ebp - 0x82c]
+000121c9  6bd248             imul edx, edx, 0x48
+000121cc  8b85d4f7ffff       mov eax, dword ptr [ebp - 0x82c]
+000121d2  6bc058             imul eax, eax, 0x58
+000121d5  668b8c1546f1ffff   mov cx, word ptr [ebp + edx - 0xeba]
+000121dd  66898c052af4ffff   mov word ptr [ebp + eax - 0xbd6], cx
+000121e5  e904fcffff         jmp 0x10011dee  ; ->0x11dee
+000121ea  8b15bccb0110       mov edx, dword ptr [0x1001cbbc]
+000121f0  83e201             and edx, 1
+000121f3  751a               jne 0x1001220f
+000121f5  a1bccb0110         mov eax, dword ptr [0x1001cbbc]
+000121fa  83c801             or eax, 1
+000121fd  a3bccb0110         mov dword ptr [0x1001cbbc], eax
+00012202  0fb78d08f1ffff     movzx ecx, word ptr [ebp - 0xef8]
+00012209  890db8cb0110       mov dword ptr [0x1001cbb8], ecx
+0001220f  0fb79508f1ffff     movzx edx, word ptr [ebp - 0xef8]
+00012216  2b15b8cb0110       sub edx, dword ptr [0x1001cbb8]
+0001221c  83fa01             cmp edx, 1
+0001221f  760d               jbe 0x1001222e
+00012221  68b4880110         push 0x100188b4
+00012226  e855e9ffff         call 0x10010b80  ; ->0x10b80
+0001222b  83c404             add esp, 4
+0001222e  0fb78508f1ffff     movzx eax, word ptr [ebp - 0xef8]
+00012235  a3b8cb0110         mov dword ptr [0x1001cbb8], eax
+0001223a  8b0db4cb0110       mov ecx, dword ptr [0x1001cbb4]
+00012240  83c101             add ecx, 1
+00012243  890db4cb0110       mov dword ptr [0x1001cbb4], ecx
+00012249  8b15b4cb0110       mov edx, dword ptr [0x1001cbb4]
+0001224f  8995e0f3ffff       mov dword ptr [ebp - 0xc20], edx
+00012255  0fb645d0           movzx eax, byte ptr [ebp - 0x30]
+00012259  f7d8               neg eax
+0001225b  1bc0               sbb eax, eax
+0001225d  83c001             add eax, 1
+00012260  898598f7ffff       mov dword ptr [ebp - 0x868], eax
+00012266  8b0db4cb0110       mov ecx, dword ptr [0x1001cbb4]
+0001226c  6bc91e             imul ecx, ecx, 0x1e
+0001226f  898dfcf0ffff       mov dword ptr [ebp - 0xf04], ecx
+00012275  c78500f1ffff00000000 mov dword ptr [ebp - 0xf00], 0
+0001227f  dfadfcf0ffff       fild qword ptr [ebp - 0xf04]
+00012285  dd9da0f7ffff       fstp qword ptr [ebp - 0x860]
+0001228b  6a00               push 0
+0001228d  8d95e0f3ffff       lea edx, [ebp - 0xc20]
+00012293  52                 push edx
+00012294  8b85fcf9ffff       mov eax, dword ptr [ebp - 0x604]
+0001229a  8b10               mov edx, dword ptr [eax]
+0001229c  8b8dfcf9ffff       mov ecx, dword ptr [ebp - 0x604]
+000122a2  8b4204             mov eax, dword ptr [edx + 4]
+000122a5  ffd0               call eax
+000122a7  85c0               test eax, eax
+000122a9  750d               jne 0x100122b8
+000122ab  68d0880110         push 0x100188d0
+000122b0  e8cbe8ffff         call 0x10010b80  ; ->0x10b80
+000122b5  83c404             add esp, 4
+000122b8  6884010000         push 0x184
+000122bd  6a00               push 0
+000122bf  8d8dd8f7ffff       lea ecx, [ebp - 0x828]
+000122c5  51                 push ecx
+000122c6  e8990b0000         call 0x10012e64  ; ->0x12e64
+000122cb  83c40c             add esp, 0xc
+000122ce  8d95d8f7ffff       lea edx, [ebp - 0x828]
+000122d4  52                 push edx
+000122d5  8b85ccfaffff       mov eax, dword ptr [ebp - 0x534]
+000122db  8b10               mov edx, dword ptr [eax]
+000122dd  8b8dccfaffff       mov ecx, dword ptr [ebp - 0x534]
+000122e3  8b02               mov eax, dword ptr [edx]
+000122e5  ffd0               call eax
+000122e7  8d8d24faffff       lea ecx, [ebp - 0x5dc]
+000122ed  51                 push ecx
+000122ee  8d9570fdffff       lea edx, [ebp - 0x290]
+000122f4  52                 push edx
+000122f5  8b8560f9ffff       mov eax, dword ptr [ebp - 0x6a0]
+000122fb  50                 push eax
+000122fc  e8bfcfffff         call 0x1000f2c0  ; ->0xf2c0
+00012301  83c40c             add esp, 0xc
+00012304  8d8d70fdffff       lea ecx, [ebp - 0x290]
+0001230a  51                 push ecx
+0001230b  e800d4ffff         call 0x1000f710  ; ->0xf710
+00012310  83c404             add esp, 4
+00012313  e8e8afffff         call 0x1000d300  ; ->0xd300
+00012318  0fb6d0             movzx edx, al
+0001231b  85d2               test edx, edx
+0001231d  7405               je 0x10012324
+0001231f  e86cc7ffff         call 0x1000ea90  ; ->0xea90
+00012324  8d85d0faffff       lea eax, [ebp - 0x530]
+0001232a  50                 push eax
+0001232b  ff1590500110       call dword ptr [0x10015090]  ; KERNEL32.dll!QueryPerformanceCounter
+00012331  8b8dd0faffff       mov ecx, dword ptr [ebp - 0x530]
+00012337  898d10faffff       mov dword ptr [ebp - 0x5f0], ecx
+0001233d  8b95d4faffff       mov edx, dword ptr [ebp - 0x52c]
+00012343  899514faffff       mov dword ptr [ebp - 0x5ec], edx
+00012349  8b8510faffff       mov eax, dword ptr [ebp - 0x5f0]
+0001234f  2b45f8             sub eax, dword ptr [ebp - 8]
+00012352  8b8d14faffff       mov ecx, dword ptr [ebp - 0x5ec]
+00012358  1b4dfc             sbb ecx, dword ptr [ebp - 4]
+0001235b  8985f4f0ffff       mov dword ptr [ebp - 0xf0c], eax
+00012361  898df8f0ffff       mov dword ptr [ebp - 0xf08], ecx
+00012367  dfadf4f0ffff       fild qword ptr [ebp - 0xf0c]
+0001236d  dcb5e0faffff       fdiv qword ptr [ebp - 0x520]
+00012373  dd9d00faffff       fstp qword ptr [ebp - 0x600]
+00012379  dd8500faffff       fld qword ptr [ebp - 0x600]
+0001237f  dc0d785c0110       fmul qword ptr [0x10015c78]
+00012385  dc2df0880110       fsubr qword ptr [0x100188f0]
+0001238b  e8400c0000         call 0x10012fd0  ; ->0x12fd0
+00012390  898564f9ffff       mov dword ptr [ebp - 0x69c], eax
+00012396  83bd64f9ffff00     cmp dword ptr [ebp - 0x69c], 0
+0001239d  7e0d               jle 0x100123ac
+0001239f  8b9564f9ffff       mov edx, dword ptr [ebp - 0x69c]
+000123a5  52                 push edx
+000123a6  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+000123ac  e920f7ffff         jmp 0x10011ad1  ; ->0x11ad1
+000123b1  6a00               push 0
+000123b3  e898030000         call 0x10012750  ; ->0x12750
+000123b8  83c404             add esp, 4
+000123bb  33c0               xor eax, eax
+000123bd  5f                 pop edi
+000123be  5e                 pop esi
+000123bf  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+000123c2  33cd               xor ecx, ebp
+000123c4  e89b090000         call 0x10012d64  ; ->0x12d64
+000123c9  8be5               mov esp, ebp
+000123cb  5d                 pop ebp
+000123cc  c20400             ret 4
+000123cf  cc                 int3 
+000123d0  55                 push ebp
+000123d1  8bec               mov ebp, esp
+000123d3  81ecd4010000       sub esp, 0x1d4
+000123d9  a1a8c20110         mov eax, dword ptr [0x1001c2a8]
+000123de  33c5               xor eax, ebp
+000123e0  8945f0             mov dword ptr [ebp - 0x10], eax
+000123e3  c78538feffff00000000 mov dword ptr [ebp - 0x1c8], 0
+000123ed  6808890110         push 0x10018908  ; ".\xEyeUsb.ini"
+000123f2  6a0a               push 0xa
+000123f4  6818890110         push 0x10018918  ; "MonitorList"
+000123f9  6824890110         push 0x10018924  ; "Config"
+000123fe  ff1580500110       call dword ptr [0x10015080]  ; KERNEL32.dll!GetPrivateProfileIntA
+00012404  8945f4             mov dword ptr [ebp - 0xc], eax
+00012407  6884010000         push 0x184
+0001240c  8b45f4             mov eax, dword ptr [ebp - 0xc]
+0001240f  50                 push eax
+00012410  682c890110         push 0x1001892c  ; "MONITOR2USB"
+00012415  ff157c530110       call dword ptr [0x1001537c]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+0001241b  8bc8               mov ecx, eax
+0001241d  ff1578530110       call dword ptr [0x10015378]  ; xEyeList.dll!?RegisterList@xEyeListManager@@QAE_NPBDHH@Z
+00012423  0fb6c8             movzx ecx, al
+00012426  85c9               test ecx, ecx
+00012428  740f               je 0x10012439
+0001242a  6838890110         push 0x10018938  ; "MonitorListSuccess"
+0001242f  e84ce7ffff         call 0x10010b80  ; ->0x10b80
+00012434  83c404             add esp, 4
+00012437  eb15               jmp 0x1001244e  ; ->0x1244e
+00012439  684c890110         push 0x1001894c  ; "MonitorListFail"
+0001243e  e83de7ffff         call 0x10010b80  ; ->0x10b80
+00012443  83c404             add esp, 4
+00012446  83c8ff             or eax, 0xffffffff
+00012449  e9b8020000         jmp 0x10012706  ; ->0x12706
+0001244e  685c890110         push 0x1001895c  ; "Class2USB"
+00012453  ff157c530110       call dword ptr [0x1001537c]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00012459  8bc8               mov ecx, eax
+0001245b  ff1580530110       call dword ptr [0x10015380]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00012461  898554feffff       mov dword ptr [ebp - 0x1ac], eax
+00012467  6868890110         push 0x10018968  ; "MONITOR2USB"
+0001246c  ff157c530110       call dword ptr [0x1001537c]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00012472  8bc8               mov ecx, eax
+00012474  ff1580530110       call dword ptr [0x10015380]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+0001247a  89853cfeffff       mov dword ptr [ebp - 0x1c4], eax
+00012480  c68553feffff00     mov byte ptr [ebp - 0x1ad], 0
+00012487  6a00               push 0
+00012489  e8c2020000         call 0x10012750  ; ->0x12750
+0001248e  83c404             add esp, 4
+00012491  8d9558feffff       lea edx, [ebp - 0x1a8]
+00012497  52                 push edx
+00012498  ff151c510110       call dword ptr [0x1001511c]  ; KERNEL32.dll!QueryPerformanceFrequency
+0001249e  dfad58feffff       fild qword ptr [ebp - 0x1a8]
+000124a4  dd9d60feffff       fstp qword ptr [ebp - 0x1a0]
+000124aa  8d8558feffff       lea eax, [ebp - 0x1a8]
+000124b0  50                 push eax
+000124b1  ff1590500110       call dword ptr [0x10015090]  ; KERNEL32.dll!QueryPerformanceCounter
+000124b7  8b8d58feffff       mov ecx, dword ptr [ebp - 0x1a8]
+000124bd  894df8             mov dword ptr [ebp - 8], ecx
+000124c0  8b955cfeffff       mov edx, dword ptr [ebp - 0x1a4]
+000124c6  8955fc             mov dword ptr [ebp - 4], edx
+000124c9  d9ee               fldz 
+000124cb  dd9d40feffff       fstp qword ptr [ebp - 0x1c0]
+000124d1  b801000000         mov eax, 1
+000124d6  85c0               test eax, eax
+000124d8  0f841b020000       je 0x100126f9
+000124de  8d8d58feffff       lea ecx, [ebp - 0x1a8]
+000124e4  51                 push ecx
+000124e5  ff1590500110       call dword ptr [0x10015090]  ; KERNEL32.dll!QueryPerformanceCounter
+000124eb  8b9558feffff       mov edx, dword ptr [ebp - 0x1a8]
+000124f1  8955f8             mov dword ptr [ebp - 8], edx
+000124f4  8b855cfeffff       mov eax, dword ptr [ebp - 0x1a4]
+000124fa  8945fc             mov dword ptr [ebp - 4], eax
+000124fd  8d8d68feffff       lea ecx, [ebp - 0x198]
+00012503  51                 push ecx
+00012504  8b9554feffff       mov edx, dword ptr [ebp - 0x1ac]
+0001250a  8b02               mov eax, dword ptr [edx]
+0001250c  8b8d54feffff       mov ecx, dword ptr [ebp - 0x1ac]
+00012512  8b10               mov edx, dword ptr [eax]
+00012514  ffd2               call edx
+00012516  85c0               test eax, eax
+00012518  7509               jne 0x10012523
+0001251a  c68553feffff00     mov byte ptr [ebp - 0x1ad], 0
+00012521  eb69               jmp 0x1001258c  ; ->0x1258c
+00012523  6874890110         push 0x10018974  ; "SetxEyeRun"
+00012528  8d8568feffff       lea eax, [ebp - 0x198]
+0001252e  50                 push eax
+0001252f  e8420a0000         call 0x10012f76  ; ->0x12f76
+00012534  83c408             add esp, 8
+00012537  85c0               test eax, eax
+00012539  7519               jne 0x10012554
+0001253b  6880890110         push 0x10018980  ; "STATE_RUN"
+00012540  e83be6ffff         call 0x10010b80  ; ->0x10b80
+00012545  83c404             add esp, 4
+00012548  6a01               push 1
+0001254a  e8e1010000         call 0x10012730  ; ->0x12730
+0001254f  83c404             add esp, 4
+00012552  eb38               jmp 0x1001258c  ; ->0x1258c
+00012554  688c890110         push 0x1001898c  ; "SetxEyePause"
+00012559  8d8d68feffff       lea ecx, [ebp - 0x198]
+0001255f  51                 push ecx
+00012560  e8110a0000         call 0x10012f76  ; ->0x12f76
+00012565  83c408             add esp, 8
+00012568  85c0               test eax, eax
+0001256a  7519               jne 0x10012585
+0001256c  689c890110         push 0x1001899c  ; "STATE_PAUSE"
+00012571  e80ae6ffff         call 0x10010b80  ; ->0x10b80
+00012576  83c404             add esp, 4
+00012579  6a02               push 2
+0001257b  e8b0010000         call 0x10012730  ; ->0x12730
+00012580  83c404             add esp, 4
+00012583  eb07               jmp 0x1001258c  ; ->0x1258c
+00012585  c68553feffff01     mov byte ptr [ebp - 0x1ad], 1
+0001258c  e8ffabffff         call 0x1000d190  ; ->0xd190
+00012591  83f801             cmp eax, 1
+00012594  7462               je 0x100125f8
+00012596  83bd38feffff64     cmp dword ptr [ebp - 0x1c8], 0x64
+0001259d  7c3b               jl 0x100125da
+0001259f  e87c010000         call 0x10012720  ; ->0x12720
+000125a4  83f801             cmp eax, 1
+000125a7  751b               jne 0x100125c4
+000125a9  e892010000         call 0x10012740  ; ->0x12740
+000125ae  0fb6d0             movzx edx, al
+000125b1  85d2               test edx, edx
+000125b3  750d               jne 0x100125c2
+000125b5  e8c6aaffff         call 0x1000d080  ; ->0xd080
+000125ba  6a64               push 0x64
+000125bc  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+000125c2  eb0a               jmp 0x100125ce  ; ->0x125ce
+000125c4  6a00               push 0
+000125c6  e885010000         call 0x10012750  ; ->0x12750
+000125cb  83c404             add esp, 4
+000125ce  6a01               push 1
+000125d0  e8dbacffff         call 0x1000d2b0  ; ->0xd2b0
+000125d5  83c404             add esp, 4
+000125d8  eb1c               jmp 0x100125f6  ; ->0x125f6
+000125da  68a8890110         push 0x100189a8
+000125df  e89ce5ffff         call 0x10010b80  ; ->0x10b80
+000125e4  83c404             add esp, 4
+000125e7  8b8538feffff       mov eax, dword ptr [ebp - 0x1c8]
+000125ed  83c001             add eax, 1
+000125f0  898538feffff       mov dword ptr [ebp - 0x1c8], eax
+000125f6  eb74               jmp 0x1001266c  ; ->0x1266c
+000125f8  c78538feffff00000000 mov dword ptr [ebp - 0x1c8], 0
+00012602  e819010000         call 0x10012720  ; ->0x12720
+00012607  83f801             cmp eax, 1
+0001260a  7525               jne 0x10012631
+0001260c  e82f010000         call 0x10012740  ; ->0x12740
+00012611  0fb6c8             movzx ecx, al
+00012614  85c9               test ecx, ecx
+00012616  750d               jne 0x10012625
+00012618  e863aaffff         call 0x1000d080  ; ->0xd080
+0001261d  6a64               push 0x64
+0001261f  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+00012625  6a03               push 3
+00012627  e884acffff         call 0x1000d2b0  ; ->0xd2b0
+0001262c  83c404             add esp, 4
+0001262f  eb14               jmp 0x10012645  ; ->0x12645
+00012631  6a00               push 0
+00012633  e818010000         call 0x10012750  ; ->0x12750
+00012638  83c404             add esp, 4
+0001263b  6a04               push 4
+0001263d  e86eacffff         call 0x1000d2b0  ; ->0xd2b0
+00012642  83c404             add esp, 4
+00012645  0fb69553feffff     movzx edx, byte ptr [ebp - 0x1ad]
+0001264c  85d2               test edx, edx
+0001264e  741c               je 0x1001266c
+00012650  6a00               push 0
+00012652  8d8568feffff       lea eax, [ebp - 0x198]
+00012658  50                 push eax
+00012659  8b8d3cfeffff       mov ecx, dword ptr [ebp - 0x1c4]
+0001265f  8b11               mov edx, dword ptr [ecx]
+00012661  8b8d3cfeffff       mov ecx, dword ptr [ebp - 0x1c4]
+00012667  8b4204             mov eax, dword ptr [edx + 4]
+0001266a  ffd0               call eax
+0001266c  8d8d58feffff       lea ecx, [ebp - 0x1a8]
+00012672  51                 push ecx
+00012673  ff1590500110       call dword ptr [0x10015090]  ; KERNEL32.dll!QueryPerformanceCounter
+00012679  8b9558feffff       mov edx, dword ptr [ebp - 0x1a8]
+0001267f  899548feffff       mov dword ptr [ebp - 0x1b8], edx
+00012685  8b855cfeffff       mov eax, dword ptr [ebp - 0x1a4]
+0001268b  89854cfeffff       mov dword ptr [ebp - 0x1b4], eax
+00012691  8b8d48feffff       mov ecx, dword ptr [ebp - 0x1b8]
+00012697  2b4df8             sub ecx, dword ptr [ebp - 8]
+0001269a  8b954cfeffff       mov edx, dword ptr [ebp - 0x1b4]
+000126a0  1b55fc             sbb edx, dword ptr [ebp - 4]
+000126a3  898d2cfeffff       mov dword ptr [ebp - 0x1d4], ecx
+000126a9  899530feffff       mov dword ptr [ebp - 0x1d0], edx
+000126af  dfad2cfeffff       fild qword ptr [ebp - 0x1d4]
+000126b5  dcb560feffff       fdiv qword ptr [ebp - 0x1a0]
+000126bb  dd9d40feffff       fstp qword ptr [ebp - 0x1c0]
+000126c1  dd8540feffff       fld qword ptr [ebp - 0x1c0]
+000126c7  dc0d785c0110       fmul qword ptr [0x10015c78]
+000126cd  dc2dc8890110       fsubr qword ptr [0x100189c8]
+000126d3  e8f8080000         call 0x10012fd0  ; ->0x12fd0
+000126d8  898534feffff       mov dword ptr [ebp - 0x1cc], eax
+000126de  83bd34feffff00     cmp dword ptr [ebp - 0x1cc], 0
+000126e5  7e0d               jle 0x100126f4
+000126e7  8b8534feffff       mov eax, dword ptr [ebp - 0x1cc]
+000126ed  50                 push eax
+000126ee  ff1534500110       call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+000126f4  e9d8fdffff         jmp 0x100124d1  ; ->0x124d1
+000126f9  6a00               push 0
+000126fb  ff1574520110       call dword ptr [0x10015274]  ; MSVCR80.dll!_endthreadex
+00012701  83c404             add esp, 4
+00012704  33c0               xor eax, eax
+00012706  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+00012709  33cd               xor ecx, ebp
+0001270b  e854060000         call 0x10012d64  ; ->0x12d64
+00012710  8be5               mov esp, ebp
+00012712  5d                 pop ebp
+00012713  c20400             ret 4
+00012716  cc                 int3 
+00012717  cc                 int3 
+00012718  cc                 int3 
+00012719  cc                 int3 
+0001271a  cc                 int3 
+0001271b  cc                 int3 
+0001271c  cc                 int3 
+0001271d  cc                 int3 
+0001271e  cc                 int3 
+0001271f  cc                 int3 
+00012720  55                 push ebp
+00012721  8bec               mov ebp, esp
+00012723  a19cc20110         mov eax, dword ptr [0x1001c29c]
+00012728  5d                 pop ebp
+00012729  c3                 ret 
+0001272a  cc                 int3 
+0001272b  cc                 int3 
+0001272c  cc                 int3 
+0001272d  cc                 int3 
+0001272e  cc                 int3 
+0001272f  cc                 int3 
+00012730  55                 push ebp
+00012731  8bec               mov ebp, esp
+00012733  8b4508             mov eax, dword ptr [ebp + 8]
+00012736  a39cc20110         mov dword ptr [0x1001c29c], eax
+0001273b  5d                 pop ebp
+0001273c  c3                 ret 
+0001273d  cc                 int3 
+0001273e  cc                 int3 
+0001273f  cc                 int3 
+00012740  55                 push ebp
+00012741  8bec               mov ebp, esp
+00012743  a0c0cb0110         mov al, byte ptr [0x1001cbc0]
+00012748  5d                 pop ebp
+00012749  c3                 ret 
+0001274a  cc                 int3 
+0001274b  cc                 int3 
+0001274c  cc                 int3 
+0001274d  cc                 int3 
+0001274e  cc                 int3 
+0001274f  cc                 int3 
+00012750  55                 push ebp
+00012751  8bec               mov ebp, esp
+00012753  8a4508             mov al, byte ptr [ebp + 8]
+00012756  a2c0cb0110         mov byte ptr [0x1001cbc0], al
+0001275b  5d                 pop ebp
+0001275c  c3                 ret 
+0001275d  cc                 int3 
+0001275e  cc                 int3 
+0001275f  cc                 int3 
+00012760  55                 push ebp
+00012761  8bec               mov ebp, esp
+00012763  b801000000         mov eax, 1
+00012768  5d                 pop ebp
+00012769  c20c00             ret 0xc
+0001276c  ff25b0500110       jmp dword ptr [0x100150b0]
+00012772  ff25b4500110       jmp dword ptr [0x100150b4]
+00012778  ff25b8500110       jmp dword ptr [0x100150b8]
+0001277e  ff25bc500110       jmp dword ptr [0x100150bc]
+00012784  ff25c0500110       jmp dword ptr [0x100150c0]
+0001278a  e9e1070000         jmp 0x10012f70  ; ->0x12f70
+0001278f  55                 push ebp
+00012790  8bec               mov ebp, esp
+00012792  83ec0c             sub esp, 0xc
+00012795  a1a8c20110         mov eax, dword ptr [0x1001c2a8]
+0001279a  33c5               xor eax, ebp
+0001279c  8945fc             mov dword ptr [ebp - 4], eax
+0001279f  56                 push esi
+000127a0  33f6               xor esi, esi
+000127a2  ff1514510110       call dword ptr [0x10015114]  ; KERNEL32.dll!GetThreadLocale
+000127a8  6a07               push 7
+000127aa  8d4df4             lea ecx, [ebp - 0xc]
+000127ad  51                 push ecx
+000127ae  6804100000         push 0x1004
+000127b3  50                 push eax
+000127b4  ff1518510110       call dword ptr [0x10015118]  ; KERNEL32.dll!GetLocaleInfoA
+000127ba  85c0               test eax, eax
+000127bc  741f               je 0x100127dd
+000127be  8a4df4             mov cl, byte ptr [ebp - 0xc]
+000127c1  84c9               test cl, cl
+000127c3  8d45f4             lea eax, [ebp - 0xc]
+000127c6  7415               je 0x100127dd
+000127c8  6bf60a             imul esi, esi, 0xa
+000127cb  0fbec9             movsx ecx, cl
+000127ce  40                 inc eax
+000127cf  8d740ed0           lea esi, [esi + ecx - 0x30]
+000127d3  8a08               mov cl, byte ptr [eax]
+000127d5  84c9               test cl, cl
+000127d7  75ef               jne 0x100127c8
+000127d9  85f6               test esi, esi
+000127db  7508               jne 0x100127e5
+000127dd  ff1520510110       call dword ptr [0x10015120]  ; KERNEL32.dll!GetACP
+000127e3  8bf0               mov esi, eax
+000127e5  8b4dfc             mov ecx, dword ptr [ebp - 4]
+000127e8  8bc6               mov eax, esi
+000127ea  33cd               xor ecx, ebp
+000127ec  5e                 pop esi
+000127ed  e872050000         call 0x10012d64  ; ->0x12d64
+000127f2  c9                 leave 
+000127f3  c3                 ret 
+000127f4  6a03               push 3
+000127f6  58                 pop eax
+000127f7  c3                 ret 
+000127f8  55                 push ebp
+000127f9  8bec               mov ebp, esp
+000127fb  81ec98000000       sub esp, 0x98
+00012801  a1a8c20110         mov eax, dword ptr [0x1001c2a8]
+00012806  33c5               xor eax, ebp
+00012808  8945fc             mov dword ptr [ebp - 4], eax
+0001280b  8d8568ffffff       lea eax, [ebp - 0x98]
+00012811  50                 push eax
+00012812  c78568ffffff94000000 mov dword ptr [ebp - 0x98], 0x94
+0001281c  ff15a8500110       call dword ptr [0x100150a8]  ; KERNEL32.dll!GetVersionExA
+00012822  83bd78ffffff02     cmp dword ptr [ebp - 0x88], 2
+00012829  750e               jne 0x10012839
+0001282b  83bd6cffffff05     cmp dword ptr [ebp - 0x94], 5
+00012832  b8f4270110         mov eax, 0x100127f4
+00012837  7305               jae 0x1001283e
+00012839  b88f270110         mov eax, 0x1001278f
+0001283e  50                 push eax
+0001283f  68a4c20110         push 0x1001c2a4
+00012844  ff1504510110       call dword ptr [0x10015104]  ; KERNEL32.dll!InterlockedExchange
+0001284a  ff15a4c20110       call dword ptr [0x1001c2a4]
+00012850  8b4dfc             mov ecx, dword ptr [ebp - 4]
+00012853  33cd               xor ecx, ebp
+00012855  e80a050000         call 0x10012d64  ; ->0x12d64
+0001285a  c9                 leave 
+0001285b  c3                 ret 
+0001285c  56                 push esi
+0001285d  6a18               push 0x18
+0001285f  8bf1               mov esi, ecx
+00012861  6a00               push 0
+00012863  56                 push esi
+00012864  e8fb050000         call 0x10012e64  ; ->0x12e64
+00012869  83c40c             add esp, 0xc
+0001286c  8bc6               mov eax, esi
+0001286e  5e                 pop esi
+0001286f  c3                 ret 
+00012870  6a0c               push 0xc
+00012872  6800970110         push 0x10019700
+00012877  e8480b0000         call 0x100133c4  ; ->0x133c4
+0001287c  8365fc00           and dword ptr [ebp - 4], 0
+00012880  51                 push ecx
+00012881  ff15a0500110       call dword ptr [0x100150a0]  ; KERNEL32.dll!InitializeCriticalSection
+00012887  8365e400           and dword ptr [ebp - 0x1c], 0
+0001288b  eb1e               jmp 0x100128ab  ; ->0x128ab
+0001288d  8b45ec             mov eax, dword ptr [ebp - 0x14]
+00012890  8b00               mov eax, dword ptr [eax]
+00012892  8b00               mov eax, dword ptr [eax]
+00012894  33c9               xor ecx, ecx
+00012896  3d170000c0         cmp eax, 0xc0000017
+0001289b  0f94c1             sete cl
+0001289e  8bc1               mov eax, ecx
+000128a0  c3                 ret 
+000128a1  8b65e8             mov esp, dword ptr [ebp - 0x18]
+000128a4  c745e40e000780     mov dword ptr [ebp - 0x1c], 0x8007000e
+000128ab  c745fcfeffffff     mov dword ptr [ebp - 4], 0xfffffffe
+000128b2  8b45e4             mov eax, dword ptr [ebp - 0x1c]
+000128b5  e84f0b0000         call 0x10013409  ; ->0x13409
+000128ba  c3                 ret 
+000128bb  8b442404           mov eax, dword ptr [esp + 4]
+000128bf  85c0               test eax, eax
+000128c1  7507               jne 0x100128ca
+000128c3  b857000780         mov eax, 0x80070057
+000128c8  eb11               jmp 0x100128db  ; ->0x128db
+000128ca  83382c             cmp dword ptr [eax], 0x2c
+000128cd  75f4               jne 0x100128c3
+000128cf  83601c00           and dword ptr [eax + 0x1c], 0
+000128d3  8d4804             lea ecx, [eax + 4]
+000128d6  e895ffffff         call 0x10012870  ; ->0x12870
+000128db  c20400             ret 4
+000128de  56                 push esi
+000128df  8bf1               mov esi, ecx
+000128e1  8b06               mov eax, dword ptr [esi]
+000128e3  85c0               test eax, eax
+000128e5  740a               je 0x100128f1
+000128e7  50                 push eax
+000128e8  e87d050000         call 0x10012e6a  ; ->0x12e6a
+000128ed  832600             and dword ptr [esi], 0
+000128f0  59                 pop ecx
+000128f1  83660400           and dword ptr [esi + 4], 0
+000128f5  83660800           and dword ptr [esi + 8], 0
+000128f9  5e                 pop esi
+000128fa  c3                 ret 
+000128fb  8b442404           mov eax, dword ptr [esp + 4]
+000128ff  85c0               test eax, eax
+00012901  7c0d               jl 0x10012910
+00012903  3b4104             cmp eax, dword ptr [ecx + 4]
+00012906  7d08               jge 0x10012910
+00012908  8b09               mov ecx, dword ptr [ecx]
+0001290a  8d0441             lea eax, [ecx + eax*2]
+0001290d  c20400             ret 4
+00012910  6a00               push 0
+00012912  6a00               push 0
+00012914  6a01               push 1
+00012916  688c0000c0         push 0xc000008c
+0001291b  ff1510510110       call dword ptr [0x10015110]  ; KERNEL32.dll!RaiseException
+00012921  cc                 int3 
+00012922  8b442404           mov eax, dword ptr [esp + 4]
+00012926  85c0               test eax, eax
+00012928  7c0d               jl 0x10012937
+0001292a  3b4104             cmp eax, dword ptr [ecx + 4]
+0001292d  7d08               jge 0x10012937
+0001292f  8b09               mov ecx, dword ptr [ecx]
+00012931  8d0481             lea eax, [ecx + eax*4]
+00012934  c20400             ret 4
+00012937  6a00               push 0
+00012939  6a00               push 0
+0001293b  6a01               push 1
+0001293d  688c0000c0         push 0xc000008c
+00012942  ff1510510110       call dword ptr [0x10015110]  ; KERNEL32.dll!RaiseException
+00012948  cc                 int3 
+00012949  56                 push esi
+0001294a  8bf1               mov esi, ecx
+0001294c  8d4e04             lea ecx, [esi + 4]
+0001294f  e808ffffff         call 0x1001285c  ; ->0x1285c
+00012954  33c0               xor eax, eax
+00012956  894620             mov dword ptr [esi + 0x20], eax
+00012959  894624             mov dword ptr [esi + 0x24], eax
+0001295c  894628             mov dword ptr [esi + 0x28], eax
+0001295f  8bc6               mov eax, esi
+00012961  5e                 pop esi
+00012962  c3                 ret 
+00012963  56                 push esi
+00012964  8b742408           mov esi, dword ptr [esp + 8]
+00012968  85f6               test esi, esi
+0001296a  7507               jne 0x10012973
+0001296c  b857000780         mov eax, 0x80070057
+00012971  eb4c               jmp 0x100129bf  ; ->0x129bf
+00012973  8b06               mov eax, dword ptr [esi]
+00012975  85c0               test eax, eax
+00012977  7444               je 0x100129bd
+00012979  83f82c             cmp eax, 0x2c
+0001297c  75ee               jne 0x1001296c
+0001297e  57                 push edi
+0001297f  33ff               xor edi, edi
+00012981  397e24             cmp dword ptr [esi + 0x24], edi
+00012984  7e21               jle 0x100129a7
+00012986  53                 push ebx
+00012987  8d5e20             lea ebx, [esi + 0x20]
+0001298a  57                 push edi
+0001298b  8bcb               mov ecx, ebx
+0001298d  e869ffffff         call 0x100128fb  ; ->0x128fb
+00012992  0fb700             movzx eax, word ptr [eax]
+00012995  ff742414           push dword ptr [esp + 0x14]
+00012999  50                 push eax
+0001299a  ff154c530110       call dword ptr [0x1001534c]  ; USER32.dll!UnregisterClassA
+000129a0  47                 inc edi
+000129a1  3b7e24             cmp edi, dword ptr [esi + 0x24]
+000129a4  7ce4               jl 0x1001298a
+000129a6  5b                 pop ebx
+000129a7  8d4e20             lea ecx, [esi + 0x20]
+000129aa  e82fffffff         call 0x100128de  ; ->0x128de
+000129af  8d4604             lea eax, [esi + 4]
+000129b2  50                 push eax
+000129b3  ff1500510110       call dword ptr [0x10015100]  ; KERNEL32.dll!DeleteCriticalSection
+000129b9  832600             and dword ptr [esi], 0
+000129bc  5f                 pop edi
+000129bd  33c0               xor eax, eax
+000129bf  5e                 pop esi
+000129c0  c20800             ret 8
+000129c3  56                 push esi
+000129c4  8bf1               mov esi, ecx
+000129c6  807e0400           cmp byte ptr [esi + 4], 0
+000129ca  740c               je 0x100129d8
+000129cc  ff36               push dword ptr [esi]
+000129ce  ff1508510110       call dword ptr [0x10015108]  ; KERNEL32.dll!LeaveCriticalSection
+000129d4  c6460400           mov byte ptr [esi + 4], 0
+000129d8  5e                 pop esi
+000129d9  c3                 ret 
+000129da  56                 push esi
+000129db  8bf1               mov esi, ecx
+000129dd  8d4e18             lea ecx, [esi + 0x18]
+000129e0  e877feffff         call 0x1001285c  ; ->0x1285c
+000129e5  33c0               xor eax, eax
+000129e7  894630             mov dword ptr [esi + 0x30], eax
+000129ea  894634             mov dword ptr [esi + 0x34], eax
+000129ed  894638             mov dword ptr [esi + 0x38], eax
+000129f0  8bc6               mov eax, esi
+000129f2  5e                 pop esi
+000129f3  c3                 ret 
+000129f4  56                 push esi
+000129f5  8bf1               mov esi, ecx
+000129f7  8d4618             lea eax, [esi + 0x18]
+000129fa  50                 push eax
+000129fb  ff1500510110       call dword ptr [0x10015100]  ; KERNEL32.dll!DeleteCriticalSection
+00012a01  8d4e30             lea ecx, [esi + 0x30]
+00012a04  5e                 pop esi
+00012a05  e9d4feffff         jmp 0x100128de  ; ->0x128de
+00012a0a  55                 push ebp
+00012a0b  8bec               mov ebp, esp
+00012a0d  51                 push ecx
+00012a0e  51                 push ecx
+00012a0f  56                 push esi
+00012a10  8bf1               mov esi, ecx
+00012a12  8d4618             lea eax, [esi + 0x18]
+00012a15  50                 push eax
+00012a16  8945f8             mov dword ptr [ebp - 8], eax
+00012a19  ff150c510110       call dword ptr [0x1001510c]  ; KERNEL32.dll!EnterCriticalSection
+00012a1f  8b4634             mov eax, dword ptr [esi + 0x34]
+00012a22  8b4d08             mov ecx, dword ptr [ebp + 8]
+00012a25  3bc8               cmp ecx, eax
+00012a27  c645fc01           mov byte ptr [ebp - 4], 1
+00012a2b  7f24               jg 0x10012a51
+00012a2d  85c9               test ecx, ecx
+00012a2f  7c20               jl 0x10012a51
+00012a31  3bc8               cmp ecx, eax
+00012a33  750f               jne 0x10012a44
+00012a35  8b7608             mov esi, dword ptr [esi + 8]
+00012a38  8d4df8             lea ecx, [ebp - 8]
+00012a3b  e883ffffff         call 0x100129c3  ; ->0x129c3
+00012a40  8bc6               mov eax, esi
+00012a42  eb17               jmp 0x10012a5b  ; ->0x12a5b
+00012a44  51                 push ecx
+00012a45  8d4e30             lea ecx, [esi + 0x30]
+00012a48  e8d5feffff         call 0x10012922  ; ->0x12922
+00012a4d  8b30               mov esi, dword ptr [eax]
+00012a4f  ebe7               jmp 0x10012a38  ; ->0x12a38
+00012a51  8d4df8             lea ecx, [ebp - 8]
+00012a54  e86affffff         call 0x100129c3  ; ->0x129c3
+00012a59  33c0               xor eax, eax
+00012a5b  5e                 pop esi
+00012a5c  c9                 leave 
+00012a5d  c20400             ret 4
+00012a60  56                 push esi
+00012a61  8bf1               mov esi, ecx
+00012a63  e8e1feffff         call 0x10012949  ; ->0x12949
+00012a68  56                 push esi
+00012a69  c7062c000000       mov dword ptr [esi], 0x2c
+00012a6f  e847feffff         call 0x100128bb  ; ->0x128bb
+00012a74  85c0               test eax, eax
+00012a76  7d0a               jge 0x10012a82
+00012a78  c605d8c2011001     mov byte ptr [0x1001c2d8], 1
+00012a7f  832600             and dword ptr [esi], 0
+00012a82  8bc6               mov eax, esi
+00012a84  5e                 pop esi
+00012a85  c3                 ret 
+00012a86  55                 push ebp
+00012a87  8d6c2488           lea ebp, [esp - 0x78]
+00012a8b  81ec98000000       sub esp, 0x98
+00012a91  a1a8c20110         mov eax, dword ptr [0x1001c2a8]
+00012a96  33c5               xor eax, ebp
+00012a98  894574             mov dword ptr [ebp + 0x74], eax
+00012a9b  56                 push esi
+00012a9c  8bf1               mov esi, ecx
+00012a9e  e837ffffff         call 0x100129da  ; ->0x129da
+00012aa3  b800000010         mov eax, 0x10000000
+00012aa8  6894000000         push 0x94
+00012aad  894608             mov dword ptr [esi + 8], eax
+00012ab0  894604             mov dword ptr [esi + 4], eax
+00012ab3  8d45e0             lea eax, [ebp - 0x20]
+00012ab6  6a00               push 0
+00012ab8  50                 push eax
+00012ab9  c7063c000000       mov dword ptr [esi], 0x3c
+00012abf  c6460c00           mov byte ptr [esi + 0xc], 0
+00012ac3  e89c030000         call 0x10012e64  ; ->0x12e64
+00012ac8  83c40c             add esp, 0xc
+00012acb  8d45e0             lea eax, [ebp - 0x20]
+00012ace  50                 push eax
+00012acf  c745e094000000     mov dword ptr [ebp - 0x20], 0x94
+00012ad6  ff15a8500110       call dword ptr [0x100150a8]  ; KERNEL32.dll!GetVersionExA
+00012adc  837df002           cmp dword ptr [ebp - 0x10], 2
+00012ae0  7508               jne 0x10012aea
+00012ae2  837de405           cmp dword ptr [ebp - 0x1c], 5
+00012ae6  721a               jb 0x10012b02
+00012ae8  eb14               jmp 0x10012afe  ; ->0x12afe
+00012aea  837df001           cmp dword ptr [ebp - 0x10], 1
+00012aee  7512               jne 0x10012b02
+00012af0  837de404           cmp dword ptr [ebp - 0x1c], 4
+00012af4  7708               ja 0x10012afe
+00012af6  750a               jne 0x10012b02
+00012af8  837de800           cmp dword ptr [ebp - 0x18], 0
+00012afc  7604               jbe 0x10012b02
+00012afe  c6460c01           mov byte ptr [esi + 0xc], 1
+00012b02  8d4e18             lea ecx, [esi + 0x18]
+00012b05  c7461000080000     mov dword ptr [esi + 0x10], 0x800
+00012b0c  c74614008a0110     mov dword ptr [esi + 0x14], 0x10018a00
+00012b13  e858fdffff         call 0x10012870  ; ->0x12870
+00012b18  85c0               test eax, eax
+00012b1a  7d07               jge 0x10012b23
+00012b1c  c605d8c2011001     mov byte ptr [0x1001c2d8], 1
+00012b23  8b4d74             mov ecx, dword ptr [ebp + 0x74]
+00012b26  8bc6               mov eax, esi
+00012b28  33cd               xor ecx, ebp
+00012b2a  5e                 pop esi
+00012b2b  e834020000         call 0x10012d64  ; ->0x12d64
+00012b30  83c578             add ebp, 0x78
+00012b33  c9                 leave 
+00012b34  c3                 ret 
+00012b35  56                 push esi
+00012b36  ff35c8cb0110       push dword ptr [0x1001cbc8]
+00012b3c  8bf1               mov esi, ecx
+00012b3e  56                 push esi
+00012b3f  e81ffeffff         call 0x10012963  ; ->0x12963
+00012b44  8d4e20             lea ecx, [esi + 0x20]
+00012b47  5e                 pop esi
+00012b48  e991fdffff         jmp 0x100128de  ; ->0x128de
+00012b4d  80790800           cmp byte ptr [ecx + 8], 0
+00012b51  c701108a0110       mov dword ptr [ecx], 0x10018a10
+00012b57  740e               je 0x10012b67
+00012b59  8b4904             mov ecx, dword ptr [ecx + 4]
+00012b5c  85c9               test ecx, ecx
+00012b5e  7407               je 0x10012b67
+00012b60  51                 push ecx
+00012b61  ff15fc500110       call dword ptr [0x100150fc]  ; KERNEL32.dll!HeapDestroy
+00012b67  c3                 ret 
+00012b68  ff742404           push dword ptr [esp + 4]
+00012b6c  6a00               push 0
+00012b6e  ff7104             push dword ptr [ecx + 4]
+00012b71  ff15f8500110       call dword ptr [0x100150f8]  ; KERNEL32.dll!HeapAlloc
+00012b77  c20400             ret 4
+00012b7a  837c240400         cmp dword ptr [esp + 4], 0
+00012b7f  740f               je 0x10012b90
+00012b81  ff742404           push dword ptr [esp + 4]
+00012b85  6a00               push 0
+00012b87  ff7104             push dword ptr [ecx + 4]
+00012b8a  ff15f4500110       call dword ptr [0x100150f4]  ; KERNEL32.dll!HeapFree
+00012b90  c20400             ret 4
+00012b93  55                 push ebp
+00012b94  8bec               mov ebp, esp
+00012b96  33c0               xor eax, eax
+00012b98  394508             cmp dword ptr [ebp + 8], eax
+00012b9b  7509               jne 0x10012ba6
+00012b9d  ff750c             push dword ptr [ebp + 0xc]
+00012ba0  8b01               mov eax, dword ptr [ecx]
+00012ba2  ff10               call dword ptr [eax]
+00012ba4  eb21               jmp 0x10012bc7  ; ->0x12bc7
+00012ba6  39450c             cmp dword ptr [ebp + 0xc], eax
+00012ba9  750c               jne 0x10012bb7
+00012bab  ff7508             push dword ptr [ebp + 8]
+00012bae  8b01               mov eax, dword ptr [ecx]
+00012bb0  ff5004             call dword ptr [eax + 4]
+00012bb3  33c0               xor eax, eax
+00012bb5  eb10               jmp 0x10012bc7  ; ->0x12bc7
+00012bb7  ff750c             push dword ptr [ebp + 0xc]
+00012bba  ff7508             push dword ptr [ebp + 8]
+00012bbd  50                 push eax
+00012bbe  ff7104             push dword ptr [ecx + 4]
+00012bc1  ff15f0500110       call dword ptr [0x100150f0]  ; KERNEL32.dll!HeapReAlloc
+00012bc7  5d                 pop ebp
+00012bc8  c20800             ret 8
+00012bcb  ff742404           push dword ptr [esp + 4]
+00012bcf  6a00               push 0
+00012bd1  ff7104             push dword ptr [ecx + 4]
+00012bd4  ff15ec500110       call dword ptr [0x100150ec]  ; KERNEL32.dll!HeapSize
+00012bda  c20400             ret 4
+00012bdd  56                 push esi
+00012bde  8bf1               mov esi, ecx
+00012be0  e868ffffff         call 0x10012b4d  ; ->0x12b4d
+00012be5  f644240801         test byte ptr [esp + 8], 1
+00012bea  7407               je 0x10012bf3
+00012bec  56                 push esi
+00012bed  e866010000         call 0x10012d58  ; ->0x12d58
+00012bf2  59                 pop ecx
+00012bf3  8bc6               mov eax, esi
+00012bf5  5e                 pop esi
+00012bf6  c20400             ret 4
+00012bf9  8bc1               mov eax, ecx
+00012bfb  8b4c2404           mov ecx, dword ptr [esp + 4]
+00012bff  894804             mov dword ptr [eax + 4], ecx
+00012c02  c700248a0110       mov dword ptr [eax], 0x10018a24
+00012c08  33c9               xor ecx, ecx
+00012c0a  c7401402000000     mov dword ptr [eax + 0x14], 2
+00012c11  89480c             mov dword ptr [eax + 0xc], ecx
+00012c14  894810             mov dword ptr [eax + 0x10], ecx
+00012c17  66894818           mov word ptr [eax + 0x18], cx
+00012c1b  6689481a           mov word ptr [eax + 0x1a], cx
+00012c1f  894008             mov dword ptr [eax + 8], eax
+00012c22  c20400             ret 4
+00012c25  8b442408           mov eax, dword ptr [esp + 8]
+00012c29  f764240c           mul dword ptr [esp + 0xc]
+00012c2d  85d2               test edx, edx
+00012c2f  7705               ja 0x10012c36
+00012c31  83f8ff             cmp eax, -1
+00012c34  7606               jbe 0x10012c3c
+00012c36  b857000780         mov eax, 0x80070057
+00012c3b  c3                 ret 
+00012c3c  8b4c2404           mov ecx, dword ptr [esp + 4]
+00012c40  8901               mov dword ptr [ecx], eax
+00012c42  33c0               xor eax, eax
+00012c44  c3                 ret 
+00012c45  8b4904             mov ecx, dword ptr [ecx + 4]
+00012c48  8b01               mov eax, dword ptr [ecx]
+00012c4a  ff6004             jmp dword ptr [eax + 4]
+00012c4d  33d2               xor edx, edx
+00012c4f  8d4114             lea eax, [ecx + 0x14]
+00012c52  42                 inc edx
+00012c53  f00fc110           lock xadd dword ptr [eax], edx
+00012c57  8d4108             lea eax, [ecx + 8]
+00012c5a  c3                 ret 
+00012c5b  8bc1               mov eax, ecx
+00012c5d  c3                 ret 
+00012c5e  f644240401         test byte ptr [esp + 4], 1
+00012c63  56                 push esi
+00012c64  8bf1               mov esi, ecx
+00012c66  c706248a0110       mov dword ptr [esi], 0x10018a24
+00012c6c  7407               je 0x10012c75
+00012c6e  56                 push esi
+00012c6f  e8e4000000         call 0x10012d58  ; ->0x12d58
+00012c74  59                 pop ecx
+00012c75  8bc6               mov eax, esi
+00012c77  5e                 pop esi
+00012c78  c20400             ret 4
+00012c7b  8b442408           mov eax, dword ptr [esp + 8]
+00012c7f  8b4c240c           mov ecx, dword ptr [esp + 0xc]
+00012c83  83caff             or edx, 0xffffffff
+00012c86  2bd0               sub edx, eax
+00012c88  3bd1               cmp edx, ecx
+... cut
+

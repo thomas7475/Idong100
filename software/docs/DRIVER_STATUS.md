@@ -1,5 +1,55 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
+Turn 50, 2026-11-28. **The T13 startup-begin failure researched and
+fixed: `A_a_v4.4_BG0313.bit` is the FPGA bitstream, the vendor
+downloads it on every device open, and our driver never did.** The
+T13 bench failed at the cold machine's state 1 (`vendor -2: Rx DEVICE
+ID Msg Err`) with steps 1-3 PASS. This turn decoded, from
+xeyezHal.dll v2.6.0.6 (`research/idong100/agents/22-turn50/`):
+`xEyeUsb.ini [Config] BitFile=A_a_v4.4_BG0313.bit` (the same section
+`NeedHandleMatch` lives in) is read by the xEyeUSB manager init
+(@0x50e0) and handed to `xeyezHal_SetFpgaFile`; `xeyezHal_StartFlow`
+(@0x16300 -> the open state machine @0x13b70) then runs - Init,
+SetCmosIndex/CmosTable/FpgaTable (dirty-flag gated), the 8051 flash
+update (platform != 1, observed on the wire since turn 32), **step 3
+`DownLoadFpga` - UNCONDITIONAL on every StartFlow** - ChipIDVerify,
+CMOS_CFG (the CMOS register tables our --cmos already replays),
+FPGA_CFG (FPGA register tables - NOT yet in the driver), LensRead,
+LED tables (also not yet). The bit file: 235,930 B, Xilinx
+**Spartan-3A XC3S400A** (`work_top.ncd;HW_TIMEOUT=FALSE`,
+3s400aft256, 2010/04/06), byte-identical in v2.5.0.7 and v2.6.0.6,
+SHA-pinned in the repo since turn 40. The download wire (session
+plane EP 0x02/0x82 - the same pair the whole 7F 55 session uses):
+START `7f 55 02 00...` -> QUERY_CFG `7f 55 02 01...` -> announce
+`7f 55 02 02 00 00 00 04` + size BE u32 (12 B) -> the WHOLE file
+**bit-reversed** (`u8::reverse_bits`, the vendor's literal shift
+chain) in RAW <=64 KiB bulk writes with NO replies -> END `7f 55 02
+03...` -> DONE `7f 55 02 01 00 00 00 01`; every reply 8 B, ack 01
+@+4; vendor codes -10000/-10015/-10014/-10013/-10012. The FPGA
+configuration is VOLATILE - the vendor re-downloads it on every
+open - and until it is loaded the DSP behind the FPGA never answers:
+that IS the T13 state-1 timeout. The turn-32 "no FPGA upload exists
+on the wire" was a false negative - every capture started AFTER
+`McuManager25::connect` had already run the download. NEW in the
+crate: `protocol::fpga::{fpga_step_frame, fpga_send_announce,
+fpga_bit_reverse, FpgaDownload, FpgaDownloadReport}` over
+`Transport`, the replay test `src/tests/fpga_replay.rs` (byte-exact
+happy path, 64 KiB chunking, the vendor-chain bit-reversal pin over
+all 256 byte values, the four failure codes), and the records bench
+now 7 steps: [4/7] the FPGA download with `--cmos` (`--no-fpga`
+skips, `--fpga-only` runs just the download), then probe -> cold/hot
+start -> the record loop. Also fixed from the T13 output: the ENS
+state-1 error now CARRIES ITS CAUSE (silence `Short{64,0}` vs a
+wrong-frame answer `BadType{..}` - the old message flattened both to
+"vendor -2"). Bonus decode: the usbCom PRE-LOOP @0x114c0 (turn 49
+missed it) - waits for the record stream (100 x 500 ms), ACKs the
+first two records, then sends **PU 0x7FF / OD 0x7EE** ("Reset DSP",
+6 tries) before usbCom starts. 166 tests green both feature states
+(+8: fpga_replay), nightly fmt clean, examples warning-free both
+states. NEXT BENCH (T14): `cargo run --features usb --example
+records -- --cmos --frames 10` - [4/7] decides the FPGA decode, [6/7]
+decides whether the DSP answers once the FPGA is up.
+
 Turn 49, 2026-11-28. **P3b: the `ens_code.ldr` upload decoded and
 implemented - the capture ask is retired.** The T12 bench (user turn
 48/49) returned VERDICT B (silence on EP 0x83 after the session init),
@@ -164,7 +214,8 @@ game capture pins them), and P4 ROS 2 (needs a ROS install).**
 | P2.4b self-reboot recovery (`video --recover`) | DONE (turn 44): wait bootloader landing -> re-flash the pinned image (ungated `FLASH_CONFIRMED` path) -> wait renum -> re-init -> resume; `session_full` points at it; turn 47: the bootloader/video-node opens RETRY through the fresh-node udev race (run 11: recovery worked 8/9, the 9th hit "Access denied" on the first open) |
 | P2.6 rate measurement (`video --rate N`, turn 45/47) | **CLOSED (turn 48, run 13)**: 300 frames / 3 sessions / 0 payload errors; session 1 undisturbed 110/110 deltas EXACTLY 1,920,000 = flat 25 fps cadence; the device clock pinned at **48 MHz** (`DEVICE_CLOCK_HZ`), the 10-ms skip quantum pinned (`PTS_SKIP_QUANTUM` = 480,000); the negotiated 30 fps is an upper bound only |
 | P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | ACCEPTED - T8 PASS x2 on the turn-41 bench (readback matched, launched, identity intact); `FLASH_CONFIRMED` = true since turn 42 |
-| Marker/3D record plane (P3a/P3b, turns 46/49) | WIRE PLANE FULLY DECODED: PU/OD on EP 0x83/0x03 - type-0xF0 announce, 640-B raw record (OD trailer @+0x27C, status @+0x25C), type-7 ACK; open item #4 RESOLVED (x/y/z f64 @ slot +0x08/+0x10/+0x18, quality @+0x24, HOST-computed); the ENS startup fully decoded turn 49 - the 8-state cold machine `0xf790` (the `ens_code.ldr` upload + pairing + ID + lens params), the hot start `0x10640`/`0x10900`, the vendor crc.dll checksum; `protocol::ens::{ColdStart, HotStart, crc32_ens, RecordIo}` + the `ens_replay` test; the T13 bench flow in the records example - awaiting its bench run |
+| FPGA bring-up (`protocol::fpga`, turn 50) | DECODED + IMPLEMENTED, bench pending: `A_a_v4.4_BG0313.bit` (XC3S400A, volatile) downloaded on every open over EP 0x02/0x82 - START/QUERY_CFG/announce{size BE}/bit-reversed file in <=64 KiB raw writes/END/DONE; the records bench runs it as step [4/7] (`--cmos`, `--no-fpga` skips, `--fpga-only` alone); the open sequence's FPGA register/LED table steps (0xfc70/0xfa70) decoded but NOT implemented |
+| Marker/3D record plane (P3a/P3b, turns 46/49/50) | WIRE PLANE FULLY DECODED: PU/OD on EP 0x83/0x03 - type-0xF0 announce, 640-B raw record (OD trailer @+0x27C, status @+0x25C), type-7 ACK; open item #4 RESOLVED (x/y/z f64 @ slot +0x08/+0x10/+0x18, quality @+0x24, HOST-computed); the ENS startup fully decoded turn 49 (the 8-state cold machine `0xf790`, the hot start `0x10640`/`0x10900`, the vendor crc.dll checksum) + turn 50's usbCom PRE-LOOP @0x114c0 (records -> 2 ACKs -> PU 0x7FF/OD 0x7EE DSP reset); the T13 bench ran: steps 1-3 PASS, state 1 timed out (vendor -2) - root cause the missing FPGA download, fixed this turn; T14 = the rerun that decides |
 | P4 ROS 2 adapter - pure data layer (`src/ros/`, turn 48) | DONE + unit-tested (149 tests): params (model + params.yaml parser pinned to the launch file), lifecycle (state machine), pubsub (six interfaces + converters), diagnostics (window/floor/stall), node (drain/convert/stamp core) - all rclrs-free, hardware-free |
 | P4 ROS 2 adapter - rclrs glue (`idong-ros2/src`) | REMAINING: lib.rs/node.rs wiring (declare params, create the six interfaces, the executor loop calling `NodeCore`) - needs a ROS 2 install to build against |
 
@@ -192,7 +243,9 @@ cargo run --features usb --example video -- --probe       # T6: V4L2 probe
 cargo run --features usb --example video -- --cmos --frames 10  # T7: video
 cargo run --features usb --example flash_mcu                   # T8 dry run
 cargo run --features usb --example flash_mcu -- --confirm      # T8
-cargo run --features usb --example records -- --cmos          # T12: record plane
+cargo run --features usb --example records -- --cmos          # T12/T13: probe only / cold start
+cargo run --features usb --example records -- --cmos --frames 10  # T14: full plane (FPGA + DSP + records)
+cargo run --features usb --example records -- --cmos --fpga-only  # the FPGA download alone
 ```
 
 `flash_mcu` reads `firmware/v2.6.0.6/app_m8051_2611.hex` by default
@@ -310,14 +363,25 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
 
 ## What is missing, in order
 
-1. **The T13 bench run** (the one remaining bench run):
-   `cargo run --features usb --example records -- --cmos` - the
-   probe (VERDICT B is expected after a fresh flash) runs the 8-state
-   cold start with the shipped, SHA-256-pinned `ens_code.ldr` (the
-   turn-49 static decode - no game capture needed any more), then the
-   record handshake loop. The verdict matrix: `docs/LINUX_TESTS.md`
-   T13. If records flow, the marker plane is LIVE end-to-end and the
-   blob layout (the classifier input) is the next decode.
+1. **The T14 bench run** (the one remaining bench run):
+   `cargo run --features usb --example records -- --cmos --frames 10`.
+   Step [4/7] (the FPGA download, new this turn) decides the turn-50
+   decode: PASS = the XC3S400A accepts our START/QUERY/announce/chunks
+   END/DONE sequence. Step [6/7] (the cold machine) then decides
+   whether the DSP answers once the FPGA is up. Verdict matrix in
+   `docs/LINUX_TESTS.md` T14:
+   - [4/7] PASS + the cold machine reaches state 2 (the code-load
+     announce accepted): the DSP path is OPEN - the marker plane is
+     one bench away.
+   - [4/7] PASS but state 1 still silent: implement the open
+     sequence's FPGA register/LED table steps (CMOS_CFG 0xfd90 /
+     FPGA_CFG 0xfc70 / LED 0xfa70 - the ini `*_Fpga` tables,
+     `Led_Scale_Fpga_v26.txt`, the 30fps `*Fpga*` .dat payloads) as
+     the next decode; also candidate: the exact DSP-release timing
+     after DONE (the vendor sleeps 1000 ms in usbCom's entry path).
+   - [4/7] FAIL with a reply mismatch: the frame decode is wrong -
+     capture the run and compare against
+     `research/idong100/agents/22-turn50/artifacts/`.
 2. **P4 ROS 2: the rclrs glue** (`idong-ros2/src/lib.rs` +
    `node.rs`): declare the table-5 parameters, create the six
    interfaces with their QoS, run the executor loop that calls
@@ -329,7 +393,17 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
    diagnostics/node, 24 unit tests); the glue is thin copy code but
    needs a ROS 2 install to compile against (rclrs + the generated
    idong_msgs crate exist only inside a colcon workspace).
-3. **Channel-B decode** (optional): the run-11/run-13 benches
+3. **The open sequence's FPGA register/LED table steps** (0xfd90
+   CMOS_CFG / 0xfc70 FPGA_CFG / 0xfa70 LED WR/RD/Verify - turn 50
+   decode): implement IF T14 shows the plane still dead after a clean
+   FPGA download. Payload sources: `xeyezHal.ini`'s `*_Fpga` entries,
+   `config/Led_Scale_Fpga_v26.txt` (addr/value pairs 0x58..0x6b),
+   the `config/30fps*` `.dat` blobs.
+4. **The usbCom PRE-LOOP** (turn 50 decode @0x114c0): wait for the
+   stream, 2 ACKs, then PU 0x7FF -> OD 0x7EE ("Reset DSP", 6 tries).
+   Implement together with the steady-state record loop polish (it is
+   the vendor's own re-sync step when records were already flowing).
+5. **Channel-B decode** (optional): the run-11/run-13 benches
    confirmed channel B is NOT an image (flat 127.3 +- 6.4, sd rising
    to ~19 only on bright frames - scene-coupled noise, not
    structure). The marker/3D data lives on the MI_04 record pair

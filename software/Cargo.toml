@@ -113,5 +113,10 @@ path = "src/tests/firmware_files.rs"
 name = "ens_replay"
 path = "src/tests/ens_replay.rs"
 
+# turn 50: the FPGA bitstream download (xeyezHal DownLoadFpga) replay
+[[test]]
+name = "fpga_replay"
+path = "src/tests/fpga_replay.rs"
+
 [profile.release]
 debug = true  # keep symbols for on-device diagnosis

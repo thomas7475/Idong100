@@ -1,0 +1,371 @@
+### step4 @ RVA 0x118b0  
+000118b0  55                 push ebp
+000118b1  8bec               mov ebp, esp
+000118b3  83ec10             sub esp, 0x10
+000118b6  894df0             mov dword ptr [ebp - 0x10], ecx
+000118b9  6864ca0110         push 0x1001ca64
+000118be  8b45f0             mov eax, dword ptr [ebp - 0x10]
+000118c1  50                 push eax
+000118c2  e8d9a7ffff         call 0x1000c0a0  ; ->0xc0a0
+000118c7  83c408             add esp, 8
+000118ca  6a08               push 8
+000118cc  6a08               push 8
+000118ce  6a01               push 1
+000118d0  6a00               push 0
+000118d2  6a00               push 0
+000118d4  6a00               push 0
+000118d6  6a00               push 0
+000118d8  6a0a               push 0xa
+000118da  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+000118dd  e89e9affff         call 0x1000b380  ; ->0xb380
+000118e2  8945f8             mov dword ptr [ebp - 8], eax
+000118e5  837df801           cmp dword ptr [ebp - 8], 1
+000118e9  7419               je 0x10011904
+000118eb  68a4ca0110         push 0x1001caa4  ; "ChipIDVerify"
+000118f0  8b4df8             mov ecx, dword ptr [ebp - 8]
+000118f3  51                 push ecx
+000118f4  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+000118f7  e8a4d1ffff         call 0x1000eaa0  ; ->0xeaa0
+000118fc  8b45f8             mov eax, dword ptr [ebp - 8]
+000118ff  e95a010000         jmp 0x10011a5e  ; ->0x11a5e
+00011904  c745f400000000     mov dword ptr [ebp - 0xc], 0
+0001190b  ba01000000         mov edx, 1
+00011910  85d2               test edx, edx
+00011912  0f84c0000000       je 0x100119d8
+00011918  6a08               push 8
+0001191a  6a08               push 8
+0001191c  6a04               push 4
+0001191e  6a00               push 0
+00011920  6a00               push 0
+00011922  6a00               push 0
+00011924  6a02               push 2
+00011926  6a0a               push 0xa
+00011928  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+0001192b  e8509affff         call 0x1000b380  ; ->0xb380
+00011930  8945f8             mov dword ptr [ebp - 8], eax
+00011933  837df801           cmp dword ptr [ebp - 8], 1
+00011937  7531               jne 0x1001196a
+00011939  817df4f4010000     cmp dword ptr [ebp - 0xc], 0x1f4
+00011940  7e1b               jle 0x1001195d
+00011942  68b4ca0110         push 0x1001cab4  ; "ChipIDVerify"
+00011947  8b45f8             mov eax, dword ptr [ebp - 8]
+0001194a  50                 push eax
+0001194b  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+0001194e  e84dd1ffff         call 0x1000eaa0  ; ->0xeaa0
+00011953  b81fd9ffff         mov eax, 0xffffd91f
+00011958  e901010000         jmp 0x10011a5e  ; ->0x11a5e
+0001195d  8b4df4             mov ecx, dword ptr [ebp - 0xc]
+00011960  83c101             add ecx, 1
+00011963  894df4             mov dword ptr [ebp - 0xc], ecx
+00011966  eba3               jmp 0x1001190b  ; ->0x1190b
+00011968  eb69               jmp 0x100119d3  ; thunk -> 0x1190b
+0001196a  817df8f2d8ffff     cmp dword ptr [ebp - 8], 0xffffd8f2
+00011971  7558               jne 0x100119cb
+00011973  8b55f0             mov edx, dword ptr [ebp - 0x10]
+00011976  81c208070000       add edx, 0x708
+0001197c  8b45f0             mov eax, dword ptr [ebp - 0x10]
+0001197f  89900c0b0400       mov dword ptr [eax + 0x40b0c], edx
+00011985  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+00011988  8b910c0b0400       mov edx, dword ptr [ecx + 0x40b0c]
+0001198e  0fb702             movzx eax, word ptr [edx]
+00011991  3d7f550000         cmp eax, 0x557f
+00011996  7512               jne 0x100119aa
+00011998  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+0001199b  8b910c0b0400       mov edx, dword ptr [ecx + 0x40b0c]
+000119a1  0fb64204           movzx eax, byte ptr [edx + 4]
+000119a5  83f801             cmp eax, 1
+000119a8  741d               je 0x100119c7
+000119aa  68c4ca0110         push 0x1001cac4  ; "ChipIDVerify"
+000119af  8b4df8             mov ecx, dword ptr [ebp - 8]
+000119b2  51                 push ecx
+000119b3  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+000119b6  e8e5d0ffff         call 0x1000eaa0  ; ->0xeaa0
+000119bb  b81ed9ffff         mov eax, 0xffffd91e
+000119c0  e999000000         jmp 0x10011a5e  ; ->0x11a5e
+000119c5  eb02               jmp 0x100119c9  ; ->0x119c9
+000119c7  eb0f               jmp 0x100119d8  ; ->0x119d8
+000119c9  eb08               jmp 0x100119d3  ; thunk -> 0x1190b
+000119cb  8b45f8             mov eax, dword ptr [ebp - 8]
+000119ce  e98b000000         jmp 0x10011a5e  ; ->0x11a5e
+000119d3  e933ffffff         jmp 0x1001190b  ; ->0x1190b
+000119d8  c645fc00           mov byte ptr [ebp - 4], 0
+000119dc  c645fd00           mov byte ptr [ebp - 3], 0
+000119e0  6a02               push 2
+000119e2  8d55fc             lea edx, [ebp - 4]
+000119e5  52                 push edx
+000119e6  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+000119e9  e8b2b4ffff         call 0x1000cea0  ; ->0xcea0
+000119ee  8945f8             mov dword ptr [ebp - 8], eax
+000119f1  837df800           cmp dword ptr [ebp - 8], 0
+000119f5  7d16               jge 0x10011a0d
+000119f7  68d4ca0110         push 0x1001cad4  ; "ChipIDVerify"
+000119fc  8b45f8             mov eax, dword ptr [ebp - 8]
+000119ff  50                 push eax
+00011a00  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+00011a03  e898d0ffff         call 0x1000eaa0  ; ->0xeaa0
+00011a08  8b45f8             mov eax, dword ptr [ebp - 8]
+00011a0b  eb51               jmp 0x10011a5e  ; ->0x11a5e
+00011a0d  6a02               push 2
+00011a0f  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+00011a12  81c1080b0000       add ecx, 0xb08
+00011a18  51                 push ecx
+00011a19  8d55fc             lea edx, [ebp - 4]
+00011a1c  52                 push edx
+00011a1d  e8d806ffff         call 0x100020fa  ; MSVCR80.dll!memcpy
+00011a22  83c40c             add esp, 0xc
+00011a25  0fb645fd           movzx eax, byte ptr [ebp - 3]
+00011a29  83e001             and eax, 1
+00011a2c  751a               jne 0x10011a48
+00011a2e  68e4ca0110         push 0x1001cae4
+00011a33  8b4df0             mov ecx, dword ptr [ebp - 0x10]
+00011a36  51                 push ecx
+00011a37  e864a6ffff         call 0x1000c0a0  ; ->0xc0a0
+00011a3c  83c408             add esp, 8
+00011a3f  b80efeffff         mov eax, 0xfffffe0e
+00011a44  eb18               jmp 0x10011a5e  ; ->0x11a5e
+00011a46  eb11               jmp 0x10011a59  ; ->0x11a59
+00011a48  68fcca0110         push 0x1001cafc
+00011a4d  8b55f0             mov edx, dword ptr [ebp - 0x10]
+00011a50  52                 push edx
+00011a51  e84aa6ffff         call 0x1000c0a0  ; ->0xc0a0
+00011a56  83c408             add esp, 8
+00011a59  b82c000000         mov eax, 0x2c
+00011a5e  8be5               mov esp, ebp
+00011a60  5d                 pop ebp
+00011a61  c3                 ret 
+
+### step7 @ RVA 0x139f0  
+000139f0  55                 push ebp
+000139f1  8bec               mov ebp, esp
+000139f3  81ec2c010000       sub esp, 0x12c
+000139f9  898dd4feffff       mov dword ptr [ebp - 0x12c], ecx
+000139ff  68e8b90110         push 0x1001b9e8
+00013a04  8b85d4feffff       mov eax, dword ptr [ebp - 0x12c]
+00013a0a  50                 push eax
+00013a0b  e89086ffff         call 0x1000c0a0  ; ->0xc0a0
+00013a10  83c408             add esp, 8
+00013a13  8b8dd4feffff       mov ecx, dword ptr [ebp - 0x12c]
+00013a19  83b9101d060000     cmp dword ptr [ecx + 0x61d10], 0
+00013a20  750a               jne 0x10013a2c
+00013a22  b821fcffff         mov eax, 0xfffffc21
+00013a27  e9b4000000         jmp 0x10013ae0  ; ->0x13ae0
+00013a2c  6a03               push 3
+00013a2e  6820010000         push 0x120
+00013a33  8d95d8feffff       lea edx, [ebp - 0x128]
+00013a39  52                 push edx
+00013a3a  8b8dd4feffff       mov ecx, dword ptr [ebp - 0x12c]
+00013a40  e81bf9ffff         call 0x10013360  ; ->0x13360
+00013a45  8945fc             mov dword ptr [ebp - 4], eax
+00013a48  6824ba0110         push 0x1001ba24  ; "LensRead"
+00013a4d  8b45fc             mov eax, dword ptr [ebp - 4]
+00013a50  50                 push eax
+00013a51  8b8dd4feffff       mov ecx, dword ptr [ebp - 0x12c]
+00013a57  e844b0ffff         call 0x1000eaa0  ; ->0xeaa0
+00013a5c  837dfc00           cmp dword ptr [ebp - 4], 0
+00013a60  7d05               jge 0x10013a67
+00013a62  8b45fc             mov eax, dword ptr [ebp - 4]
+00013a65  eb79               jmp 0x10013ae0  ; ->0x13ae0
+00013a67  68a0000000         push 0xa0
+00013a6c  8d8dd8feffff       lea ecx, [ebp - 0x128]
+00013a72  51                 push ecx
+00013a73  8b95d4feffff       mov edx, dword ptr [ebp - 0x12c]
+00013a79  8b82101d0600       mov eax, dword ptr [edx + 0x61d10]
+00013a7f  50                 push eax
+00013a80  e875e6feff         call 0x100020fa  ; MSVCR80.dll!memcpy
+00013a85  83c40c             add esp, 0xc
+00013a88  68a0000000         push 0xa0
+00013a8d  8b8dd4feffff       mov ecx, dword ptr [ebp - 0x12c]
+00013a93  8b91101d0600       mov edx, dword ptr [ecx + 0x61d10]
+00013a99  52                 push edx
+00013a9a  8b85d4feffff       mov eax, dword ptr [ebp - 0x12c]
+00013aa0  05681c0400         add eax, 0x41c68
+00013aa5  50                 push eax
+00013aa6  e84fe6feff         call 0x100020fa  ; MSVCR80.dll!memcpy
+00013aab  83c40c             add esp, 0xc
+00013aae  8b8dd4feffff       mov ecx, dword ptr [ebp - 0x12c]
+00013ab4  e80790ffff         call 0x1000cac0  ; ->0xcac0
+00013ab9  8945fc             mov dword ptr [ebp - 4], eax
+00013abc  6830ba0110         push 0x1001ba30  ; "LensToCfgParam"
+00013ac1  8b4dfc             mov ecx, dword ptr [ebp - 4]
+00013ac4  51                 push ecx
+00013ac5  8b8dd4feffff       mov ecx, dword ptr [ebp - 0x12c]
+00013acb  e8d0afffff         call 0x1000eaa0  ; ->0xeaa0
+00013ad0  837dfc00           cmp dword ptr [ebp - 4], 0
+00013ad4  7d05               jge 0x10013adb
+00013ad6  8b45fc             mov eax, dword ptr [ebp - 4]
+00013ad9  eb05               jmp 0x10013ae0  ; ->0x13ae0
+00013adb  b801000000         mov eax, 1
+00013ae0  8be5               mov esp, ebp
+00013ae2  5d                 pop ebp
+00013ae3  c3                 ret 
+
+### step8 @ RVA 0xfa70  
+0000fa70  55                 push ebp
+0000fa71  8bec               mov ebp, esp
+0000fa73  83ec44             sub esp, 0x44
+0000fa76  a118000210         mov eax, dword ptr [0x10020018]
+0000fa7b  33c5               xor eax, ebp
+0000fa7d  8945fc             mov dword ptr [ebp - 4], eax
+0000fa80  894dbc             mov dword ptr [ebp - 0x44], ecx
+0000fa83  6890bb0110         push 0x1001bb90
+0000fa88  8b45bc             mov eax, dword ptr [ebp - 0x44]
+0000fa8b  50                 push eax
+0000fa8c  e80fc6ffff         call 0x1000c0a0  ; ->0xc0a0
+0000fa91  83c408             add esp, 8
+0000fa94  c645c40f           mov byte ptr [ebp - 0x3c], 0xf
+0000fa98  c645c500           mov byte ptr [ebp - 0x3b], 0
+0000fa9c  66c745c60014       mov word ptr [ebp - 0x3a], 0x1400
+0000faa2  6a04               push 4
+0000faa4  8d4dc4             lea ecx, [ebp - 0x3c]
+0000faa7  51                 push ecx
+0000faa8  8b55bc             mov edx, dword ptr [ebp - 0x44]
+0000faab  81c210030000       add edx, 0x310
+0000fab1  52                 push edx
+0000fab2  e84326ffff         call 0x100020fa  ; MSVCR80.dll!memcpy
+0000fab7  83c40c             add esp, 0xc
+0000faba  6a08               push 8
+0000fabc  6a0c               push 0xc
+0000fabe  6a01               push 1
+0000fac0  6a04               push 4
+0000fac2  6a00               push 0
+0000fac4  6a00               push 0
+0000fac6  6a00               push 0
+0000fac8  6a0b               push 0xb
+0000faca  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000facd  e8aeb8ffff         call 0x1000b380  ; ->0xb380
+0000fad2  8945c0             mov dword ptr [ebp - 0x40], eax
+0000fad5  68ccbb0110         push 0x1001bbcc  ; "FPGA_BULK_START"
+0000fada  8b45c0             mov eax, dword ptr [ebp - 0x40]
+0000fadd  50                 push eax
+0000fade  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fae1  e8baefffff         call 0x1000eaa0  ; ->0xeaa0
+0000fae6  837dc000           cmp dword ptr [ebp - 0x40], 0
+0000faea  7d08               jge 0x1000faf4
+0000faec  8b45c0             mov eax, dword ptr [ebp - 0x40]
+0000faef  e96e010000         jmp 0x1000fc62  ; ->0xfc62
+0000faf4  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000faf7  e854bbffff         call 0x1000b650  ; ->0xb650
+0000fafc  68d8000210         push 0x100200d8  ; "P"
+0000fb01  6a14               push 0x14
+0000fb03  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fb06  e815caffff         call 0x1000c520  ; ->0xc520
+0000fb0b  8945c0             mov dword ptr [ebp - 0x40], eax
+0000fb0e  68dcbb0110         push 0x1001bbdc  ; "Led_WR_TABLE"
+0000fb13  8b4dc0             mov ecx, dword ptr [ebp - 0x40]
+0000fb16  51                 push ecx
+0000fb17  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fb1a  e881efffff         call 0x1000eaa0  ; ->0xeaa0
+0000fb1f  837dc000           cmp dword ptr [ebp - 0x40], 0
+0000fb23  7d08               jge 0x1000fb2d
+0000fb25  8b45c0             mov eax, dword ptr [ebp - 0x40]
+0000fb28  e935010000         jmp 0x1000fc62  ; ->0xfc62
+0000fb2d  6a08               push 8
+0000fb2f  6a08               push 8
+0000fb31  6a01               push 1
+0000fb33  6a00               push 0
+0000fb35  6a00               push 0
+0000fb37  6a00               push 0
+0000fb39  6a03               push 3
+0000fb3b  6a0b               push 0xb
+0000fb3d  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fb40  e83bb8ffff         call 0x1000b380  ; ->0xb380
+0000fb45  8945c0             mov dword ptr [ebp - 0x40], eax
+0000fb48  68ecbb0110         push 0x1001bbec  ; "FPGA_BULK_END"
+0000fb4d  8b55c0             mov edx, dword ptr [ebp - 0x40]
+0000fb50  52                 push edx
+0000fb51  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fb54  e847efffff         call 0x1000eaa0  ; ->0xeaa0
+0000fb59  837dc000           cmp dword ptr [ebp - 0x40], 0
+0000fb5d  7d08               jge 0x1000fb67
+0000fb5f  8b45c0             mov eax, dword ptr [ebp - 0x40]
+0000fb62  e9fb000000         jmp 0x1000fc62  ; ->0xfc62
+0000fb67  c645c40f           mov byte ptr [ebp - 0x3c], 0xf
+0000fb6b  c645c580           mov byte ptr [ebp - 0x3b], 0x80
+0000fb6f  66c745c60014       mov word ptr [ebp - 0x3a], 0x1400
+0000fb75  6a04               push 4
+0000fb77  8d45c4             lea eax, [ebp - 0x3c]
+0000fb7a  50                 push eax
+0000fb7b  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fb7e  81c110030000       add ecx, 0x310
+0000fb84  51                 push ecx
+0000fb85  e87025ffff         call 0x100020fa  ; MSVCR80.dll!memcpy
+0000fb8a  83c40c             add esp, 0xc
+0000fb8d  6a08               push 8
+0000fb8f  6a0c               push 0xc
+0000fb91  6a01               push 1
+0000fb93  6a04               push 4
+0000fb95  6a00               push 0
+0000fb97  6a00               push 0
+0000fb99  6a00               push 0
+0000fb9b  6a0b               push 0xb
+0000fb9d  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fba0  e8dbb7ffff         call 0x1000b380  ; ->0xb380
+0000fba5  8945c0             mov dword ptr [ebp - 0x40], eax
+0000fba8  68fcbb0110         push 0x1001bbfc  ; "FPGA_BULK_START"
+0000fbad  8b55c0             mov edx, dword ptr [ebp - 0x40]
+0000fbb0  52                 push edx
+0000fbb1  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fbb4  e8e7eeffff         call 0x1000eaa0  ; ->0xeaa0
+0000fbb9  837dc000           cmp dword ptr [ebp - 0x40], 0
+0000fbbd  7d08               jge 0x1000fbc7
+0000fbbf  8b45c0             mov eax, dword ptr [ebp - 0x40]
+0000fbc2  e99b000000         jmp 0x1000fc62  ; ->0xfc62
+0000fbc7  8d45c8             lea eax, [ebp - 0x38]
+0000fbca  50                 push eax
+0000fbcb  6a14               push 0x14
+0000fbcd  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fbd0  e81bc8ffff         call 0x1000c3f0  ; ->0xc3f0
+0000fbd5  8945c0             mov dword ptr [ebp - 0x40], eax
+0000fbd8  680cbc0110         push 0x1001bc0c  ; "Led_RD_TABLE"
+0000fbdd  8b4dc0             mov ecx, dword ptr [ebp - 0x40]
+0000fbe0  51                 push ecx
+0000fbe1  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fbe4  e8b7eeffff         call 0x1000eaa0  ; ->0xeaa0
+0000fbe9  837dc000           cmp dword ptr [ebp - 0x40], 0
+0000fbed  7d05               jge 0x1000fbf4
+0000fbef  8b45c0             mov eax, dword ptr [ebp - 0x40]
+0000fbf2  eb6e               jmp 0x1000fc62  ; ->0xfc62
+0000fbf4  6a08               push 8
+0000fbf6  6a08               push 8
+0000fbf8  6a01               push 1
+0000fbfa  6a00               push 0
+0000fbfc  6a00               push 0
+0000fbfe  6a00               push 0
+0000fc00  6a03               push 3
+0000fc02  6a0b               push 0xb
+0000fc04  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fc07  e874b7ffff         call 0x1000b380  ; ->0xb380
+0000fc0c  8945c0             mov dword ptr [ebp - 0x40], eax
+0000fc0f  681cbc0110         push 0x1001bc1c  ; "FPGA_BULK_END"
+0000fc14  8b55c0             mov edx, dword ptr [ebp - 0x40]
+0000fc17  52                 push edx
+0000fc18  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fc1b  e880eeffff         call 0x1000eaa0  ; ->0xeaa0
+0000fc20  837dc000           cmp dword ptr [ebp - 0x40], 0
+0000fc24  7d05               jge 0x1000fc2b
+0000fc26  8b45c0             mov eax, dword ptr [ebp - 0x40]
+0000fc29  eb37               jmp 0x1000fc62  ; ->0xfc62
+0000fc2b  6a14               push 0x14
+0000fc2d  8d45c8             lea eax, [ebp - 0x38]
+0000fc30  50                 push eax
+0000fc31  68d8000210         push 0x100200d8  ; "P"
+0000fc36  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fc39  e8d2b9ffff         call 0x1000b610  ; ->0xb610
+0000fc3e  8945c0             mov dword ptr [ebp - 0x40], eax
+0000fc41  682cbc0110         push 0x1001bc2c  ; "FPGA_BULK_Verify"
+0000fc46  8b4dc0             mov ecx, dword ptr [ebp - 0x40]
+0000fc49  51                 push ecx
+0000fc4a  8b4dbc             mov ecx, dword ptr [ebp - 0x44]
+0000fc4d  e84eeeffff         call 0x1000eaa0  ; ->0xeaa0
+0000fc52  837dc000           cmp dword ptr [ebp - 0x40], 0
+0000fc56  7d05               jge 0x1000fc5d
+0000fc58  8b45c0             mov eax, dword ptr [ebp - 0x40]
+0000fc5b  eb05               jmp 0x1000fc62  ; ->0xfc62
+0000fc5d  b801000000         mov eax, 1
+0000fc62  8b4dfc             mov ecx, dword ptr [ebp - 4]
+0000fc65  33cd               xor ecx, ebp
+0000fc67  e84f23ffff         call 0x10001fbb  ; ->0x1fbb
+0000fc6c  8be5               mov esp, ebp
+0000fc6e  5d                 pop ebp
+0000fc6f  c3                 ret 
+

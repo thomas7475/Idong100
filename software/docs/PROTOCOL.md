@@ -641,3 +641,70 @@ verdict failure, the full hot start, probe silence), and the T13 bench
 flow in `records.rs`: probe -> hot start / cold start (the shipped,
 SHA-256-pinned ldr) -> the record handshake loop (`--no-ldr` keeps the
 old read-only T12 behavior, `--no-match` mirrors NeedHandleMatch=0).
+
+## FPGA bring-up (turn 50: `A_a_v4.4_BG0313.bit` - the missing step, decoded)
+
+The T13 bench failed at the cold machine's state 1 (`vendor -2: Rx
+DEVICE ID Msg Err`) with steps 1-3 PASS. Root cause, decoded this turn
+from xeyezHal.dll v2.6.0.6
+(`research/idong100/agents/22-turn50/FINDINGS.md`, artifacts +
+`research/scripts/dis50_hal.py`): **the driver never configured the
+FPGA**. The vendor chain (xEyeUSB `McuManager25::connect`, turn 33):
+
+```
+GetPrivateProfileStringA("Config","BitFile", ... xEyeUsb.ini)   @0x5172
+-> xeyezHal_SetFpgaFile(name)        (dispatch impl 0xbd10)
+-> xeyezHal_StartFlow()              (dispatch @0x16300 -> open seq @0x13b70)
+     init -> SetCmosIndex -> SetCmosTable -> SetFpgaTable -> SetBoard
+     -> SetTransMode (all dirty-flag gated)
+     -> the 8051 flash update (0x13060, platform != 1: observed on wire)
+     -> DownLoadFpga 0x10040 - UNCONDITIONAL, every StartFlow
+     -> ChipIDVerify (0x118b0) -> CMOS_CFG (0xfd90: CMOS0/1 WRITE/READ_REG)
+     -> FPGA_CFG (0xfc70: FPGA_WRITE_REG) -> LensRead (0x139f0)
+     -> LED tables (0xfa70: FPGA_BULK Led_WR_TABLE/Led_RD_TABLE/Verify)
+-> session init -> GetMcuVersion -> license gates
+-> _InitBlobUpload = xeyezHal_GetBlobBegin(0) (0x11270: starts the
+   "GET_CAL_INFO_START" data flow + the StereoCameraBridge listener;
+   NOT the FPGA download despite the name)
+```
+
+The bitstream: `A_a_v4.4_BG0313.bit`, 235,930 B, Xilinx BIT format,
+design `work_top.ncd;HW_TIMEOUT=FALSE;UserID=0xFFFFFFFF`, part
+**3s400aft256** (Spartan-3A XC3S400A FT256), built 2010/04/06. The
+configuration is VOLATILE - the vendor re-downloads it on every
+device open; without it the DSP behind the FPGA never answers, which
+is exactly the T13 state-1 timeout. The bit file ships byte-identical
+in v2.5.0.7 and v2.6.0.6 (sha256 75df0a38..., pinned in
+`firmware/SHA256SUMS`).
+
+The wire (frame builder @0xb2f0, flow runner `flow_open` @0xb380,
+`DownLoadFpga` impl @0x10040, `SendFpgaCode` @0xd570; session plane
+EP 0x02 write / EP 0x82 read, the SAME pair the whole 7F 55 session
+uses; every reply is 8 B, magic `7f 55` + ack `01` @+4, 3 s budget;
+vendor codes: -10000 tx / -10015 short reply / -10014 frame /
+-10013 fopen / -10012 chunk tx):
+
+| step | TX | note |
+|---|---|---|
+| FPGA_DOWNLOAD_START | `7f 55 02 00 00 00 00 00` | u16 cmd 0x0002 |
+| FPGA_DOWNLOAD_QUERY_CFG | `7f 55 02 01 00 00 00 00` | cmd 0x0102; reply bytes 5..8 kept raw (idcode candidate) |
+| SendFpgaCode announce | `7f 55 02 02 00 00 00 04` + size **BE** u32 (12 B) | cmd 0x0202, flag word 4 = "a 4-B field follows" |
+| the file | the WHOLE file **bit-reversed** (`u8::reverse_bits`, the literal `(b&1)<<7 | ...` chain @0xd605), RAW **<=64 KiB** bulk writes, 3 s each, NO replies | the vendor reverses in place, .bit header included |
+| FPGA_DOWNLOAD_END | `7f 55 02 03 00 00 00 00` | cmd 0x0302 |
+| FPGA_DOWNLOAD_DONE | `7f 55 02 01 00 00 00 01` | cmd 0x0102, flag word 1 |
+
+Platform flag [device+0x41c44] == 1 would skip the bit-reversal and
+the flash-update step - this unit is platform != 1 (the flash update
+RAN in every capture), so the reversal applies. The open sequence's
+steps 5/6/8 (CMOS_CFG / FPGA_CFG / LED tables) are decoded but NOT
+yet implemented - the candidate next step if the plane stays dead
+after a clean FPGA download (payloads: the ini `*_Fpga` tables,
+`Led_Scale_Fpga_v26.txt` = addr/value pairs 0x58..0x6b).
+
+Implemented (turn 50): `protocol::fpga::{fpga_step_frame,
+fpga_send_announce, fpga_bit_reverse, FpgaDownload,
+FpgaDownloadReport}` over `Transport`, the replay test
+`src/tests/fpga_replay.rs` (byte-exact happy path, chunking, the
+vendor-chain pin over all 256 bytes, the four failure codes), and the
+records bench step [4/7] (`--no-fpga` skips, `--fpga-only` runs just
+the download). 166 tests green both feature states.

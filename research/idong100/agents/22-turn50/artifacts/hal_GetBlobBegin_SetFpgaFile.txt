@@ -1,0 +1,57 @@
+### GetBlobBegin @ RVA 0x15950  xeyezHal_GetBlobBegin
+00015950  55                 push ebp
+00015951  8bec               mov ebp, esp
+00015953  b9f4210810         mov ecx, 0x100821f4
+00015958  e833170000         call 0x10017090  ; ->0x17090
+0001595d  b9f4210810         mov ecx, 0x100821f4
+00015962  e8a9160000         call 0x10017010  ; ->0x17010
+00015967  83f801             cmp eax, 1
+0001596a  7512               jne 0x1001597e
+0001596c  8b4508             mov eax, dword ptr [ebp + 8]
+0001596f  50                 push eax
+00015970  b9e0040210         mov ecx, 0x100204e0
+00015975  e8f6b8ffff         call 0x10011270  ; ->0x11270
+0001597a  eb26               jmp 0x100159a2  ; ->0x159a2
+0001597c  eb24               jmp 0x100159a2  ; ->0x159a2
+0001597e  b9f4210810         mov ecx, 0x100821f4
+00015983  e888160000         call 0x10017010  ; ->0x17010
+00015988  83f802             cmp eax, 2
+0001598b  7512               jne 0x1001599f
+0001598d  8b4d08             mov ecx, dword ptr [ebp + 8]
+00015990  51                 push ecx
+00015991  b9f8210810         mov ecx, 0x100821f8
+00015996  e8d52effff         call 0x10008870  ; ->0x8870
+0001599b  eb05               jmp 0x100159a2  ; ->0x159a2
+0001599d  eb03               jmp 0x100159a2  ; ->0x159a2
+0001599f  83c8ff             or eax, 0xffffffff
+000159a2  5d                 pop ebp
+000159a3  c3                 ret 
+
+### SetFpgaFile @ RVA 0x15410  xeyezHal_SetFpgaFile
+00015410  55                 push ebp
+00015411  8bec               mov ebp, esp
+00015413  b9f4210810         mov ecx, 0x100821f4
+00015418  e8731c0000         call 0x10017090  ; ->0x17090
+0001541d  b9f4210810         mov ecx, 0x100821f4
+00015422  e8e91b0000         call 0x10017010  ; ->0x17010
+00015427  83f801             cmp eax, 1
+0001542a  7512               jne 0x1001543e
+0001542c  8b4508             mov eax, dword ptr [ebp + 8]
+0001542f  50                 push eax
+00015430  b9e0040210         mov ecx, 0x100204e0
+00015435  e8d668ffff         call 0x1000bd10  ; ->0xbd10
+0001543a  eb24               jmp 0x10015460  ; ->0x15460
+0001543c  eb1d               jmp 0x1001545b  ; ->0x1545b
+0001543e  b9f4210810         mov ecx, 0x100821f4
+00015443  e8c81b0000         call 0x10017010  ; ->0x17010
+00015448  83f802             cmp eax, 2
+0001544b  7509               jne 0x10015456
+0001544d  b801000000         mov eax, 1
+00015452  eb0c               jmp 0x10015460  ; ->0x15460
+00015454  eb05               jmp 0x1001545b  ; ->0x1545b
+00015456  83c8ff             or eax, 0xffffffff
+00015459  eb05               jmp 0x10015460  ; ->0x15460
+0001545b  b801000000         mov eax, 1
+00015460  5d                 pop ebp
+00015461  c3                 ret 
+

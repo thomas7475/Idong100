@@ -1,0 +1,232 @@
+### openseq_full @ RVA 0x13b70  
+00013b70  55                 push ebp
+00013b71  8bec               mov ebp, esp
+00013b73  83ec08             sub esp, 8
+00013b76  894df8             mov dword ptr [ebp - 8], ecx
+00013b79  c745fc01000000     mov dword ptr [ebp - 4], 1
+00013b80  833dc404021000     cmp dword ptr [0x100204c4], 0
+00013b87  7409               je 0x10013b92
+00013b89  833dc804021000     cmp dword ptr [0x100204c8], 0
+00013b90  752a               jne 0x10013bbc
+00013b92  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013b95  e826c8ffff         call 0x100103c0  ; ->0x103c0
+00013b9a  8945fc             mov dword ptr [ebp - 4], eax
+00013b9d  68c8af0110         push 0x1001afc8  ; "Init StartFlow"
+00013ba2  8b45fc             mov eax, dword ptr [ebp - 4]
+00013ba5  50                 push eax
+00013ba6  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013ba9  e8f2aeffff         call 0x1000eaa0  ; ->0xeaa0
+00013bae  837dfc00           cmp dword ptr [ebp - 4], 0
+00013bb2  7d08               jge 0x10013bbc
+00013bb4  8b45fc             mov eax, dword ptr [ebp - 4]
+00013bb7  e946030000         jmp 0x10013f02  ; ->0x13f02
+00013bbc  833dbc04021000     cmp dword ptr [0x100204bc], 0
+00013bc3  7520               jne 0x10013be5
+00013bc5  c745fc22fcffff     mov dword ptr [ebp - 4], 0xfffffc22
+00013bcc  68d8af0110         push 0x1001afd8  ; "SetFpgaFile"
+00013bd1  8b4dfc             mov ecx, dword ptr [ebp - 4]
+00013bd4  51                 push ecx
+00013bd5  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013bd8  e8c3aeffff         call 0x1000eaa0  ; ->0xeaa0
+00013bdd  8b45fc             mov eax, dword ptr [ebp - 4]
+00013be0  e91d030000         jmp 0x10013f02  ; ->0x13f02
+00013be5  833dc004021000     cmp dword ptr [0x100204c0], 0
+00013bec  752c               jne 0x10013c1a
+00013bee  6a04               push 4
+00013bf0  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013bf3  e8c880ffff         call 0x1000bcc0  ; ->0xbcc0
+00013bf8  8945fc             mov dword ptr [ebp - 4], eax
+00013bfb  68e4af0110         push 0x1001afe4  ; "SetCmosIndex"
+00013c00  8b55fc             mov edx, dword ptr [ebp - 4]
+00013c03  52                 push edx
+00013c04  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013c07  e894aeffff         call 0x1000eaa0  ; ->0xeaa0
+00013c0c  837dfc00           cmp dword ptr [ebp - 4], 0
+00013c10  7d08               jge 0x10013c1a
+00013c12  8b45fc             mov eax, dword ptr [ebp - 4]
+00013c15  e9e8020000         jmp 0x10013f02  ; ->0x13f02
+00013c1a  833dc404021000     cmp dword ptr [0x100204c4], 0
+00013c21  752e               jne 0x10013c51
+00013c23  6a00               push 0
+00013c25  6a00               push 0
+00013c27  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013c2a  e83180ffff         call 0x1000bc60  ; ->0xbc60
+00013c2f  8945fc             mov dword ptr [ebp - 4], eax
+00013c32  68f4af0110         push 0x1001aff4  ; "SetCmosTable"
+00013c37  8b45fc             mov eax, dword ptr [ebp - 4]
+00013c3a  50                 push eax
+00013c3b  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013c3e  e85daeffff         call 0x1000eaa0  ; ->0xeaa0
+00013c43  837dfc00           cmp dword ptr [ebp - 4], 0
+00013c47  7d08               jge 0x10013c51
+00013c49  8b45fc             mov eax, dword ptr [ebp - 4]
+00013c4c  e9b1020000         jmp 0x10013f02  ; ->0x13f02
+00013c51  833dc804021000     cmp dword ptr [0x100204c8], 0
+00013c58  752e               jne 0x10013c88
+00013c5a  6a00               push 0
+00013c5c  6a00               push 0
+00013c5e  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013c61  e89a7fffff         call 0x1000bc00  ; ->0xbc00
+00013c66  8945fc             mov dword ptr [ebp - 4], eax
+00013c69  6804b00110         push 0x1001b004  ; "SetFpgaTable"
+00013c6e  8b4dfc             mov ecx, dword ptr [ebp - 4]
+00013c71  51                 push ecx
+00013c72  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013c75  e826aeffff         call 0x1000eaa0  ; ->0xeaa0
+00013c7a  837dfc00           cmp dword ptr [ebp - 4], 0
+00013c7e  7d08               jge 0x10013c88
+00013c80  8b45fc             mov eax, dword ptr [ebp - 4]
+00013c83  e97a020000         jmp 0x10013f02  ; ->0x13f02
+00013c88  833dcc04021000     cmp dword ptr [0x100204cc], 0
+00013c8f  7512               jne 0x10013ca3
+00013c91  8b55f8             mov edx, dword ptr [ebp - 8]
+00013c94  81c2681c0400       add edx, 0x41c68
+00013c9a  8b45f8             mov eax, dword ptr [ebp - 8]
+00013c9d  8990101d0600       mov dword ptr [eax + 0x61d10], edx
+00013ca3  833dd004021000     cmp dword ptr [0x100204d0], 0
+00013caa  752c               jne 0x10013cd8
+00013cac  6a00               push 0
+00013cae  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013cb1  e8da7effff         call 0x1000bb90  ; ->0xbb90
+00013cb6  8945fc             mov dword ptr [ebp - 4], eax
+00013cb9  6814b00110         push 0x1001b014  ; "SetBoard"
+00013cbe  8b4dfc             mov ecx, dword ptr [ebp - 4]
+00013cc1  51                 push ecx
+00013cc2  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013cc5  e8d6adffff         call 0x1000eaa0  ; ->0xeaa0
+00013cca  837dfc00           cmp dword ptr [ebp - 4], 0
+00013cce  7d08               jge 0x10013cd8
+00013cd0  8b45fc             mov eax, dword ptr [ebp - 4]
+00013cd3  e92a020000         jmp 0x10013f02  ; ->0x13f02
+00013cd8  833dd404021000     cmp dword ptr [0x100204d4], 0
+00013cdf  752c               jne 0x10013d0d
+00013ce1  6a00               push 0
+00013ce3  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013ce6  e8657effff         call 0x1000bb50  ; ->0xbb50
+00013ceb  8945fc             mov dword ptr [ebp - 4], eax
+00013cee  6820b00110         push 0x1001b020  ; "SetTransMode"
+00013cf3  8b55fc             mov edx, dword ptr [ebp - 4]
+00013cf6  52                 push edx
+00013cf7  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013cfa  e8a1adffff         call 0x1000eaa0  ; ->0xeaa0
+00013cff  837dfc00           cmp dword ptr [ebp - 4], 0
+00013d03  7d08               jge 0x10013d0d
+00013d05  8b45fc             mov eax, dword ptr [ebp - 4]
+00013d08  e9f5010000         jmp 0x10013f02  ; ->0x13f02
+00013d0d  833dd804021000     cmp dword ptr [0x100204d8], 0
+00013d14  750d               jne 0x10013d23
+00013d16  8b45f8             mov eax, dword ptr [ebp - 8]
+00013d19  c7804c1c040001000000 mov dword ptr [eax + 0x41c4c], 1
+00013d23  833ddc04021000     cmp dword ptr [0x100204dc], 0
+00013d2a  750d               jne 0x10013d39
+00013d2c  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013d2f  c781501c040001000000 mov dword ptr [ecx + 0x41c50], 1
+00013d39  c705bc04021000000000 mov dword ptr [0x100204bc], 0
+00013d43  c705c004021000000000 mov dword ptr [0x100204c0], 0
+00013d4d  c705c404021000000000 mov dword ptr [0x100204c4], 0
+00013d57  c705c804021000000000 mov dword ptr [0x100204c8], 0
+00013d61  c705cc04021000000000 mov dword ptr [0x100204cc], 0
+00013d6b  c705d004021000000000 mov dword ptr [0x100204d0], 0
+00013d75  c705d404021000000000 mov dword ptr [0x100204d4], 0
+00013d7f  c705d804021000000000 mov dword ptr [0x100204d8], 0
+00013d89  c705dc04021000000000 mov dword ptr [0x100204dc], 0
+00013d93  8b55f8             mov edx, dword ptr [ebp - 8]
+00013d96  83ba441c040001     cmp dword ptr [edx + 0x41c44], 1
+00013d9d  7443               je 0x10013de2
+00013d9f  8b45f8             mov eax, dword ptr [ebp - 8]
+00013da2  c70002000000       mov dword ptr [eax], 2
+00013da8  6830b00110         push 0x1001b030  ; "B"
+00013dad  ff1594800110       call dword ptr [0x10018094]  ; KERNEL32.dll!OutputDebugStringW
+00013db3  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013db6  e8a5f2ffff         call 0x10013060  ; ->0x13060
+00013dbb  8945fc             mov dword ptr [ebp - 4], eax
+00013dbe  837dfc00           cmp dword ptr [ebp - 4], 0
+00013dc2  7d13               jge 0x10013dd7
+00013dc4  6858b00110         push 0x1001b058  ; "U"
+00013dc9  ff1594800110       call dword ptr [0x10018094]  ; KERNEL32.dll!OutputDebugStringW
+00013dcf  8b45fc             mov eax, dword ptr [ebp - 4]
+00013dd2  e92b010000         jmp 0x10013f02  ; ->0x13f02
+00013dd7  68e8030000         push 0x3e8
+00013ddc  ff1590800110       call dword ptr [0x10018090]  ; KERNEL32.dll!Sleep
+00013de2  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013de5  c70103000000       mov dword ptr [ecx], 3
+00013deb  8b55f8             mov edx, dword ptr [ebp - 8]
+00013dee  83c208             add edx, 8
+00013df1  52                 push edx
+00013df2  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013df5  e846c2ffff         call 0x10010040  ; ->0x10040
+00013dfa  8945fc             mov dword ptr [ebp - 4], eax
+00013dfd  837dfc00           cmp dword ptr [ebp - 4], 0
+00013e01  7d08               jge 0x10013e0b
+00013e03  8b45fc             mov eax, dword ptr [ebp - 4]
+00013e06  e9f7000000         jmp 0x10013f02  ; ->0x13f02
+00013e0b  8b45f8             mov eax, dword ptr [ebp - 8]
+00013e0e  83b8441c040001     cmp dword ptr [eax + 0x41c44], 1
+00013e15  742e               je 0x10013e45
+00013e17  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013e1a  83b9501c040000     cmp dword ptr [ecx + 0x41c50], 0
+00013e21  7422               je 0x10013e45
+00013e23  8b55f8             mov edx, dword ptr [ebp - 8]
+00013e26  c70204000000       mov dword ptr [edx], 4
+00013e2c  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013e2f  e87cdaffff         call 0x100118b0  ; ->0x118b0
+00013e34  8945fc             mov dword ptr [ebp - 4], eax
+00013e37  837dfc00           cmp dword ptr [ebp - 4], 0
+00013e3b  7d08               jge 0x10013e45
+00013e3d  8b45fc             mov eax, dword ptr [ebp - 4]
+00013e40  e9bd000000         jmp 0x10013f02  ; ->0x13f02
+00013e45  8b45f8             mov eax, dword ptr [ebp - 8]
+00013e48  83b8441c040001     cmp dword ptr [eax + 0x41c44], 1
+00013e4f  742e               je 0x10013e7f
+00013e51  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013e54  83b94c1c040000     cmp dword ptr [ecx + 0x41c4c], 0
+00013e5b  7422               je 0x10013e7f
+00013e5d  8b55f8             mov edx, dword ptr [ebp - 8]
+00013e60  c70207000000       mov dword ptr [edx], 7
+00013e66  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013e69  e882fbffff         call 0x100139f0  ; ->0x139f0
+00013e6e  8945fc             mov dword ptr [ebp - 4], eax
+00013e71  837dfc00           cmp dword ptr [ebp - 4], 0
+00013e75  7d08               jge 0x10013e7f
+00013e77  8b45fc             mov eax, dword ptr [ebp - 4]
+00013e7a  e983000000         jmp 0x10013f02  ; ->0x13f02
+00013e7f  8b45f8             mov eax, dword ptr [ebp - 8]
+00013e82  c70005000000       mov dword ptr [eax], 5
+00013e88  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013e8b  e800bfffff         call 0x1000fd90  ; ->0xfd90
+00013e90  8945fc             mov dword ptr [ebp - 4], eax
+00013e93  837dfc00           cmp dword ptr [ebp - 4], 0
+00013e97  7d05               jge 0x10013e9e
+00013e99  8b45fc             mov eax, dword ptr [ebp - 4]
+00013e9c  eb64               jmp 0x10013f02  ; ->0x13f02
+00013e9e  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013ea1  c70106000000       mov dword ptr [ecx], 6
+00013ea7  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013eaa  e8c1bdffff         call 0x1000fc70  ; ->0xfc70
+00013eaf  8945fc             mov dword ptr [ebp - 4], eax
+00013eb2  837dfc00           cmp dword ptr [ebp - 4], 0
+00013eb6  7d05               jge 0x10013ebd
+00013eb8  8b45fc             mov eax, dword ptr [ebp - 4]
+00013ebb  eb45               jmp 0x10013f02  ; ->0x13f02
+00013ebd  8b55f8             mov edx, dword ptr [ebp - 8]
+00013ec0  83ba441c040001     cmp dword ptr [edx + 0x41c44], 1
+00013ec7  742b               je 0x10013ef4
+00013ec9  8b45f8             mov eax, dword ptr [ebp - 8]
+00013ecc  83b84c1c040000     cmp dword ptr [eax + 0x41c4c], 0
+00013ed3  741f               je 0x10013ef4
+00013ed5  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013ed8  c70108000000       mov dword ptr [ecx], 8
+00013ede  8b4df8             mov ecx, dword ptr [ebp - 8]
+00013ee1  e88abbffff         call 0x1000fa70  ; ->0xfa70
+00013ee6  8945fc             mov dword ptr [ebp - 4], eax
+00013ee9  837dfc00           cmp dword ptr [ebp - 4], 0
+00013eed  7d05               jge 0x10013ef4
+00013eef  8b45fc             mov eax, dword ptr [ebp - 4]
+00013ef2  eb0e               jmp 0x10013f02  ; ->0x13f02
+00013ef4  8b55f8             mov edx, dword ptr [ebp - 8]
+00013ef7  c70209000000       mov dword ptr [edx], 9
+00013efd  b801000000         mov eax, 1
+00013f02  8be5               mov esp, ebp
+00013f04  5d                 pop ebp
+00013f05  c3                 ret 
+

@@ -1,0 +1,62 @@
+### prestart @ RVA 0x16300  xeyezHal_StartFlow
+00016300  55                 push ebp
+00016301  8bec               mov ebp, esp
+00016303  b9f4210810         mov ecx, 0x100821f4
+00016308  e8830d0000         call 0x10017090  ; ->0x17090
+0001630d  b9f4210810         mov ecx, 0x100821f4
+00016312  e8f90c0000         call 0x10017010  ; ->0x17010
+00016317  83f801             cmp eax, 1
+0001631a  750e               jne 0x1001632a
+0001631c  b9e0040210         mov ecx, 0x100204e0
+00016321  e84ad8ffff         call 0x10013b70  ; ->0x13b70
+00016326  eb26               jmp 0x1001634e  ; ->0x1634e
+00016328  eb24               jmp 0x1001634e  ; ->0x1634e
+0001632a  b9f4210810         mov ecx, 0x100821f4
+0001632f  e8dc0c0000         call 0x10017010  ; ->0x17010
+00016334  83f802             cmp eax, 2
+00016337  7512               jne 0x1001634b
+00016339  8b4508             mov eax, dword ptr [ebp + 8]
+0001633c  50                 push eax
+0001633d  b9f8210810         mov ecx, 0x100821f8
+00016342  e8594bffff         call 0x1000aea0  ; ->0xaea0
+00016347  eb05               jmp 0x1001634e  ; ->0x1634e
+00016349  eb03               jmp 0x1001634e  ; ->0x1634e
+0001634b  83c8ff             or eax, 0xffffffff
+0001634e  5d                 pop ebp
+0001634f  c3                 ret 
+
+### StartFlow @ RVA 0x16350  xeyezHal_UserLensParaRead
+00016350  55                 push ebp
+00016351  8bec               mov ebp, esp
+00016353  b9f4210810         mov ecx, 0x100821f4
+00016358  e8330d0000         call 0x10017090  ; ->0x17090
+0001635d  b9f4210810         mov ecx, 0x100821f4
+00016362  e8a90c0000         call 0x10017010  ; ->0x17010
+00016367  83f801             cmp eax, 1
+0001636a  7516               jne 0x10016382
+0001636c  8b450c             mov eax, dword ptr [ebp + 0xc]
+0001636f  50                 push eax
+00016370  8b4d08             mov ecx, dword ptr [ebp + 8]
+00016373  51                 push ecx
+00016374  b9e0040210         mov ecx, 0x100204e0
+00016379  e842e0ffff         call 0x100143c0  ; ->0x143c0
+0001637e  eb31               jmp 0x100163b1  ; ->0x163b1
+00016380  eb2a               jmp 0x100163ac  ; ->0x163ac
+00016382  b9f4210810         mov ecx, 0x100821f4
+00016387  e8840c0000         call 0x10017010  ; ->0x17010
+0001638c  83f802             cmp eax, 2
+0001638f  7516               jne 0x100163a7
+00016391  8b550c             mov edx, dword ptr [ebp + 0xc]
+00016394  52                 push edx
+00016395  8b4508             mov eax, dword ptr [ebp + 8]
+00016398  50                 push eax
+00016399  b9f8210810         mov ecx, 0x100821f8
+0001639e  e8cd49ffff         call 0x1000ad70  ; ->0xad70
+000163a3  eb0c               jmp 0x100163b1  ; ->0x163b1
+000163a5  eb05               jmp 0x100163ac  ; ->0x163ac
+000163a7  83c8ff             or eax, 0xffffffff
+000163aa  eb05               jmp 0x100163b1  ; ->0x163b1
+000163ac  b801000000         mov eax, 1
+000163b1  5d                 pop ebp
+000163b2  c3                 ret 
+

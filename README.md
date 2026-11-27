@@ -65,6 +65,39 @@ cargo run --features usb --example records -- --cmos        # T13: cold start + 
 
 The bench ladder T2-T13 with PASS criteria: `software/docs/LINUX_TESTS.md`.
 
+## Status (turn 50, 2026-11-28) - the T13 failure solved: `A_a_v4.4_BG0313.bit` is the FPGA bitstream, now downloaded by the driver
+
+The T13 bench failed at the cold machine's state 1 (`vendor -2: Rx
+DEVICE ID Msg Err`) with steps 1-3 PASS. Researching that failure
+answered the open `.bit` question in the same move: **the vendor
+software DOES use `A_a_v4.4_BG0313.bit`** - `xEyeUsb.ini [Config]
+BitFile=` names it, the xEyeUSB manager init hands it to
+`xeyezHal_SetFpgaFile`, and `xeyezHal_StartFlow` downloads it to the
+on-board **Xilinx Spartan-3A XC3S400A** on EVERY device open (the
+configuration is volatile; the open state machine @0x13b70 runs the
+8051 flash update, the FPGA download, the CMOS/FPGA/LED table flows,
+in that order). The DSP sits behind the FPGA - until the bitstream is
+loaded, the record plane (EP 0x83/0x03) is silent, which IS the T13
+state-1 timeout; the turn-32 "no FPGA upload on the wire" was a
+capture-window false negative. The download wire (same 7F 55 session
+plane, EP 0x02/0x82): START `7f 55 02 00..` -> QUERY_CFG `7f 55 02
+01..` -> announce `7f 55 02 02 00 00 00 04` + size BE u32 -> the
+WHOLE file **bit-reversed** in raw <=64 KiB writes (no replies) ->
+END -> DONE; replies are 8 B with ack `01` @+4. Full decode:
+`research/idong100/agents/22-turn50/FINDINGS.md` (+ the usbCom
+PRE-LOOP @0x114c0 bonus decode: records -> 2 ACKs -> PU 0x7FF/OD
+0x7EE "Reset DSP"). In the crate: `protocol::fpga::{fpga_step_frame,
+fpga_send_announce, fpga_bit_reverse, FpgaDownload,
+FpgaDownloadReport}` + the `fpga_replay` test (byte-exact frames,
+64 KiB chunking, the vendor bit-reversal chain pinned over all 256
+bytes, the four vendor failure codes), and the records bench is now
+7 steps - [4/7] the FPGA download with `--cmos` (`--no-fpga` skips,
+`--fpga-only` runs just it), then probe -> cold/hot start -> records;
+the ENS state-1 error now carries its cause (silence vs wrong-frame).
+166 tests green in both feature states, nightly fmt clean, examples
+warning-free both states. NEXT BENCH (T14): `cargo run --features
+usb --example records -- --cmos --frames 10`.
+
 ## Status (turn 49, 2026-11-28) - P3b: the ens_code.ldr upload decoded from the vendor DLL itself, the capture ask retired
 
 The T12 bench returned **VERDICT B** (silence on EP 0x83 after the

@@ -77,14 +77,21 @@ folder.
 
 `app_m8051_2611.hex` is the only MCU image the driver flashes. The other hex
 files are not pinned, so `flash_mcu` refuses them; none of them has been seen on
-the wire of the test unit. The captures also show that the `.bit` and `.ldr`
-files are never uploaded by the host during the captured 7F 55 session
-(PROTOCOL.md, turn 32); the driver pins them because the vendor host opens them
-by name. Turn 49 decoded WHERE the `.ldr` actually travels: `ens_code.ldr` is
-the DSP's runtime loader upload on the record plane (EP 0x83/0x03, PU/OD
-frames, `0xf790` state 2 - see PROTOCOL.md "ENS startup"), so the driver
-uploads it too (`records -- --cmos`, T13) - the 7F 55 flash captures never
-see it because it is a DIFFERENT plane.
+the wire of the test unit. The turn-32 captures never showed the `.bit` or
+`.ldr` on the wire - turn 49/50 explained why (both travel OUTSIDE the
+captured windows, so "never uploaded" was a capture blind spot, not a fact):
+
+- `ens_code.ldr` is the DSP's runtime loader upload on the record plane
+  (EP 0x83/0x03, PU/OD frames, `0xf790` state 2 - PROTOCOL.md "ENS
+  startup"); the driver uploads it too (`records -- --cmos`, T13/T14).
+- `A_a_v4.4_BG0313.bit` is the FPGA bitstream, downloaded on EVERY device
+  open over the session plane (EP 0x02/0x82) by `xeyezHal_StartFlow` step 3
+  (`DownLoadFpga` @0x10040: START -> QUERY_CFG -> announce{size BE} ->
+  the bit-reversed file in <=64 KiB raw writes -> END -> DONE) - turn 50
+  decode (PROTOCOL.md "FPGA bring-up", `research/idong100/agents/22-turn50/`).
+  The XC3S400A configuration is VOLATILE; the driver now downloads it too
+  (`records -- --cmos`, bench step [4/7]) - the captures never contained it
+  because they all started after `McuManager25::connect` had already run it.
 
 ## The vendor's file map
 

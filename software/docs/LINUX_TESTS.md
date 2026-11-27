@@ -444,45 +444,58 @@ decode of the 8-state machine (from the vendor DLL itself) makes that
 upload possible without the kit-37 game capture - the follow-up bench
 is T13.
 
-## T13 - THE P3b record-plane COLD START (records --cmos, turn 49)
+## T13 - THE P3b record-plane COLD START (records --cmos, turn 49) - RAN, turn 50 root cause
+
+**Turn-49/50 result (the user's bench run):** steps [1/6] enumerate,
+[2/6] identity, [3/6] full session init ALL PASS; [4/6] the probe
+stayed silent (VERDICT B, expected after a fresh flash); [5/6] the
+cold start loaded the pinned ldr (54,420 B, crc32_ens 0x63EAA8CA, 851
+chunks) and FAILED at state 1: `ens startup-begin failed (vendor -2:
+Rx DEVICE ID Msg Err / illegal)`. **Turn 50 root cause** (the research
+the failure triggered): the driver never configured the FPGA - the
+vendor downloads `A_a_v4.4_BG0313.bit` on every device open
+(`xeyezHal_StartFlow` step 3) and the DSP behind the XC3S400A never
+answers until it is loaded. Fixed in turn 50 (protocol::fpga + the
+bench step [4/7]); the state-1 error now also names its cause
+(silence vs a wrong-frame answer). T13 is superseded by **T14**.
 
 ```
-# the full flow: session init -> probe -> (VERDICT B) the 8-state
-# ens_code.ldr upload -> the record handshake loop:
+# the full flow: session init -> FPGA download -> probe -> (the 8-state
+# ens_code.ldr upload) -> the record handshake loop:
 cargo run --features usb --example records -- --cmos --frames 10
-# the old T12 read-only behavior (no upload, report and stop):
-cargo run --features usb --example records -- --cmos --no-ldr
+# the old T12 read-only behavior (no FPGA, no upload, report and stop):
+cargo run --features usb --example records -- --cmos --no-fpga --no-ldr
 # NeedHandleMatch = 0 (type 0x26, no pairing loop):
 cargo run --features usb --example records -- --cmos --no-match
+# the FPGA download alone (decides the turn-50 wire decode):
+cargo run --features usb --example records -- --cmos --fpga-only
 ```
 
-The turn-49 decode (full walkthrough:
-`research/idong100/agents/21-turn49/FINDINGS.md`): the vendor
-`0xf790` 8-state machine - startup-begin (PU 1 -> OD 1), the
-`ens_code.ldr` code-load (PU 2 {size, CRC32} -> OD 2 -> raw 64-B
-chunks -> OD 3 word 0xF), the skip, the pairing select (OD 5 -> PU
-0x25/0x26 -> OD 5), ID & version (PU 0x8001 -> OD 1: 32-B ID, 8-B
-version), the pairing/link loop (OD 0xFFF/4 -> PU 0xFFE/4) and the
-lens parameters (OD 6, 128 B -> PU 6). The CRC is the vendor crc.dll
-variant (`crc32_ens`: reflected 0xEDB88320 table, hybrid MSB update,
-init 0, no final xor - "123456789" -> 0x4D3A139E, the shipped ldr ->
-0x63EAA8CA). The driver replays it exactly, with the shipped,
-SHA-256-pinned `ens_code.ldr`.
+## T14 - THE P3c record plane WITH the FPGA bring-up (records --cmos, turn 50)
+
+The turn-50 flow adds step [4/7] before the probe: the FPGA bitstream
+download (`A_a_v4.4_BG0313.bit`, 235,930 B, XC3S400A, SHA-pinned) -
+START `7f 55 02 00..` -> QUERY_CFG `7f 55 02 01..` -> announce
+`7f 55 02 02 00 00 00 04` + size BE -> the bit-reversed file in
+<=64 KiB raw writes -> END -> DONE (full decode:
+`research/idong100/agents/22-turn50/FINDINGS.md`). Then the probe
+([5/7]) and the cold/hot start ([6/7]) as in T13.
 
 The verdict matrix:
 
 | observation | verdict |
 | --- | --- |
-| probe silent -> the cold start runs -> all milestones -> `records N/N` | PASS: the DSP runs, the marker record stream is LIVE - the blob layout decode is next |
-| probe silent -> the cold start runs -> the OD type-2 go-ahead never answers | the device is not in the boot state the vendor expects - full power cycle, then rerun (the loader upload is volatile RAM state) |
-| probe ALIVE (hot start path) -> `records N/N` | PASS: the previous session's DSP is still running - the hot start finished it (lens + DID) |
-| the code-load CRC verdict word != 0xF | the device computed a different CRC - send the printed announce CRC; a mismatch here means wrong ldr bytes (impossible: SHA-256-pinned) or a different firmware generation |
-| records stop mid-run | check the self-reboot window (31-157 s); the loader upload adds ~9 s (851 chunks at ~10 Hz device pace) - rerun on a fresh landing |
+| [4/7] PASS + [6/7] all milestones + records flow | PASS: the marker plane is LIVE end-to-end - the blob layout decode is next |
+| [4/7] PASS, [6/7] state 1 still silent (`Short{64,0}` in the cause) | the DSP needs more than the bitstream: implement the open sequence's FPGA register/LED table steps (0xfd90/0xfc70/0xfa70 - the ini `*_Fpga` tables) or check the DSP-release timing (usbCom sleeps 1000 ms before the machine) |
+| [4/7] PASS, [6/7] state 1 answers with a WRONG frame (`BadType{..}`) | something IS alive on EP 0x83 after the FPGA download - capture that frame; it likely pins the pre-loop's OD 0x7EE reset exchange order |
+| [4/7] FAIL, any step, cause `Short`/`read error` | the device did not accept the flow - capture the run; compare bytes against `research/idong100/agents/22-turn50/artifacts/hal_DownLoadFpga_impl_0x10040.txt` |
+| [4/7] FAIL, `reply ... magic/ack mismatch` with a real frame | the FPGA download decode is falsified on this unit - send the printed reply bytes; check the platform flag (the bit-reversal skip) |
+| [5/7] probe ALIVE straight after [4/7] | the FPGA download woke the DSP with its resident code - the hot start finishes it |
 
-PASS criteria: the milestones print in order, the DID/version/lens
-lines decode, and at least one complete record exchange follows
-(`--frames 10` at the 35-fps pacing runs ~1 s; the run stays well
-inside the self-reboot window).
+PASS criteria: [4/7] prints the QUERY_CFG reply + PASS; [6/7] the
+milestones print in order and at least one complete record exchange
+follows. The FPGA download adds ~250 ms of wire time (235,930 B in 4
+writes) - the run stays well inside the self-reboot window.
 
 ## T8 - THE P2.3 8051 firmware upload (controlled flash replay)
 

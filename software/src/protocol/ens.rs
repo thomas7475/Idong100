@@ -488,10 +488,20 @@ impl<IO: RecordIo> ColdStart<'_, IO> {
     pub fn run(&mut self, handle_match: bool) -> crate::Result<StartupOutcome> {
         // ---- state 1: startup begin (0xfa30) ----
         // "Tx DSP Start" (PU type 1) -> "Rx DEVICE ID" (OD type 1).
-        self.tx(&pu_frame(ENS_TYPE_START), ENS_TIMEOUT_FRAME)
-            .map_err(|_| vendor_ens("startup-begin", -1, "Tx DSP Start Err"))?;
-        self.rx(RECORD_FRAME_LEN, ENS_TYPE_DEVICE_ID, ENS_TIMEOUT_FRAME)
-            .map_err(|_| vendor_ens("startup-begin", -2, "Rx DEVICE ID Msg Err / illegal"))?;
+        // The cause stays in the message (turn 50: the T13 bench ran
+        // this state and "vendor -2" alone could not tell a SILENT
+        // device from a wrong-frame answer - Short{} = silence,
+        // BadType{} = something answered).
+        self.tx(&pu_frame(ENS_TYPE_START), ENS_TIMEOUT_FRAME).map_err(|e| {
+            crate::IdongError::Usb(format!(
+                "ens startup-begin failed (vendor -1: Tx DSP Start Err; cause: {e})"
+            ))
+        })?;
+        self.rx(RECORD_FRAME_LEN, ENS_TYPE_DEVICE_ID, ENS_TIMEOUT_FRAME).map_err(|e| {
+            crate::IdongError::Usb(format!(
+                "ens startup-begin failed (vendor -2: Rx DEVICE ID Msg Err / illegal; cause: {e})"
+            ))
+        })?;
         self.step("startup-begin")?;
 
         // ---- state 2: code-load (0xfae0) ----

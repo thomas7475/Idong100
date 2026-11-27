@@ -11,6 +11,7 @@
 pub mod boot;
 pub mod cmd;
 pub mod ens;
+pub mod fpga;
 pub mod frames;
 pub mod records;
 pub mod runtime;

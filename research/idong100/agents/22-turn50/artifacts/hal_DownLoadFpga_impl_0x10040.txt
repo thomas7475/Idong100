@@ -1,0 +1,109 @@
+### downloadfpga_impl @ RVA 0x10040  
+00010040  55                 push ebp
+00010041  8bec               mov ebp, esp
+00010043  83ec08             sub esp, 8
+00010046  894df8             mov dword ptr [ebp - 8], ecx
+00010049  685cb60110         push 0x1001b65c
+0001004e  8b45f8             mov eax, dword ptr [ebp - 8]
+00010051  50                 push eax
+00010052  e849c0ffff         call 0x1000c0a0  ; ->0xc0a0
+00010057  83c408             add esp, 8
+0001005a  6a08               push 8
+0001005c  6a08               push 8
+0001005e  6a01               push 1
+00010060  6a00               push 0
+00010062  6a00               push 0
+00010064  6a00               push 0
+00010066  6a00               push 0
+00010068  6a02               push 2
+0001006a  8b4df8             mov ecx, dword ptr [ebp - 8]
+0001006d  e80eb3ffff         call 0x1000b380  ; ->0xb380
+00010072  8945fc             mov dword ptr [ebp - 4], eax
+00010075  689cb60110         push 0x1001b69c  ; "FPGA_DOWNLOAD_START"
+0001007a  8b4dfc             mov ecx, dword ptr [ebp - 4]
+0001007d  51                 push ecx
+0001007e  8b4df8             mov ecx, dword ptr [ebp - 8]
+00010081  e81aeaffff         call 0x1000eaa0  ; ->0xeaa0
+00010086  837dfc00           cmp dword ptr [ebp - 4], 0
+0001008a  7d08               jge 0x10010094
+0001008c  8b45fc             mov eax, dword ptr [ebp - 4]
+0001008f  e9d8000000         jmp 0x1001016c  ; ->0x1016c
+00010094  6a08               push 8
+00010096  6a08               push 8
+00010098  6a01               push 1
+0001009a  6a00               push 0
+0001009c  6a00               push 0
+0001009e  6a00               push 0
+000100a0  6a01               push 1
+000100a2  6a02               push 2
+000100a4  8b4df8             mov ecx, dword ptr [ebp - 8]
+000100a7  e8d4b2ffff         call 0x1000b380  ; ->0xb380
+000100ac  8945fc             mov dword ptr [ebp - 4], eax
+000100af  68b0b60110         push 0x1001b6b0  ; "FPGA_DOWNLOAD_QUERY_CFG"
+000100b4  8b55fc             mov edx, dword ptr [ebp - 4]
+000100b7  52                 push edx
+000100b8  8b4df8             mov ecx, dword ptr [ebp - 8]
+000100bb  e8e0e9ffff         call 0x1000eaa0  ; ->0xeaa0
+000100c0  837dfc00           cmp dword ptr [ebp - 4], 0
+000100c4  7d08               jge 0x100100ce
+000100c6  8b45fc             mov eax, dword ptr [ebp - 4]
+000100c9  e99e000000         jmp 0x1001016c  ; ->0x1016c
+000100ce  8b4508             mov eax, dword ptr [ebp + 8]
+000100d1  50                 push eax
+000100d2  8b4df8             mov ecx, dword ptr [ebp - 8]
+000100d5  e896d4ffff         call 0x1000d570  ; ->0xd570
+000100da  8945fc             mov dword ptr [ebp - 4], eax
+000100dd  68c8b60110         push 0x1001b6c8  ; "SendFpgaCode"
+000100e2  8b4dfc             mov ecx, dword ptr [ebp - 4]
+000100e5  51                 push ecx
+000100e6  8b4df8             mov ecx, dword ptr [ebp - 8]
+000100e9  e8b2e9ffff         call 0x1000eaa0  ; ->0xeaa0
+000100ee  837dfc00           cmp dword ptr [ebp - 4], 0
+000100f2  7d05               jge 0x100100f9
+000100f4  8b45fc             mov eax, dword ptr [ebp - 4]
+000100f7  eb73               jmp 0x1001016c  ; ->0x1016c
+000100f9  6a08               push 8
+000100fb  6a08               push 8
+000100fd  6a01               push 1
+000100ff  6a00               push 0
+00010101  6a00               push 0
+00010103  6a00               push 0
+00010105  6a03               push 3
+00010107  6a02               push 2
+00010109  8b4df8             mov ecx, dword ptr [ebp - 8]
+0001010c  e86fb2ffff         call 0x1000b380  ; ->0xb380
+00010111  8945fc             mov dword ptr [ebp - 4], eax
+00010114  68d8b60110         push 0x1001b6d8  ; "FPGA_DOWNLOAD_END"
+00010119  8b55fc             mov edx, dword ptr [ebp - 4]
+0001011c  52                 push edx
+0001011d  8b4df8             mov ecx, dword ptr [ebp - 8]
+00010120  e87be9ffff         call 0x1000eaa0  ; ->0xeaa0
+00010125  837dfc00           cmp dword ptr [ebp - 4], 0
+00010129  7d05               jge 0x10010130
+0001012b  8b45fc             mov eax, dword ptr [ebp - 4]
+0001012e  eb3c               jmp 0x1001016c  ; ->0x1016c
+00010130  6a08               push 8
+00010132  6a08               push 8
+00010134  6a01               push 1
+00010136  6a00               push 0
+00010138  6a00               push 0
+0001013a  6a01               push 1
+0001013c  6a01               push 1
+0001013e  6a02               push 2
+00010140  8b4df8             mov ecx, dword ptr [ebp - 8]
+00010143  e838b2ffff         call 0x1000b380  ; ->0xb380
+00010148  8945fc             mov dword ptr [ebp - 4], eax
+0001014b  68ecb60110         push 0x1001b6ec  ; "FPGA_DOWNLOAD_DONE"
+00010150  8b45fc             mov eax, dword ptr [ebp - 4]
+00010153  50                 push eax
+00010154  8b4df8             mov ecx, dword ptr [ebp - 8]
+00010157  e844e9ffff         call 0x1000eaa0  ; ->0xeaa0
+0001015c  837dfc00           cmp dword ptr [ebp - 4], 0
+00010160  7d05               jge 0x10010167
+00010162  8b45fc             mov eax, dword ptr [ebp - 4]
+00010165  eb05               jmp 0x1001016c  ; ->0x1016c
+00010167  b801000000         mov eax, 1
+0001016c  8be5               mov esp, ebp
+0001016e  5d                 pop ebp
+0001016f  c20400             ret 4
+

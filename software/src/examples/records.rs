@@ -1,36 +1,40 @@
-//! P3a/P3b marker-record-plane bench - T12/T13 (turns 46/49).
+//! P3a/P3b marker-record-plane bench - T12/T13/T14 (turns 46/49/50).
 //!
 //! `cargo run --features usb --example records`
 //! `cargo run --features usb --example records -- --cmos`
 //! `cargo run --features usb --example records -- --cmos --frames 10`
 //! `cargo run --features usb --example records -- --cmos --frames 10 --out recdir`
-//! `cargo run --features usb --example records -- --cmos --no-ldr   (T12: probe only)`
+//! `cargo run --features usb --example records -- --cmos --no-fpga --no-ldr   (T12: probe only)`
 //!
 //! What this does on the REAL sensor:
 //!   1. enumerate - runtime device 0471:2500 must be present
 //!   2. read-only identity (the four EEPROM reads, like bringup)
 //!   3. WITH `--cmos` only: the full session init (register tables +
 //!      poll cycle, exactly session_full --cmos)
-//!   4. the ENS PROBE (read-only): read 64 B from EP 0x83 ten times
+//!   4. WITH `--cmos` only (turn 50): the FPGA BITSTREAM download -
+//!      A_a_v4.4_BG0313.bit, SHA-pinned, bit-reversed and streamed in
+//!      64 KiB chunks over the 7F 55 session plane (the vendor
+//!      `xeyezHal_StartFlow` step 3 / `DownLoadFpga` @0x10040; the
+//!      XC3S400A config is VOLATILE - the vendor re-downloads it on
+//!      every device open). `--no-fpga` skips it.
+//!   5. the ENS PROBE (read-only): read 64 B from EP 0x83 ten times
 //!      (100 ms each) and check for an OD frame of type 0xF0 - the
 //!      vendor usbCom worker's startup probe (xEyeUSB.dll @RVA 0x10640)
-//!   5a. probe ALIVE -> the HOT START (0x10640 + 0x10900): three
+//!   6a. probe ALIVE -> the HOT START (0x10640 + 0x10900): three
 //!       record cycles, two type-7 ACKs, then the lens (PU/OD 0x10)
 //!       and device-ID (PU/OD 0x9001) exchange
-//!   5b. probe SILENT (the T12 verdict) -> the COLD START (0xf790,
-//!       turn 49: fully decoded from the vendor DLL): the 8-state
-//!       machine that uploads the shipped, SHA-256-pinned
+//!   6b. probe SILENT -> the COLD START (0xf790, turn 49): the
+//!       8-state machine that uploads the shipped, SHA-256-pinned
 //!       `ens_code.ldr` to the DSP (PU type 2 {size, CRC32} -> OD 2 ->
 //!       raw 64-B chunks -> OD 3), then the pairing select, the ID &
 //!       version exchange, the pairing loop and the lens parameters.
-//!       `--no-ldr` keeps the old T12 behavior (report and stop).
-//!   6. the RECORD LOOP: status frame -> 640-B record -> type-7 ACK,
+//!       `--no-ldr` keeps the T12 behavior (report and stop).
+//!   7. the RECORD LOOP: status frame -> 640-B record -> type-7 ACK,
 //!      `--frames N` times, raw dumps + per-record stats.
 //!
-//! The only flash write in this bench is the DSP's runtime loader
-//! upload (RAM code-load via the record plane - volatile, exactly the
-//! vendor's own startup). The 8051 flash and the EEPROM are never
-//! touched.
+//! The FPGA download and the DSP loader upload are both VOLATILE RAM
+//! loads (the vendor's own startup behavior). The 8051 flash and the
+//! EEPROM are never touched.
 
 #[cfg(feature = "usb")]
 fn main() {
@@ -54,8 +58,10 @@ fn main() {
     let probe_only = args.iter().any(|a| a == "--probe-only");
     let no_ldr = args.iter().any(|a| a == "--no-ldr");
     let no_match = args.iter().any(|a| a == "--no-match");
+    let no_fpga = args.iter().any(|a| a == "--no-fpga");
+    let fpga_only = args.iter().any(|a| a == "--fpga-only");
 
-    println!("[1/6] enumerate");
+    println!("[1/7] enumerate");
     let devices = idong::list_devices();
     if devices.is_empty() {
         println!("      no sensor found - plug the sensor in (0471:2600/2500)");
@@ -80,7 +86,7 @@ fn main() {
     };
     println!("      PASS: vendor interface MI_04 claimed (bulk pairs 0x02/0x82 + 0x03/0x83)");
 
-    println!("[2/6] read-only identity");
+    println!("[2/7] read-only identity");
     match idong::Session::connect_readonly(&mut t) {
         Ok(info) => {
             match idong::calib::parse_calibration_payload(&info.calibration) {
@@ -102,12 +108,13 @@ fn main() {
     }
 
     if !cmos {
-        println!("[3/6] session init SKIPPED (no --cmos)");
-        println!("      The vendor engine completes the register init before the");
-        println!("      record plane can run. Rerun with --cmos to send the exact");
-        println!("      vendor tables first (volatile registers, EEPROM untouched).");
+        println!("[3/7] session init SKIPPED (no --cmos)");
+        println!("      The vendor engine completes the register init and the");
+        println!("      FPGA download before the record plane can run. Rerun with");
+        println!("      --cmos to send the vendor tables + the bitstream first");
+        println!("      (both volatile - RAM state, EEPROM untouched).");
     } else {
-        println!("[3/6] full session init (--cmos: register tables + polls)");
+        println!("[3/7] full session init (--cmos: register tables + polls)");
         match idong::Session::connect(&mut t, idong::Phase::Runtime, &[], false) {
             Ok(mut session) => {
                 if let Err(e) = session.poll_cycle() {
@@ -122,7 +129,51 @@ fn main() {
         }
     }
 
-    println!("[4/6] ENS probe: EP 0x83, 64 B x {ENS_PROBE_TRIES} @ 100 ms, expecting OD type 0xF0");
+    // ---- [4/7]: the FPGA bitstream download (turn 50) ----
+    if cmos && !no_fpga {
+        println!("[4/7] FPGA bring-up: download A_a_v4.4_BG0313.bit (StartFlow step 3)");
+        let set = match idong::firmware::load_set() {
+            Ok(s) => s,
+            Err(e) => {
+                println!("      FAIL: firmware set: {e}");
+                std::process::exit(2);
+            }
+        };
+        println!(
+            "      bitstream {} B (XC3S400A work_top.ncd, volatile config) - bit-reversed, {} chunks of 64 KiB",
+            set.bit.len(),
+            set.bit.len().div_ceil(idong::protocol::fpga::FPGA_CHUNK)
+        );
+        let mut dl = idong::protocol::fpga::FpgaDownload::new(&mut t);
+        match dl.run(&set.bit) {
+            Ok(rep) => {
+                for m in &dl.milestones {
+                    println!("      milestone: {m}");
+                }
+                println!("      QUERY_CFG reply: {}", hex_head(&rep.query_reply));
+                println!(
+                    "      PASS: the FPGA is configured ({} B in {} chunks)",
+                    rep.size, rep.chunks
+                );
+            }
+            Err(e) => {
+                println!("      FAIL: {e}");
+                println!("      (the FPGA config is volatile and the vendor re-downloads");
+                println!("      it on every open - power-cycle the sensor and rerun)");
+                std::process::exit(2);
+            }
+        }
+        if fpga_only {
+            println!();
+            println!("PASS: fpga-only run (--fpga-only). The DSP loader (ens_code.ldr)");
+            println!("was NOT uploaded - rerun without the flag for the full plane.");
+            return;
+        }
+    } else {
+        println!("[4/7] FPGA bring-up SKIPPED (--no-fpga or no --cmos)");
+    }
+
+    println!("[5/7] ENS probe: EP 0x83, 64 B x {ENS_PROBE_TRIES} @ 100 ms, expecting OD type 0xF0");
     let mut probe_saw = None;
     for try_no in 1..=ENS_PROBE_TRIES {
         match t.read_bulk_ep(EP_RECORD_IN, RECORD_FRAME_LEN, ENS_PROBE_TIMEOUT) {
@@ -163,7 +214,7 @@ fn main() {
             std::process::exit(2);
         }
         println!();
-        println!("[5/6] cold start: the 8-state ens_code.ldr upload (sha256-pinned)");
+        println!("[6/7] cold start: the 8-state ens_code.ldr upload (sha256-pinned)");
         let set = match idong::firmware::load_set() {
             Ok(s) => s,
             Err(e) => {
@@ -214,7 +265,7 @@ fn main() {
         return;
     }
     println!();
-    println!("[5/6] hot start: 3 record cycles + lens/DID exchange (0x10640 + 0x10900)");
+    println!("[6/7] hot start: 3 record cycles + lens/DID exchange (0x10640 + 0x10900)");
     let mut hs = HotStart::new(&mut t);
     match hs.run() {
         Ok(Some(out)) => {
@@ -249,7 +300,7 @@ fn startup_done(t: &mut idong::UsbTransport, frames: usize, outdir: String, cold
     let how = if cold { "cold start" } else { "hot start" };
     println!();
     println!(
-        "[6/6] handshake loop after {how}: {frames} records (status -> 640-B record -> type-7 ACK)"
+        "[7/7] handshake loop after {how}: {frames} records (status -> 640-B record -> type-7 ACK)"
     );
     let _ = std::fs::create_dir_all(&outdir);
     let mut ack = idong::protocol::ens::Type7Command::ack_zeros();

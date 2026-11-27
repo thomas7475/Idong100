@@ -1,0 +1,77 @@
+### flow_open @ RVA 0xb380  
+0000b380  55                 push ebp
+0000b381  8bec               mov ebp, esp
+0000b383  83ec08             sub esp, 8
+0000b386  894df8             mov dword ptr [ebp - 8], ecx
+0000b389  6a08               push 8
+0000b38b  6a00               push 0
+0000b38d  8b45f8             mov eax, dword ptr [ebp - 8]
+0000b390  0508070000         add eax, 0x708
+0000b395  50                 push eax
+0000b396  e8356cffff         call 0x10001fd0  ; MSVCR80.dll!memset
+0000b39b  83c40c             add esp, 0xc
+0000b39e  668b4d18           mov cx, word ptr [ebp + 0x18]
+0000b3a2  51                 push ecx
+0000b3a3  8a5514             mov dl, byte ptr [ebp + 0x14]
+0000b3a6  52                 push edx
+0000b3a7  8a4510             mov al, byte ptr [ebp + 0x10]
+0000b3aa  50                 push eax
+0000b3ab  8a4d0c             mov cl, byte ptr [ebp + 0xc]
+0000b3ae  51                 push ecx
+0000b3af  8a5508             mov dl, byte ptr [ebp + 8]
+0000b3b2  52                 push edx
+0000b3b3  8b45f8             mov eax, dword ptr [ebp - 8]
+0000b3b6  0508030000         add eax, 0x308
+0000b3bb  50                 push eax
+0000b3bc  8b4df8             mov ecx, dword ptr [ebp - 8]
+0000b3bf  e82cffffff         call 0x1000b2f0  ; ->0xb2f0
+0000b3c4  68e8030000         push 0x3e8
+0000b3c9  8b4d20             mov ecx, dword ptr [ebp + 0x20]
+0000b3cc  51                 push ecx
+0000b3cd  8b55f8             mov edx, dword ptr [ebp - 8]
+0000b3d0  81c208030000       add edx, 0x308
+0000b3d6  52                 push edx
+0000b3d7  6a00               push 0
+0000b3d9  e8f27affff         call 0x10002ed0  ; EasyUsb.dll!EasyUsb.dll!ord2
+0000b3de  83c410             add esp, 0x10
+0000b3e1  85c0               test eax, eax
+0000b3e3  7d07               jge 0x1000b3ec
+0000b3e5  b8f0d8ffff         mov eax, 0xffffd8f0
+0000b3ea  eb74               jmp 0x1000b460  ; ->0xb460
+0000b3ec  8b45f8             mov eax, dword ptr [ebp - 8]
+0000b3ef  0508070000         add eax, 0x708
+0000b3f4  8b4df8             mov ecx, dword ptr [ebp - 8]
+0000b3f7  89810c0b0400       mov dword ptr [ecx + 0x40b0c], eax
+0000b3fd  68b80b0000         push 0xbb8
+0000b402  8b5524             mov edx, dword ptr [ebp + 0x24]
+0000b405  52                 push edx
+0000b406  8b45f8             mov eax, dword ptr [ebp - 8]
+0000b409  0508070000         add eax, 0x708
+0000b40e  50                 push eax
+0000b40f  6a01               push 1
+0000b411  e8c07affff         call 0x10002ed6  ; EasyUsb.dll!EasyUsb.dll!ord1
+0000b416  83c410             add esp, 0x10
+0000b419  8945fc             mov dword ptr [ebp - 4], eax
+0000b41c  8b4dfc             mov ecx, dword ptr [ebp - 4]
+0000b41f  3b4d24             cmp ecx, dword ptr [ebp + 0x24]
+0000b422  7407               je 0x1000b42b
+0000b424  b8f1d8ffff         mov eax, 0xffffd8f1
+0000b429  eb35               jmp 0x1000b460  ; ->0xb460
+0000b42b  8b55f8             mov edx, dword ptr [ebp - 8]
+0000b42e  8b820c0b0400       mov eax, dword ptr [edx + 0x40b0c]
+0000b434  0fb708             movzx ecx, word ptr [eax]
+0000b437  81f97f550000       cmp ecx, 0x557f
+0000b43d  7515               jne 0x1000b454
+0000b43f  8b55f8             mov edx, dword ptr [ebp - 8]
+0000b442  8b820c0b0400       mov eax, dword ptr [edx + 0x40b0c]
+0000b448  0fb64804           movzx ecx, byte ptr [eax + 4]
+0000b44c  0fb6551c           movzx edx, byte ptr [ebp + 0x1c]
+0000b450  3bca               cmp ecx, edx
+0000b452  7407               je 0x1000b45b
+0000b454  b8f2d8ffff         mov eax, 0xffffd8f2
+0000b459  eb05               jmp 0x1000b460  ; ->0xb460
+0000b45b  b801000000         mov eax, 1
+0000b460  8be5               mov esp, ebp
+0000b462  5d                 pop ebp
+0000b463  c22000             ret 0x20
+

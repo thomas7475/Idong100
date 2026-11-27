@@ -1,0 +1,472 @@
+=== xEyeUSB.dll ===
+  export 0x00ca90 ??0?$iDongSingleton@VxEyeUSBManager@@@@QAE@XZ
+  export 0x00c840 ??0xEyeUSBManager@@QAE@ABV0@@Z
+  export 0x00d550 ??0xEyeUSBManager@@QAE@XZ
+  export 0x00cad0 ??1?$iDongSingleton@VxEyeUSBManager@@@@QAE@XZ
+  export 0x00d580 ??1xEyeUSBManager@@QAE@XZ
+  export 0x00c830 ??4?$iDongSingleton@VxEyeUSBManager@@@@QAEAAV0@ABV0@@Z
+  export 0x00c830 ??4xEyeUSBManager@@QAEAAV0@ABV0@@Z
+  export 0x016e00 ??_7xEyeUSBManager@@6B@
+  export 0x00d5c0 ?Init@xEyeUSBManager@@UAEHPAX00@Z
+  export 0x00d640 ?getProperty@xEyeUSBManager@@UAEHPADPAX@Z
+  export 0x00caf0 ?getSingleton@?$iDongSingleton@VxEyeUSBManager@@@@SAAAVxEyeUSBManager@@XZ
+  export 0x00caf0 ?getSingletonPtr@?$iDongSingleton@VxEyeUSBManager@@@@SAPAVxEyeUSBManager@@XZ
+  export 0x01c6d4 ?ms_Singleton@?$iDongSingleton@VxEyeUSBManager@@@@1PAVxEyeUSBManager@@A
+  export 0x00d5d0 ?setProperty@xEyeUSBManager@@UAEHPADPAX@Z
+  export 0x00d330 GetHandleMatchResult
+  export 0x00d530 GetUseLensParam
+  export 0x00d0f0 GetxEyeUSBID
+  export 0x00cd60 GetxEyeUSBState
+  export 0x00ccc0 InitxEyeUSB
+  export 0x00d370 SetxEyeUSBState
+  export 0x00d2f0 StartHandleMatch
+  imports KERNEL32.dll:
+    0x10015020 WideCharToMultiByte
+    0x10015024 IsWow64Process
+    0x10015028 GetCurrentProcess
+    0x1001502c GetExitCodeProcess
+    0x10015030 OutputDebugStringA
+    0x10015034 Sleep
+    0x10015038 WaitForSingleObject
+    0x1001503c CreateProcessA
+    0x10015040 GetModuleFileNameA
+    0x10015044 GetLastError
+    0x10015048 GetPrivateProfileStringA
+    0x1001504c FindClose
+    0x10015050 FindNextFileA
+    0x10015054 DeleteFileA
+    0x10015058 SetFileAttributesA
+    0x1001505c FindFirstFileA
+    0x10015060 FindResourceA
+    0x10015064 SizeofResource
+    0x10015068 LockResource
+    0x1001506c LoadResource
+    0x10015070 FindResourceExA
+    0x10015074 FreeLibrary
+    0x10015078 GetProcAddress
+    0x1001507c LoadLibraryA
+    0x10015080 GetPrivateProfileIntA
+    0x10015084 CreateDirectoryA
+    0x10015088 TerminateThread
+    0x1001508c GetTickCount
+    0x10015090 QueryPerformanceCounter
+    0x10015094 ResumeThread
+    0x10015098 SetThreadPriority
+    0x1001509c SuspendThread
+    0x100150a0 InitializeCriticalSection
+    0x100150a4 GetExitCodeThread
+    0x100150a8 GetVersionExA
+    0x100150ac CloseHandle
+    0x100150b0 Thread32Next
+    0x100150b4 Thread32First
+    0x100150b8 CreateToolhelp32Snapshot
+    0x100150bc Process32Next
+    0x100150c0 Process32First
+    0x100150c4 GetCurrentProcessId
+    0x100150c8 WritePrivateProfileStringA
+    0x100150cc GetSystemTimeAsFileTime
+    0x100150d0 GetCurrentThreadId
+    0x100150d4 IsDebuggerPresent
+    0x100150d8 SetUnhandledExceptionFilter
+    0x100150dc UnhandledExceptionFilter
+    0x100150e0 TerminateProcess
+    0x100150e4 InterlockedCompareExchange
+    0x100150e8 GetProcessHeap
+    0x100150ec HeapSize
+    0x100150f0 HeapReAlloc
+    0x100150f4 HeapFree
+    0x100150f8 HeapAlloc
+    0x100150fc HeapDestroy
+    0x10015100 DeleteCriticalSection
+    0x10015104 InterlockedExchange
+    0x10015108 LeaveCriticalSection
+    0x1001510c EnterCriticalSection
+    0x10015110 RaiseException
+    0x10015114 GetThreadLocale
+    0x10015118 GetLocaleInfoA
+    0x1001511c QueryPerformanceFrequency
+    0x10015120 GetACP
+  imports USER32.dll:
+    0x10015324 GetDesktopWindow
+    0x10015328 SendMessageA
+    0x1001532c MessageBoxA
+    0x10015330 FindWindowA
+    0x10015334 PostMessageA
+    0x10015338 GetWindowTextA
+    0x1001533c IsWindow
+    0x10015340 EnumChildWindows
+    0x10015344 GetClassNameA
+    0x10015348 EnumThreadWindows
+    0x1001534c UnregisterClassA
+  imports ADVAPI32.dll:
+    0x10015000 RegOpenKeyExA
+    0x10015004 RegOpenKeyA
+    0x10015008 RegQueryValueExA
+    0x1001500c RegCloseKey
+  imports SHELL32.dll:
+    0x10015308 SHGetFolderPathA
+  imports xEyeMouse.dll:
+    0x10015388 ?SetPlatform@xEyeMouseManager@@QAEXH@Z
+    0x1001538c ?getSingleton@xEyeMouseManager@@SAAAV1@XZ
+  imports MSVCP80.dll:
+    0x10015128 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@XZ
+    0x1001512c ??_D?$basic_ofstream@DU?$char_traits@D@std@@@std@@QAEXXZ
+    0x10015130 ??0?$basic_ofstream@DU?$char_traits@D@std@@@std@@QAE@XZ
+    0x10015134 ??6?$basic_ostream@DU?$char_traits@D@std@@@std@@QAEAAV01@P6AAAV01@AAV01@@Z@Z
+    0x10015138 ?endl@std@@YAAAV?$basic_ostream@DU?$char_traits@D@std@@@1@AAV21@@Z
+    0x1001513c ?open@?$basic_ofstream@DU?$char_traits@D@std@@@std@@QAEXPBDHH@Z
+    0x10015140 ?close@?$basic_ofstream@DU?$char_traits@D@std@@@std@@QAEXXZ
+    0x10015144 ?is_open@?$basic_ofstream@DU?$char_traits@D@std@@@std@@QBE_NXZ
+    0x10015148 ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@PBD@Z
+    0x1001514c ??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@ABV01@@Z
+    0x10015150 ?setstate@?$basic_ios@DU?$char_traits@D@std@@@std@@QAEXH_N@Z
+    0x10015154 ?width@ios_base@std@@QAEHH@Z
+    0x10015158 ?sputn@?$basic_streambuf@DU?$char_traits@D@std@@@std@@QAEHPBDH@Z
+    0x1001515c ?eq_int_type@?$char_traits@D@std@@SA_NABH0@Z
+    0x10015160 ?eof@?$char_traits@D@std@@SAHXZ
+    0x10015164 ?sputc@?$basic_streambuf@DU?$char_traits@D@std@@@std@@QAEHD@Z
+    0x10015168 ?rdbuf@?$basic_ios@DU?$char_traits@D@std@@@std@@QBEPAV?$basic_streambuf@DU?$char_traits@D@std@@@2@XZ
+    0x1001516c ?fill@?$basic_ios@DU?$char_traits@D@std@@@std@@QBEDXZ
+    0x10015170 ?flags@ios_base@std@@QBEHXZ
+    0x10015174 ?width@ios_base@std@@QBEHXZ
+    0x10015178 ?length@?$char_traits@D@std@@SAIPBD@Z
+    0x1001517c ?flush@?$basic_ostream@DU?$char_traits@D@std@@@std@@QAEAAV12@XZ
+    0x10015180 ?tie@?$basic_ios@DU?$char_traits@D@std@@@std@@QBEPAV?$basic_ostream@DU?$char_traits@D@std@@@2@XZ
+    0x10015184 ?good@ios_base@std@@QBE_NXZ
+    0x10015188 ?_Osfx@?$basic_ostream@DU?$char_traits@D@std@@@std@@QAEXXZ
+    0x1001518c ?uncaught_exception@std@@YA_NXZ
+    0x10015190 ?_Lock@?$basic_streambuf@DU?$char_traits@D@std@@@std@@QAEXXZ
+    0x10015194 ?_Unlock@?$basic_streambuf@DU?$char_traits@D@std@@@std@@QAEXXZ
+    0x10015198 ??Y?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV01@PBD@Z
+    0x1001519c ?c_str@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QBEPBDXZ
+    0x100151a0 ??1?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@XZ
+    0x100151a4 ??4?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAEAAV01@PBD@Z
+  imports xEyeRight.dll:
+    0x10015394 ?getSingleton@xEyeRightManager@@SAAAV1@XZ
+  imports SHLWAPI.dll:
+    0x10015310 PathIsDirectoryA
+    0x10015314 PathFindExtensionA
+    0x10015318 PathAppendA
+    0x1001531c PathFileExistsA
+  imports MSVCR80.dll:
+    0x100151ac __clean_type_info_names_internal
+    0x100151b0 ?_type_info_dtor_internal_method@type_info@@QAEXXZ
+    0x100151b4 ?terminate@@YAXXZ
+    0x100151b8 ??3@YAXPAX@Z
+    0x100151bc __CxxFrameHandler3
+    0x100151c0 _CxxThrowException
+    0x100151c4 _get_winminor
+    0x100151c8 _get_winmajor
+    0x100151cc memset
+    0x100151d0 strcat_s
+    0x100151d4 strcpy_s
+    0x100151d8 _splitpath_s
+    0x100151dc free
+    0x100151e0 memmove_s
+    0x100151e4 strlen
+    0x100151e8 _mbsinc
+    0x100151ec _ismbcspace
+    0x100151f0 _mbscmp
+    0x100151f4 memcpy_s
+    0x100151f8 _vscprintf
+    0x100151fc vsprintf_s
+    0x10015200 atoi
+    0x10015204 memcmp
+    0x10015208 _mbsicmp
+    0x1001520c ??_V@YAXPAX@Z
+    0x10015210 _mbschr
+    0x10015214 sprintf_s
+    0x10015218 memcpy
+    0x1001521c ??2@YAPAXI@Z
+    0x10015220 printf
+    0x10015224 exit
+    0x10015228 fclose
+    0x1001522c fwrite
+    0x10015230 fread
+    0x10015234 fopen_s
+    0x10015238 strcmp
+    0x1001523c _access
+    0x10015240 fseek
+    0x10015244 ftell
+    0x10015248 _invalid_parameter_noinfo
+    0x1001524c ??0exception@std@@QAE@ABV01@@Z
+    0x10015250 ??1exception@std@@UAE@XZ
+    0x10015254 ??0exception@std@@QAE@XZ
+    0x10015258 ??0exception@std@@QAE@ABQBD@Z
+    0x1001525c ?what@exception@std@@UBEPBDXZ
+    0x10015260 _beginthreadex
+    0x10015264 _mbsstr
+    0x10015268 _stricmp
+    0x1001526c rewind
+    0x10015270 abs
+    0x10015274 _endthreadex
+    0x10015278 _except_handler4_common
+    0x1001527c _unlock
+    0x10015280 __dllonexit
+    0x10015284 _encode_pointer
+    0x10015288 _lock
+    0x1001528c _onexit
+    0x10015290 _decode_pointer
+    0x10015294 _malloc_crt
+    0x10015298 _encoded_null
+    0x1001529c _initterm
+    0x100152a0 _initterm_e
+    0x100152a4 _amsg_exit
+    0x100152a8 _adjust_fdiv
+    0x100152ac __CppXcptFilter
+    0x100152b0 _crt_debugger_hook
+  imports newdev.dll:
+    0x10015368 UpdateDriverForPlugAndPlayDevicesA
+  imports SETUPAPI.dll:
+    0x100152b8 SetupDiEnumDriverInfoA
+    0x100152bc SetupDiGetDriverInfoDetailA
+    0x100152c0 SetupDiBuildDriverInfoList
+    0x100152c4 SetupDiDestroyDriverInfoList
+    0x100152c8 SetupDiRemoveDevice
+    0x100152cc SetupDiGetDeviceRegistryPropertyA
+    0x100152d0 SetupDiDestroyDeviceInfoList
+    0x100152d4 SetupDiEnumDeviceInfo
+    0x100152d8 SetupDiGetClassDevsA
+    0x100152dc SetupDiClassGuidsFromNameA
+    0x100152e0 CM_Reenumerate_DevNode
+    0x100152e4 CM_Locate_DevNodeA
+    0x100152e8 SetupDiSetDeviceRegistryPropertyA
+    0x100152ec SetupDiRegisterDeviceInfo
+    0x100152f0 SetupDiCreateDeviceInfoA
+    0x100152f4 SetupDiCreateDeviceInfoList
+    0x100152f8 SetupGetInfInformationA
+    0x100152fc SetupDiGetINFClassA
+    0x10015300 SetupQueryInfVersionInformationA
+  imports xEyeList.dll:
+    0x10015378 ?RegisterList@xEyeListManager@@QAE_NPBDHH@Z
+    0x1001537c ?getSingleton@xEyeListManager@@SAAAV1@XZ
+    0x10015380 ?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+  imports xeyezHal.dll:
+    0x1001539c xeyezHal_SetEnChipIDVerify
+    0x100153a0 xeyezHal_SetClassifier
+    0x100153a4 xeyezHal_SetDevice
+    0x100153a8 xeyezHal_ChipIDVerify
+    0x100153ac xeyezHal_SetFpgaFile
+    0x100153b0 xeyezHal_SetLensBuffer
+    0x100153b4 xeyezHal_SetCmosIndex
+    0x100153b8 xeyezHal_SetBlobFeatureWidth
+    0x100153bc xeyezHal_StartFlow
+    0x100153c0 xeyezHal_GetMcuVersion
+    0x100153c4 xeyezHal_GetLastError
+    0x100153c8 xeyezHal_DeviceDetect
+    0x100153cc xeyezHal_DeviceIDRead
+    0x100153d0 xeyezHal_UserLensParaRead
+    0x100153d4 xeyezHal_UserLensParaWrite
+    0x100153d8 xeyezHal_RandomCodeRead
+    0x100153dc xeyezHal_RandomCodeWrite
+    0x100153e0 xeyezHal_FlushBulkInBuffer
+    0x100153e4 xeyezHal_GetBlobEnd
+    0x100153e8 xeyezHal_MCUReset
+    0x100153ec xeyezHal_GetNoise
+    0x100153f0 xeyezHal_DeviceVerRead
+    0x100153f4 xeyezHal_GetBlobBegin
+    0x100153f8 xeyezHal_GetGlobalImageSize
+    0x100153fc xeyezHal_GetOldBlobData
+  imports xEyeDriverCheck.dll:
+    0x10015370 CheckSpecialDevice
+  imports WeatherReport.dll:
+    0x10015354 WeatherReport
+  imports EasyUsb.dll:
+    0x10015014 ord1
+    0x10015018 ord2
+  imports crc.dll:
+    0x1001535c init_crc32_table
+    0x10015360 GenerateCRC32
+=== xeyezHal.dll ===
+  export 0x015bb0 xeyezHal_BlobAxisRead
+  export 0x015c00 xeyezHal_BlobAxisWrite
+  export 0x015b10 xeyezHal_CalibNumRead
+  export 0x015b60 xeyezHal_CalibNumWrite
+  export 0x015470 xeyezHal_CheckCodeRead
+  export 0x015e80 xeyezHal_CheckCodeWrite
+  export 0x014f30 xeyezHal_CheckMatch
+  export 0x014820 xeyezHal_Check_Key
+  export 0x014ed0 xeyezHal_ChipIDRead
+  export 0x015a70 xeyezHal_ChipIDVerify
+  export 0x0161e0 xeyezHal_ChipIDWrite
+  export 0x0149c0 xeyezHal_CmosInit
+  export 0x0156f0 xeyezHal_CmosRegRead
+  export 0x015680 xeyezHal_CmosRegWrite
+  export 0x015760 xeyezHal_CmosReset
+  export 0x015ed0 xeyezHal_DRMRead
+  export 0x015de0 xeyezHal_DRMWrite
+  export 0x015ca0 xeyezHal_DeviceCamRead
+  export 0x015cf0 xeyezHal_DeviceCamWrite
+  export 0x015d40 xeyezHal_DeviceClassRead
+  export 0x014c50 xeyezHal_DeviceDetect
+  export 0x0162a0 xeyezHal_DeviceIDRead
+  export 0x016240 xeyezHal_DeviceIDWrite
+  export 0x015d90 xeyezHal_DeviceVerRead
+  export 0x015ac0 xeyezHal_DeviceVerWtite
+  export 0x014ba0 xeyezHal_DownLoadFpga
+  export 0x016030 xeyezHal_DownLoadHex
+  export 0x015a10 xeyezHal_EpromReadInterface
+  export 0x0159b0 xeyezHal_EpromWriteInterface
+  export 0x0163c0 xeyezHal_FlashLock
+  export 0x014d60 xeyezHal_FlushBulkInBuffer
+  export 0x014970 xeyezHal_FpgaCfg
+  export 0x015610 xeyezHal_FpgaRegRead
+  export 0x0148c0 xeyezHal_FpgaRegReadTLQ
+  export 0x0155b0 xeyezHal_FpgaRegWrite
+  export 0x015510 xeyezHal_FpgaRegWriteTLQ
+  export 0x014a90 xeyezHal_GetBLVersion
+  export 0x015950 xeyezHal_GetBlobBegin
+  export 0x0158d0 xeyezHal_GetBlobData
+  export 0x014db0 xeyezHal_GetBlobEnd
+  export 0x015050 xeyezHal_GetGlobalImageSize
+  export 0x015810 xeyezHal_GetImageBegin
+  export 0x0157b0 xeyezHal_GetImageData
+  export 0x014ae0 xeyezHal_GetLastError
+  export 0x014cb0 xeyezHal_GetMcuVersion
+  export 0x014d10 xeyezHal_GetNoise
+  export 0x015860 xeyezHal_GetOldBlobData
+  export 0x014fe0 xeyezHal_GetStatus
+  export 0x0154c0 xeyezHal_HardVersion_Read
+  export 0x015e30 xeyezHal_HardVersion_Write
+  export 0x016090 xeyezHal_LensParaRead
+  export 0x016410 xeyezHal_LensParaWrite
+  export 0x014a20 xeyezHal_LoadSetting
+  export 0x015560 xeyezHal_MCUReset
+  export 0x014e00 xeyezHal_RandomCodeCancel
+  export 0x016170 xeyezHal_RandomCodeRead
+  export 0x014e60 xeyezHal_RandomCodeSet
+  export 0x016100 xeyezHal_RandomCodeWrite
+  export 0x014b40 xeyezHal_ReadCode
+  export 0x015c50 xeyezHal_SecurityComm
+  export 0x014870 xeyezHal_SetBlobFeatureWidth
+  export 0x015230 xeyezHal_SetBoard
+  export 0x015f70 xeyezHal_SetClassifier
+  export 0x0153b0 xeyezHal_SetCmosIndex
+  export 0x015350 xeyezHal_SetCmosTable
+  export 0x014f80 xeyezHal_SetDevice
+  export 0x0150b0 xeyezHal_SetEnChipIDVerify
+  export 0x015170 xeyezHal_SetEnLensWrite
+  export 0x015110 xeyezHal_SetEnableLensParamRead
+  export 0x014920 xeyezHal_SetExpMode
+  export 0x015410 xeyezHal_SetFpgaFile
+  export 0x0152f0 xeyezHal_SetFpgaTable
+  export 0x015f20 xeyezHal_SetLed_Status
+  export 0x015290 xeyezHal_SetLensBuffer
+  export 0x0151d0 xeyezHal_SetTransMode
+  export 0x016300 xeyezHal_StartFlow
+  export 0x014c00 xeyezHal_UpdateReset
+  export 0x016350 xeyezHal_UserLensParaRead
+  export 0x015fc0 xeyezHal_UserLensParaWrite
+  imports StereoCamera.dll:
+    0x10018194 ?GetStereoCamaraBridge@@YAAAVStereoCameraBridge@@XZ
+    0x10018198 ?RegisterScDataListener@StereoCameraBridge@@QAEXPAVScDataListener@@@Z
+    0x1001819c ?Get3DObject@StereoCameraBridge@@QAEXHPBXPAUSC_RESULT@@@Z
+    0x100181a0 ?SetBlobFeatureMaxWidth@StereoCameraBridge@@QAEXH@Z
+    0x100181a4 ?SetLens@StereoCameraBridge@@QAEXABUSC_LENS_PARAM@@MM@Z
+    0x100181a8 ?SetClassifier@StereoCameraBridge@@QAEXH@Z
+  imports MSVCR80.dll:
+    0x100180ac _encode_pointer
+    0x100180b0 _lock
+    0x100180b4 _onexit
+    0x100180b8 _decode_pointer
+    0x100180bc _malloc_crt
+    0x100180c0 free
+    0x100180c4 __dllonexit
+    0x100180c8 _initterm
+    0x100180cc _initterm_e
+    0x100180d0 _amsg_exit
+    0x100180d4 _adjust_fdiv
+    0x100180d8 __CppXcptFilter
+    0x100180dc _crt_debugger_hook
+    0x100180e0 __CxxFrameHandler3
+    0x100180e4 _except_handler4_common
+    0x100180e8 ?terminate@@YAXXZ
+    0x100180ec ?_type_info_dtor_internal_method@type_info@@QAEXXZ
+    0x100180f0 __clean_type_info_names_internal
+    0x100180f4 _unlock
+    0x100180f8 strncmp
+    0x100180fc fwrite
+    0x10018100 printf
+    0x10018104 memmove_s
+    0x10018108 memcpy_s
+    0x1001810c memcpy
+    0x10018110 memcmp
+    0x10018114 mbstowcs
+    0x10018118 wcstombs
+    0x1001811c sscanf
+    0x10018120 strtok
+    0x10018124 wcscmp
+    0x10018128 fclose
+    0x1001812c ??_U@YAPAXI@Z
+    0x10018130 fread
+    0x10018134 rewind
+    0x10018138 ftell
+    0x1001813c wcslen
+    0x10018140 fseek
+    0x10018144 fopen_s
+    0x10018148 abs
+    0x1001814c strcmp
+    0x10018150 strcpy_s
+    0x10018154 ??_V@YAXPAX@Z
+    0x10018158 ferror
+    0x1001815c fscanf_s
+    0x10018160 feof
+    0x10018164 fopen
+    0x10018168 ??3@YAXPAX@Z
+    0x1001816c atoi
+    0x10018170 memset
+    0x10018174 strstr
+    0x10018178 _strlwr
+    0x1001817c strcat_s
+    0x10018180 vsprintf_s
+    0x10018184 strlen
+    0x10018188 _CxxThrowException
+    0x1001818c _encoded_null
+  imports UsbPlugDetect.dll:
+    0x100181b8 USBPlugInDetect
+    0x100181bc USBPlugInGetBuffer
+  imports KERNEL32.dll:
+    0x10018014 HeapDestroy
+    0x10018018 HeapAlloc
+    0x1001801c HeapReAlloc
+    0x10018020 DeleteCriticalSection
+    0x10018024 InitializeCriticalSection
+    0x10018028 LeaveCriticalSection
+    0x1001802c EnterCriticalSection
+    0x10018030 RaiseException
+    0x10018034 GetVersionExA
+    0x10018038 GetThreadLocale
+    0x1001803c GetLocaleInfoA
+    0x10018040 GetACP
+    0x10018044 GetSystemTimeAsFileTime
+    0x10018048 GetCurrentProcessId
+    0x1001804c GetCurrentThreadId
+    0x10018050 GetTickCount
+    0x10018054 QueryPerformanceCounter
+    0x10018058 IsDebuggerPresent
+    0x1001805c SetUnhandledExceptionFilter
+    0x10018060 UnhandledExceptionFilter
+    0x10018064 GetCurrentProcess
+    0x10018068 TerminateProcess
+    0x1001806c InterlockedCompareExchange
+    0x10018070 InterlockedExchange
+    0x10018074 SetFileAttributesW
+    0x10018078 GetPrivateProfileStringW
+    0x1001807c FindResourceExW
+    0x10018080 FindResourceW
+    0x10018084 SizeofResource
+    0x10018088 LockResource
+    0x1001808c LoadResource
+    0x10018090 Sleep
+    0x10018094 OutputDebugStringW
+    0x10018098 MultiByteToWideChar
+    0x1001809c HeapSize
+    0x100180a0 GetProcessHeap
+    0x100180a4 HeapFree
+  imports USER32.dll:
+    0x100181b0 UnregisterClassA
+  imports EasyUsb.dll:
+    0x10018000 ord1
+    0x10018004 ord2
+  imports EnvAnalyzer.dll:
+    0x1001800c ?GetEnvDisturbGrade@@YAHXZ

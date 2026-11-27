@@ -1,0 +1,28 @@
+### DownLoadFpga @ RVA 0x14ba0  xeyezHal_DownLoadFpga
+00014ba0  55                 push ebp
+00014ba1  8bec               mov ebp, esp
+00014ba3  b9f4210810         mov ecx, 0x100821f4
+00014ba8  e8e3240000         call 0x10017090  ; ->0x17090
+00014bad  b9f4210810         mov ecx, 0x100821f4
+00014bb2  e859240000         call 0x10017010  ; ->0x17010
+00014bb7  83f801             cmp eax, 1
+00014bba  7512               jne 0x10014bce
+00014bbc  8b4508             mov eax, dword ptr [ebp + 8]
+00014bbf  50                 push eax
+00014bc0  b9e0040210         mov ecx, 0x100204e0
+00014bc5  e876b4ffff         call 0x10010040  ; ->0x10040
+00014bca  eb24               jmp 0x10014bf0  ; ->0x14bf0
+00014bcc  eb1d               jmp 0x10014beb  ; ->0x14beb
+00014bce  b9f4210810         mov ecx, 0x100821f4
+00014bd3  e838240000         call 0x10017010  ; ->0x17010
+00014bd8  83f802             cmp eax, 2
+00014bdb  7509               jne 0x10014be6
+00014bdd  b801000000         mov eax, 1
+00014be2  eb0c               jmp 0x10014bf0  ; ->0x14bf0
+00014be4  eb05               jmp 0x10014beb  ; ->0x14beb
+00014be6  83c8ff             or eax, 0xffffffff
+00014be9  eb05               jmp 0x10014bf0  ; ->0x14bf0
+00014beb  b801000000         mov eax, 1
+00014bf0  5d                 pop ebp
+00014bf1  c3                 ret 
+
