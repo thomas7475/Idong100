@@ -8,7 +8,27 @@
 //! cargo run --features usb --example video -- --cmos --frames 10
 //! cargo run --features usb --example video -- --iso --cmos --frames 10
 //! cargo run --features usb --example video -- --cmos --frames 10 --recover
+//! cargo run --features usb --example video -- --iso --cmos --rate 300 --recover
 //! ```
+
+//! # The P2.6 rate question (turn 45)
+//!
+//! The turn-44 bench measured 2.1 fps on the raw ISO path vs ~25 fps
+//! device-side through uvcvideo, same device, same hour. The loops this
+//! example ran were the suspect: per-frame host work (PNG encode, two
+//! planes of stats) sat between a reaped URB and its resubmission, so
+//! the ring ran dry during our own processing and ASAP scheduling
+//! hopped the next URB to a distant microframe - frames the device
+//! produced simply never arrived (invisible to every error counter).
+//! Both loops are now measure-first (requeue/resubmit BEFORE any
+//! per-frame work; the bytes are copied out first), drop accounting
+//! counts what the device made vs what we saw (seq gaps / PTS gaps),
+//! and `--rate N` measures N frames with the ring never starved by
+//! host work, reporting host wall-clock fps next to the PTS cadence -
+//! the one-command answer to "what does this firmware actually
+//! produce?". The turn-44 numbers (1/5/5/4/4 cadence = 2.1 fps
+//! delivered, ~25 fps produced) are exactly the starvation signature
+//! this removes.
 //!
 //! Modes and flags:
 //! * `--probe`        list every /dev/video* node with driver, formats
@@ -38,6 +58,13 @@
 //!                    auto-match (src/transport/v4l2.rs). Ignored with
 //!                    `--iso`.
 //! * `--frames N`    stop after N frames (default 10).
+//! * `--rate N`      P2.6 (turn 45): rate-measurement mode - capture N
+//!                    frames with the ring never starved by host work
+//!                    (requeue/resubmit first; stats + PNGs only for the
+//!                    first 3 frames) and report the full rate table:
+//!                    host wall-clock fps, PTS-cadence fps, and the
+//!                    device-side drop count (seq/PTS gap accounting).
+//!                    Sets the frame budget to N (overrides --frames).
 //! * `--outdir PATH` output folder (default: video_runN - the first
 //!                    nonexistent or EMPTY one, the kit-37 runN rule).
 //! * `--recover`     P2.4b (turn 44): survive the sensor's self-reboot.
@@ -110,6 +137,12 @@ mod bench {
         no_set_alt: bool,
         recover: bool,
         frames: u32,
+        /// `--rate N`: rate-measurement mode - capture N frames with the
+        /// ring NEVER starved by per-frame work (PNG writes and plane
+        /// stats happen only for the first 3 frames), reporting
+        /// host-wall-clock fps, PTS-cadence fps, and drop accounting.
+        /// The P2.6 answer to "what does the device actually produce?"
+        rate_probe: Option<u32>,
         device: Option<String>,
         outdir: Option<String>,
     }
@@ -125,6 +158,7 @@ mod bench {
                 no_set_alt: false,
                 recover: false,
                 frames: 10,
+                rate_probe: None,
                 device: None,
                 outdir: None,
             };
@@ -136,7 +170,7 @@ mod bench {
                     "--iso" => args.iso = true,
                     "--no-set-alt" => args.no_set_alt = true,
                     "--recover" => args.recover = true,
-                    "--frames" | "--device" | "--outdir" | "--alt" => {
+                    "--frames" | "--device" | "--outdir" | "--alt" | "--rate" => {
                         let val = a.get(i + 1).cloned();
                         match (a[i].as_str(), val) {
                             ("--frames", Some(v)) => {
@@ -148,6 +182,12 @@ mod bench {
                                 Ok(n) => args.alt = Some(n),
                                 Err(_) => eprintln!("warning: --alt {v:?} is not 0-255"),
                             },
+                            ("--rate", Some(v)) => {
+                                // --rate stands alone: capture & count N frames,
+                                // no saving beyond the first 3 (the PNG work is
+                                // exactly what the old loops starved on).
+                                args.rate_probe = Some(v.parse().unwrap_or(60).clamp(1, 3000));
+                            }
                             _ => eprintln!("warning: {} needs a value", a[i]),
                         }
                         i += 1;
@@ -155,6 +195,10 @@ mod bench {
                     other => eprintln!("warning: unknown flag {other:?}"),
                 }
                 i += 1;
+            }
+            // --rate sets its own frame budget (overriding --frames).
+            if let Some(n) = args.rate_probe {
+                args.frames = n;
             }
             args
         }
@@ -181,6 +225,17 @@ mod bench {
         first_pts: Option<u32>,
         pts_deltas_fr: Vec<f64>,
         recoveries: u32,
+        /// Wall-clock frame timestamps (Instant) of the last attempt -
+        /// the host-side rate, independent of any device clock.
+        wall_start: Option<Instant>,
+        wall_end: Option<Instant>,
+        /// Device-side frames the bus delivered but the loop did NOT
+        /// process in time: V4L2 buffer seq gaps (uvcvideo counted a
+        /// buffer, our loop missed it), ISO PTS gaps > 1 frame period.
+        drops: u64,
+        /// V4L2: first seq seen this run + last seq (gap accounting).
+        seq_first: Option<u32>,
+        seq_last: Option<u32>,
     }
 
     /// One capture attempt ends either complete or with the device gone
@@ -329,6 +384,44 @@ mod bench {
                 let fps = (n - 1) as f64 * 1_000_000.0 / span_us;
                 println!("measured rate   : {fps:.1} fps (capture timestamps, last attempt)");
             }
+        }
+        // host wall-clock rate (turn 45): the honest host-side number,
+        // independent of device clocks - our loop's delivery rate.
+        if let (Some(w0), Some(w1)) = (st.wall_start, st.wall_end) {
+            if st.got > 1 {
+                let span_s = w1.duration_since(w0).as_secs_f64();
+                if span_s > 0.0 {
+                    println!(
+                        "host wall rate  : {:.1} fps over {span_s:.1} s ({} frames delivered to our loop)",
+                        (st.got - 1) as f64 / span_s, st.got
+                    );
+                }
+            }
+        }
+        // device-side drop accounting (turn 45): frames the DEVICE
+        // produced but our loop never saw. V4L2: buffer-seq gaps.
+        // ISO: PTS gaps beyond one frame period.
+        if st.drops > 0 {
+            let (mode, detail) = if args.iso {
+                ("PTS", format!("{} frames lost on the bus/reassembly", st.drops))
+            } else {
+                (
+                    "seq",
+                    format!(
+                        "{} frames: seq {}..{} = {} counted, {} delivered",
+                        st.drops,
+                        st.seq_first.map(|v| v.to_string()).unwrap_or_default(),
+                        st.seq_last.map(|v| v.to_string()).unwrap_or_default(),
+                        st.seq_last.unwrap_or(0).saturating_sub(st.seq_first.unwrap_or(0)) + 1,
+                        st.got
+                    ),
+                )
+            };
+            println!(
+                "device drops    : {mode} gap accounting: {detail} - the device made them, our loop missed them"
+            );
+        } else {
+            println!("device drops    : 0 (every frame the device made was delivered)");
         }
         println!(
             "session         : {}",
@@ -677,6 +770,7 @@ mod bench {
         let mut first_ts: Option<i64> = None;
         let mut last_ts: Option<i64> = None;
         let mut attempt_frames = 0u32;
+        st.wall_start = Some(t_start);
 
         while st.got < args.frames && t_start.elapsed() < Duration::from_secs(30) {
             // keep the 0x0205 stream poll alive (~10 Hz) while streaming,
@@ -709,8 +803,31 @@ mod bench {
             }
             match dev.dq(500) {
                 Ok(Some((idx, bytesused, seq, ts))) => {
-                    let bytes = dev.buffer_bytes(idx, bytesused);
-                    let (a, b) = split_channels(bytes);
+                    // MEASURE-FIRST (turn 45): return the buffer to the
+                    // driver BEFORE any per-frame host work (stats,
+                    // PNG encode) - the old order starved the driver's
+                    // buffer pool during our own processing, which is
+                    // exactly the +3 seq jumps of the turn-44 run6. The
+                    // frame bytes are copied out first (the buffer is
+                    // reused the moment it is requeued).
+                    let bytes = dev.buffer_bytes(idx, bytesused).to_vec();
+                    if let Err(e) = dev.queue(idx) {
+                        println!("      FAIL: requeue: {e}");
+                        break;
+                    }
+                    // drop accounting: the driver's buffer sequence
+                    // counts EVERY frame it produced; a gap means the
+                    // device made a frame our loop did not see (slow
+                    // consumer, not a device stall).
+                    if st.seq_first.is_none() {
+                        st.seq_first = Some(seq);
+                    }
+                    if let Some(last) = st.seq_last {
+                        st.drops +=
+                            idong::protocol::video::count_dropped_frames(last, seq, 1, false);
+                    }
+                    st.seq_last = Some(seq);
+                    let (a, b) = split_channels(&bytes);
                     let sa = plane_stats(&a);
                     let sb = plane_stats(&b);
                     println!(
@@ -719,20 +836,24 @@ mod bench {
                     );
                     if st.got < 3 {
                         let raw = outdir.join(format!("frame{:04}.bin", st.got));
-                        let _ = fs::write(&raw, bytes);
+                        let _ = fs::write(&raw, &bytes);
+                        write_plane_png(
+                            &outdir.join(format!("frame{:04}_chA.png", st.got)),
+                            &a,
+                            &pix,
+                        );
+                        write_plane_png(
+                            &outdir.join(format!("frame{:04}_chB.png", st.got)),
+                            &b,
+                            &pix,
+                        );
                     }
-                    write_plane_png(&outdir.join(format!("frame{:04}_chA.png", st.got)), &a, &pix);
-                    write_plane_png(&outdir.join(format!("frame{:04}_chB.png", st.got)), &b, &pix);
                     st.any_a = merge(st.any_a, sa);
                     st.any_b = merge(st.any_b, sb);
                     first_ts.get_or_insert(ts);
                     last_ts = Some(ts);
                     st.got += 1;
                     attempt_frames += 1;
-                    if let Err(e) = dev.queue(idx) {
-                        println!("      FAIL: requeue: {e}");
-                        break;
-                    }
                 }
                 Ok(None) => continue,
                 Err(e) => {
@@ -742,6 +863,7 @@ mod bench {
             }
         }
         dev.stream_off();
+        st.wall_end = Some(Instant::now());
         if attempt_frames > 1 {
             let span_us = (last_ts.unwrap_or(0) - first_ts.unwrap_or(0)).max(1) as f64;
             st.rate = Some((attempt_frames, span_us));
@@ -901,6 +1023,31 @@ mod bench {
                 }
             }
         }
+        // GET_CUR(probe) after the negotiation (turn 45): what the device
+        // ACTUALLY settled on - the one number that decides the
+        // frame-rate question if the device honors the interval. The
+        // turn-44 runs measured 2.1 fps (ISO) vs 25 fps (uvcvideo) on
+        // the same device the same hour; if GET_CUR(probe) answers with
+        // an interval the ISO path never sent, the golden commit's
+        // 333333 (30 fps nominal) is not what the firmware runs.
+        let get_probe = pure::uvc_get_cur(iface, pure::UVC_CS_PROBE, 26);
+        match usbfs_iso::control_in(fd, &get_probe, 5000) {
+            Ok(body) => match ProbeCommit::parse(&body) {
+                Some(pc) => {
+                    println!(
+                        "      GET_CUR(probe) reply: interval {} ({} fps), payload {} B",
+                        pc.frame_interval,
+                        pc.fps(),
+                        pc.max_payload_transfer_size
+                    );
+                }
+                None => println!("      GET_CUR(probe) reply: {} B, unparsable", body.len()),
+            },
+            Err(e) => {
+                println!("      (GET_CUR probe: {e} - not fatal, firmware may not implement it)")
+            }
+        }
+
         // [4/5] SET_INTERFACE - the question the first bench run
         // decided (turn 43): the vendor capture streams with NO alt
         // change, but Linux arms an ISO endpoint only in the selected
@@ -964,11 +1111,19 @@ mod bench {
         let mut assembler = VideoAssembler::new();
         let mut payloads = 0u64;
         let mut errs = 0u64;
+        // per-URB packet status classification (the ISO ring's own
+        // health line): -EPROTO 71 = babble/ CRC, -EOVERFLOW 75 = device
+        // babble, -EILSEQ 84 = illegal byte sequence, 0 = ok. The
+        // kernel reports these per packet in the ISO desc array.
+        let mut pkt_proto = 0u64;
+        let mut pkt_overflow = 0u64;
+        let mut pkt_nilseq = 0u64;
         let mut t_last_poll = Instant::now() - Duration::from_secs(1);
         let mut poll_errors = 0u32;
         let mut polls_live = true;
         let mut gone: Option<String> = None;
         let t_start = Instant::now();
+        st.wall_start = Some(t_start);
         'outer: while st.got < args.frames && t_start.elapsed() < Duration::from_secs(30) {
             // keep the 0x0205 stream poll alive (~10 Hz) as in the V4L2 run
             if polls_live
@@ -1002,28 +1157,34 @@ mod bench {
                 .position(|u| std::ptr::eq(u.ptr() as *mut u8, reaped as *mut u8))
                 .expect("reaped URB belongs to the ring");
             let results = unsafe { urbs[idx].packet_results() };
-            // feed each packet as one UVC payload: the URB layout gives
-            // per-packet boundaries directly (the capture's ISO-record
-            // walk needed the 2412-B stride because USBPcap flattens all
-            // packets of one URB; usbfs hands them to us separated)
+            // MEASURE-FIRST (turn 45): copy the reaped packets out and
+            // resubmit the URB BEFORE any frame work. The old order let
+            // the ring drain during stats + PNG writes - a reaped ring
+            // slot was empty for whole milliseconds while the device
+            // kept producing; ASAP scheduling then jumps the next URB
+            // to the far future and frames are missed on the bus (never
+            // visible in any error counter - the payloads simply never
+            // arrive). Copying 8 x 2412 B is microseconds; PNGs are not.
+            let mut pkt_bytes: Vec<(usize, Vec<u8>)> = Vec::with_capacity(npackets);
             for (i, (actual, status)) in results.iter().enumerate() {
                 if *status != 0 {
                     errs += 1;
+                    // classify the nonzero statuses (Linux ABI digits)
+                    match *status {
+                        71 => pkt_proto += 1,    // -EPROTO
+                        75 => pkt_overflow += 1, // -EOVERFLOW (babble)
+                        84 => pkt_nilseq += 1,   // -EILSEQ
+                        _ => {}
+                    }
                     continue;
                 }
                 if *actual == 0 {
                     continue;
                 }
-                let bytes = unsafe { urbs[idx].packet_bytes(i, *actual) };
-                payloads += 1;
-                if let Some(frame) = assembler.push_payload(bytes) {
-                    report_iso_frame(st, &frame, outdir);
-                    if st.got >= args.frames {
-                        break 'outer;
-                    }
-                }
+                let bytes = unsafe { urbs[idx].packet_bytes(i, *actual) }.to_vec();
+                pkt_bytes.push((i, bytes));
             }
-            // re-submit the reaped URB
+            // the URB is free now: back into the ring before processing
             if let Err(e) = unsafe { urbs[idx].submit(fd) } {
                 if let Some(hint) = pure::submiturb_hint(e.raw_os_error()) {
                     println!("      re-submit failed: {e}\n      {hint}");
@@ -1033,7 +1194,33 @@ mod bench {
                 gone = Some(format!("resubmit: {e}"));
                 break 'outer;
             }
+            // feed each packet as one UVC payload: the URB layout gives
+            // per-packet boundaries directly (the capture's ISO-record
+            // walk needed the 2412-B stride because USBPcap flattens all
+            // packets of one URB; usbfs hands them to us separated)
+            payloads += pkt_bytes.len() as u64;
+            for (_, bytes) in &pkt_bytes {
+                if let Some(frame) = assembler.push_payload(bytes) {
+                    // device-side drop accounting: a PTS jump larger
+                    // than one frame period means the device produced a
+                    // frame that never reached the ring (bus loss), or
+                    // the assembler reset mid-stream.
+                    if let Some(prev) = st.last_pts {
+                        st.drops += idong::protocol::video::count_dropped_frames(
+                            prev,
+                            frame.pts,
+                            idong::protocol::video::PTS_PER_FRAME,
+                            true,
+                        );
+                    }
+                    report_iso_frame(st, &frame, outdir);
+                    if st.got >= args.frames {
+                        break 'outer;
+                    }
+                }
+            }
         }
+        st.wall_end = Some(Instant::now());
 
         // stop the ring before touching the interface state: discard
         // every still-submitted URB and drain the reaps (unlink is
@@ -1054,7 +1241,10 @@ mod bench {
         let _ = usbfs_iso::release_interface(fd, iface);
 
         println!();
-        println!("payloads        : {payloads} ({} errors)", errs);
+        println!(
+            "payloads        : {payloads} ({} errors: {} proto, {} overflow, {} ilseq)",
+            errs, pkt_proto, pkt_overflow, pkt_nilseq
+        );
         if let Some(e) = gone {
             return AttemptOutcome::Gone(e);
         }

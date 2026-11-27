@@ -1,9 +1,9 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
-Turn 44, 2026-11-27. The one-file answer to "how far are we, what is
+Turn 45, 2026-11-27. The one-file answer to "how far are we, what is
 left". Status line: **the protocol is fully decoded (every plane
 captured and now FULLY ASSEMBLED), the driver lives under `software/`
-of the repository, 108 tests green, and the bench ladder is complete:
+of the repository, 111 tests green, and the bench ladder is complete:
 T1-T10 all PASS - T9 (raw usbfs-ISO) and T7 (uvcvideo STREAMON, the
 former "dead end" - state-dependent after all) both captured real
 frames on the turn-44 bench day, and T10 (`--recover`) makes the run
@@ -15,16 +15,29 @@ feature - the example is the bench script on top of them), and the
 turn-44 bench exposed + fixed a real assembler bug: the EOF-flagged
 final payload of every frame carries the frame's tail (612000 + 2400
 = exactly 614400 B under one PTS) - `VideoAssembler` now closes the
-frame WITH that payload's data. What remains: the marker/3D record
-plane (needs one capture with a RUNNING GAME - the trigger command is
-unknown) and P4 ROS 2 (needs a ROS install).**
+frame WITH that payload's data. Turn 45 (P2.6) makes the one open
+video question - 2.1 fps delivered on ISO vs ~25 fps produced through
+uvcvideo, same hour - decidable in ONE bench command: both capture
+loops are now measure-first (requeue/resubmit BEFORE any per-frame
+host work; the old order starved the ring during PNG writes, and the
+1/5/5/4/4 PTS cadence of the turn-44 runs is exactly that starvation
+signature), drop accounting counts frames the device made but our
+loop missed (V4L2 buffer-seq gaps / ISO PTS gaps, pure +
+unit-tested), the ISO ring classifies its packet errors
+(proto/overflow/ilseq), `--rate N` measures N frames with the ring
+never starved and prints the full rate table (host wall rate, PTS
+cadence, device drops), and a GET_CUR(probe) after the ISO
+negotiation reports what the firmware actually settled on. What
+remains: the marker/3D record plane (needs one capture with a RUNNING
+GAME - the trigger command is unknown) and P4 ROS 2 (needs a ROS
+install).**
 
 ## The short version
 
 | Layer | Status |
 | --- | --- |
 | Wire protocol (boot flash, session, EEPROM, CMOS, stream poll, UVC video) | DONE - byte-pinned from 5 captures, turn 32/33/35 |
-| P1 pure core (frames, records, calibration, boot + runtime framing, video assembler) | DONE - 108 tests green, no hardware needed |
+| P1 pure core (frames, records, calibration, boot + runtime framing, video assembler) | DONE - 111 tests green, no hardware needed |
 | All-code-in-src/ layout (lib + src/examples/ + src/tests/ - turn 39) | DONE - explicit `[[example]]`/`[[test]]` path targets, commands unchanged |
 | Repository layout (turn 40: `software/` = crate + `firmware/` + `idong-ros2` + `idong_msgs` + `docs/`) | DONE - the 24 vendor device files ship in `firmware/`, pinned by the `firmware_files` test; `flash_mcu` needs no `--hex` |
 | Live bench run T1-T5 (turn 39: list/bringup/session_full --cmos) | PASS on the real sensor (Linux, rusb) |
@@ -58,7 +71,7 @@ device files ship in `firmware/` (turn 40; `firmware/README.md`), and
 crate. The rusb transport is a cargo feature:
 
 ```
-cargo test                      # 108 tests, hardware-free, no libusb needed
+cargo test                      # 111 tests, hardware-free, no libusb needed
 cargo test --features usb       # the same + compiles the rusb transport + the ioctl engines
 cargo run --features usb --example list            # T2: discovery
 cargo run --features usb --example bringup         # T3: read-only bring-up
@@ -112,10 +125,18 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
 - `src/transport/usbfs_iso.rs` (NEW turn 44) - the usbfs ISO engine,
   PROMOTED from the example after the T9 bench PASS: the
   ABI-pinned usbdevice_fs mirror + `IsoUrb` (one in-flight ISO URB)
-  + control_out / read_config_descriptor / disconnect_claim /
+  + control_out / control_in (turn 45: GET_CUR reads) /
+  read_config_descriptor / disconnect_claim /
   set_interface / release_interface / wait_reap / discard_and_drain.
   `libc` is an optional regular dependency behind `usb` now (plain
   `cargo test` still builds neither engine).
+- turn 45 additions: `--rate N` (rate-measurement mode - the ring
+  never starved; sets the frame budget) + the measure-first loop
+  discipline in both backends of `src/examples/video.rs`,
+  `count_dropped_frames` in `src/protocol/video.rs` (the pure drop
+  math, unit-tested), the packet-error classes
+  (proto/overflow/ilseq) on the ISO summary line, and the
+  GET_CUR(probe) dump after the ISO negotiation.
 - `src/examples/session_full.rs` (turn 38) - the P2.4 test: full vendor
   session (EEPROM + CMOS register tables, writes gated behind
   `--cmos`) + one poll cycle + 0x0205 probes.
@@ -163,14 +184,18 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
 
 ## What is missing, in order
 
-1. **The frame-rate A/B (the one open video question).** The turn-44
-   bench measured ~1.8 fps produced on the raw ISO path (golden
-   probe/commit; PTS deltas of 3/4.5/4.5/6 frame periods) vs ~25 fps
-   device-side on the V4L2 path the same hour (uvcvideo's own
-   negotiation). The vendor capture's steady state was 8.0 fps. Next
-   A/Bs, all cheap: the ISO path right after a T8 flash, an usbmon
-   capture of what uvcvideo actually commits (`sudo cat
-   /sys/kernel/debug/usb/usbmon/1u`), and `--alt 1`.
+1. **The T11 rate run (the one open video question, now one command).**
+   The turn-44 bench measured 2.1 fps delivered on the raw ISO path vs
+   ~25 fps produced through uvcvideo, same hour - and turn 45
+   root-caused the gap as OUR OWN loops starving the ring during
+   per-frame PNG work (the 1/5/5/4/4 PTS cadence is the signature:
+   the device made the missing frames, they never reached a URB).
+   The measurement is now clean:
+   `cargo run --features usb --example video -- --iso --cmos --rate 300 --recover`
+   (and the V4L2 A/B without `--iso`) - measure-first loops, drop
+   accounting, packet-error classes, GET_CUR(probe) dump. Read the
+   verdict matrix in `docs/LINUX_TESTS.md` T11: `device drops : 0`
+   with a flat cadence = the true production rate, whatever it is.
 2. **The marker/3D plane**: NOT on the wire in any capture so far.
    The running games receive the 10-slot records over the engine pipes;
    the likely trigger is a command we have not sent or EP 0x03/0x83

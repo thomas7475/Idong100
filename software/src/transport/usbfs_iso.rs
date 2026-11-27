@@ -251,6 +251,32 @@ pub fn control_out(fd: i32, req: &UsbControl, timeout_ms: u32) -> io::Result<()>
     .map(|_| ())
 }
 
+/// One device-to-host control transfer (GET_CUR / GET_INFO / ...):
+/// reads up to `req.length` bytes into a fresh Vec (the read count is
+/// the ioctl's return value, capped at `req.length`).
+pub fn control_in(fd: i32, req: &UsbControl, timeout_ms: u32) -> io::Result<Vec<u8>> {
+    let mut buf = vec![0u8; req.length as usize];
+    let mut ctrl = usbfs_api::CtrlTransfer {
+        bm_request_type: req.request_type,
+        b_request: req.request,
+        w_value: req.value,
+        w_index: req.index,
+        w_length: req.length,
+        timeout: timeout_ms,
+        data: buf.as_mut_ptr(),
+    };
+    let n = unsafe {
+        usbfs_api::ioctl(
+            fd,
+            usbfs_api::USBDEVFS_CONTROL,
+            &mut ctrl as *mut usbfs_api::CtrlTransfer as *mut u8,
+        )?
+    };
+    let n = (n.max(0) as usize).min(buf.len());
+    buf.truncate(n);
+    Ok(buf)
+}
+
 /// Read the device's raw configuration descriptor over usbfs:
 /// GET_DESCRIPTOR(config) on ep 0 - no interface claim needed.
 /// Two steps (the classic USB dance): read 8 B for wTotalLength,
