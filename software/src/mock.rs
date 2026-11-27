@@ -66,6 +66,30 @@ impl Transport for MockTransport {
     }
 }
 
+impl crate::protocol::ens::RecordIo for MockTransport {
+    /// Same scripted queue as the 7F 55 session, same
+    /// exhausted-means-empty (timeout) rule - the ens startup replay
+    /// (tests/ens_replay.rs) scripts the EP 0x83 reads here.
+    fn read_record_ep(
+        &mut self,
+        len: usize,
+        _timeout: std::time::Duration,
+    ) -> Result<Vec<u8>, IdongError> {
+        self.read(len)
+    }
+
+    /// Same write log: the replay tests assert the exact PU frames and
+    /// code-load chunks byte-for-byte.
+    fn write_record_ep(
+        &mut self,
+        buf: &[u8],
+        _timeout: std::time::Duration,
+    ) -> Result<usize, IdongError> {
+        self.writes.push(buf.to_vec());
+        Ok(buf.len())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

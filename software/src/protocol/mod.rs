@@ -144,6 +144,92 @@ pub const ENS_PROBE_TIMEOUT: Duration = Duration::from_millis(100);
 /// host-computed by classifying.dll - turn 46 finding).
 pub const RECORD_ELEMENT_LEN: usize = 0x3f0;
 
+// ---- ENS startup: the record-plane bring-up (turn 49: the 8-state
+//      cold machine @RVA 0xf790 + the hot-start probe @0x10640 +
+//      hot-start finish @0x10900, all statically disassembled from
+//      xEyeUSB.dll - no capture needed; see docs/PROTOCOL.md "ENS
+//      startup" and research/idong100/agents/21-turn49/) ----
+/// PU type: "DSP Start", the cold machine's opening command (state 1,
+/// `0x105f0(buf, 1, 0x40)` from `0xfa30`; log "Tx DSP Start").
+pub const ENS_TYPE_START: u16 = 0x0001;
+/// PU/OD type: the code-load announce (TX: file size @+8, CRC32 @+0xC)
+/// and its go-ahead answer (state 2, `0xfae0`; logs "Tx packet count &
+/// crc!" / "Ready to load program!").
+pub const ENS_TYPE_CODELOAD: u16 = 0x0002;
+/// OD type: the code-load final verdict, status word 0xF at +8 (state 2;
+/// log "Error: crc result is not correct!" when it differs).
+pub const ENS_TYPE_CODELOAD_DONE: u16 = 0x0003;
+/// PU/OD type: the handle-match (gamepad pairing) select + link-status
+/// frames; the reply word at +8 selects the sub-code (states 4/6).
+pub const ENS_TYPE_LINK: u16 = 0x0004;
+/// OD type: the handle-match config prompt (state 4, `0xfe20`).
+pub const ENS_TYPE_HANDLE_CFG: u16 = 0x0005;
+/// PU/OD type: the lens-parameter frame (128 B on the wire; state 7,
+/// `0x104e0` reads 0x80 B, usbCom copies 0x78 B from +8 for
+/// `SetLensParam`).
+pub const ENS_TYPE_LENS: u16 = 0x0006;
+/// OD type 0xFFF: the TSOL keep-alive poll; the host answers PU 0xFFE
+/// (the "IDLE msg") within 1 s (pairing loop @0x10130; also the
+/// xEyeClass keep-alive).
+pub const ENS_TYPE_KEEPALIVE_RX: u16 = 0x0fff;
+pub const ENS_TYPE_KEEPALIVE_TX: u16 = 0x0ffe;
+/// PU type 0x10: the hot-start command (hot-start finish @0x10900;
+/// answered by OD 0x10 with the 128-B lens frame).
+pub const ENS_TYPE_HOT_START: u16 = 0x0010;
+/// PU type 0x25/0x26: handle-match on/off (state 4; `NeedHandleMatch`
+/// in xEyeUsb.ini, shipped value 1 -> 0x25).
+pub const ENS_TYPE_MATCH_ON: u16 = 0x0025;
+pub const ENS_TYPE_MATCH_OFF: u16 = 0x0026;
+/// OD type 0x9001/PU 0x8001: the device-ID exchange of the cold
+/// machine's state 5 ("ID & Ver Resend") and the hot-start finish.
+pub const ENS_TYPE_ID_REQ: u16 = 0x8001;
+pub const ENS_TYPE_DID: u16 = 0x9001;
+/// OD type 1: the "DEVICE ID" frame - 32 ID bytes at +8, 8 version
+/// bytes at +0x28 (states 1 and 5, and the boot plane's device-ID step).
+pub const ENS_TYPE_DEVICE_ID: u16 = 0x0001;
+/// Device-ID frame: ID length @+8 and DSP-version length @+0x28
+/// (`0xffb0` copies 0x20 then 8 B; `0x10900` the same).
+pub const ENS_DEVICE_ID_LEN: usize = 32;
+pub const ENS_DEVICE_VER_LEN: usize = 8;
+/// Lens-parameter frame length (the OD type-6 read is 0x80 B; the
+/// params start at +8, so the `SetLensParam` block is 0x78 B).
+pub const ENS_LENS_FRAME_LEN: usize = 0x80;
+pub const ENS_LENS_PARAM_LEN: usize = 0x78;
+/// Link-status reply words at +8 of the PU type-4 answer (pairing loop
+/// `0x10130`: found -> 0x11, not-found -> 0xFF, found-timeout -> 3,
+/// found-over -> 9 - the exit sub-code).
+pub const ENS_LINK_REPLY_FOUND: u16 = 0x0011;
+pub const ENS_LINK_REPLY_NOT_FOUND: u16 = 0x00ff;
+pub const ENS_LINK_REPLY_TIMEOUT: u16 = 0x0003;
+pub const ENS_LINK_REPLY_OVER: u16 = 0x0009;
+/// Link-status sub-codes at +8 of the OD type-4 frame (1 = found with
+/// UID pair, 2 = found-timeout, 0xF = not found, 8 = found-over: the
+/// loop-exit code).
+pub const ENS_LINK_FOUND: u16 = 0x0001;
+pub const ENS_LINK_TIMEOUT: u16 = 0x0002;
+pub const ENS_LINK_NOT_FOUND: u16 = 0x000f;
+pub const ENS_LINK_OVER: u16 = 0x0008;
+/// Code-load verdict: status word 0xF at +8 of the OD type-3 answer
+/// means CRC OK (`0xfae0` @0x10e0 region; log "crc result is not
+/// correct!" when it differs).
+pub const ENS_CODELOAD_OK_WORD: u16 = 0x000f;
+/// State-4 prompt budget: the vendor polls the OD type-5 frame with a
+/// 300 ms timeout up to 11 times (`0xfe20`, tries 0..=10 with 100 ms
+/// sleeps - about 4 s of quiet tolerated).
+pub const ENS_HANDLE_CFG_TRIES: u8 = 11;
+pub const ENS_HANDLE_CFG_TIMEOUT: Duration = Duration::from_millis(300);
+/// Cold-machine outer timeouts: 3 s for the 64-B exchanges, 6 s per
+/// code-load chunk (`0xfae0`: 0xBB8 announce/answers, 0x1770 chunks).
+pub const ENS_TIMEOUT_FRAME: Duration = Duration::from_millis(3000);
+pub const ENS_TIMEOUT_CHUNK: Duration = Duration::from_millis(6000);
+/// Hot-start probe: 100 ms per 64-B try, 10 silent tries before the
+/// cold machine runs (probe `0x10640`; a wrong-type frame resets the
+/// budget, three record cycles with two ACKs then finish).
+pub const ENS_HOT_PROBE_TRIES: u8 = 10;
+/// Vendor pacing between state-machine iterations (`0xf790` @0xf922:
+/// `Sleep(0x32)`).
+pub const ENS_STATE_PAUSE: Duration = Duration::from_millis(50);
+
 // ---- Stream config defaults (xEye.ini / xEyeUsb.ini) ----
 /// xEyeFrame=50 (USBComFPS=35 transport polling).
 pub const DEFAULT_FPS: u32 = 50;

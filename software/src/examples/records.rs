@@ -1,44 +1,43 @@
-//! P3a marker/record plane bench - the T12 one-command decision (turn 46).
+//! P3a/P3b marker-record-plane bench - T12/T13 (turns 46/49).
 //!
 //! `cargo run --features usb --example records`
 //! `cargo run --features usb --example records -- --cmos`
 //! `cargo run --features usb --example records -- --cmos --frames 10`
 //! `cargo run --features usb --example records -- --cmos --frames 10 --out recdir`
+//! `cargo run --features usb --example records -- --cmos --no-ldr   (T12: probe only)`
 //!
 //! What this does on the REAL sensor:
 //!   1. enumerate - runtime device 0471:2500 must be present
 //!   2. read-only identity (the four EEPROM reads, like bringup)
 //!   3. WITH `--cmos` only: the full session init (register tables +
 //!      poll cycle, exactly session_full --cmos)
-//!   4. the ENS PROBE - the turn-46 decision point, read-only on the
-//!      record plane: read 64 B from EP 0x83 ten times (100 ms each)
-//!      and check for an OD frame of type 0xF0 - the vendor usbCom
-//!      worker's startup probe (xEyeUSB.dll @RVA 0x10640)
-//!   5. if a type-0xF0 frame answers: the vendor handshake loop -
-//!      read one 640-B record, ACK with a 64-B type-7 command on
-//!      EP 0x03 (zero payload), dump + report per record
+//!   4. the ENS PROBE (read-only): read 64 B from EP 0x83 ten times
+//!      (100 ms each) and check for an OD frame of type 0xF0 - the
+//!      vendor usbCom worker's startup probe (xEyeUSB.dll @RVA 0x10640)
+//!   5a. probe ALIVE -> the HOT START (0x10640 + 0x10900): three
+//!       record cycles, two type-7 ACKs, then the lens (PU/OD 0x10)
+//!       and device-ID (PU/OD 0x9001) exchange
+//!   5b. probe SILENT (the T12 verdict) -> the COLD START (0xf790,
+//!       turn 49: fully decoded from the vendor DLL): the 8-state
+//!       machine that uploads the shipped, SHA-256-pinned
+//!       `ens_code.ldr` to the DSP (PU type 2 {size, CRC32} -> OD 2 ->
+//!       raw 64-B chunks -> OD 3), then the pairing select, the ID &
+//!       version exchange, the pairing loop and the lens parameters.
+//!       `--no-ldr` keeps the old T12 behavior (report and stop).
+//!   6. the RECORD LOOP: status frame -> 640-B record -> type-7 ACK,
+//!      `--frames N` times, raw dumps + per-record stats.
 //!
-//! VERDICT A (stream alive): records arrive -> the raw blob data lands
-//! in --out; the marker plane is ON. VERDICT B (no frame in 10 tries):
-//! the device needs the runtime `ens_code.ldr` upload first (the
-//! vendor state machine @RVA 0xf790 - the never-captured PU/OD traffic
-//! on EP 0x03/0x83). One capture with the kit-37 unlocked app in a
-//! running game pins its wire bytes; this probe is the decision.
-//!
-//! This example never writes flash or EEPROM. The only writes (with
-//! --cmos) are the vendor's own volatile CMOS register tables and the
-//! 64-B record ACKs.
+//! The only flash write in this bench is the DSP's runtime loader
+//! upload (RAM code-load via the record plane - volatile, exactly the
+//! vendor's own startup). The 8051 flash and the EEPROM are never
+//! touched.
 
 #[cfg(feature = "usb")]
 fn main() {
-    use std::time::Duration;
+    use idong::protocol::ens::{ColdStart, HotStart};
+    use idong::protocol::{ENS_PROBE_TIMEOUT, ENS_PROBE_TRIES, EP_RECORD_IN, RECORD_FRAME_LEN};
 
-    use idong::protocol::{
-        ENS_PROBE_TIMEOUT, ENS_PROBE_TRIES, EP_RECORD_IN, EP_RECORD_OUT, RECORD_FRAME_LEN,
-        RECORD_WIRE_LEN,
-    };
-
-    println!("=== idong P3a record-plane bench (T12, turn 46) ===");
+    println!("=== idong P3b record-plane bench (T12/T13, turns 46/49) ===");
     println!();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -53,8 +52,10 @@ fn main() {
         }
     };
     let probe_only = args.iter().any(|a| a == "--probe-only");
+    let no_ldr = args.iter().any(|a| a == "--no-ldr");
+    let no_match = args.iter().any(|a| a == "--no-match");
 
-    println!("[1/5] enumerate");
+    println!("[1/6] enumerate");
     let devices = idong::list_devices();
     if devices.is_empty() {
         println!("      no sensor found - plug the sensor in (0471:2600/2500)");
@@ -79,7 +80,7 @@ fn main() {
     };
     println!("      PASS: vendor interface MI_04 claimed (bulk pairs 0x02/0x82 + 0x03/0x83)");
 
-    println!("[2/5] read-only identity");
+    println!("[2/6] read-only identity");
     match idong::Session::connect_readonly(&mut t) {
         Ok(info) => {
             match idong::calib::parse_calibration_payload(&info.calibration) {
@@ -101,12 +102,12 @@ fn main() {
     }
 
     if !cmos {
-        println!("[3/5] session init SKIPPED (no --cmos)");
+        println!("[3/6] session init SKIPPED (no --cmos)");
         println!("      The vendor engine completes the register init before the");
         println!("      record plane can run. Rerun with --cmos to send the exact");
         println!("      vendor tables first (volatile registers, EEPROM untouched).");
     } else {
-        println!("[3/5] full session init (--cmos: register tables + polls)");
+        println!("[3/6] full session init (--cmos: register tables + polls)");
         match idong::Session::connect(&mut t, idong::Phase::Runtime, &[], false) {
             Ok(mut session) => {
                 if let Err(e) = session.poll_cycle() {
@@ -121,7 +122,7 @@ fn main() {
         }
     }
 
-    println!("[4/5] ENS probe: EP 0x83, 64 B x {ENS_PROBE_TRIES} @ 100 ms, expecting OD type 0xF0");
+    println!("[4/6] ENS probe: EP 0x83, 64 B x {ENS_PROBE_TRIES} @ 100 ms, expecting OD type 0xF0");
     let mut probe_saw = None;
     for try_no in 1..=ENS_PROBE_TRIES {
         match t.read_bulk_ep(EP_RECORD_IN, RECORD_FRAME_LEN, ENS_PROBE_TIMEOUT) {
@@ -151,28 +152,105 @@ fn main() {
     }
 
     let Some(_first) = probe_saw else {
+        // ---- VERDICT B: silence -> the cold start (turn 49) ----
         println!();
-        println!("      VERDICT B: no type-0xF0 record stream on EP 0x83.");
-        println!("      The vendor stack would now run the ens_code.ldr upload state");
-        println!("      machine (xEyeUSB.dll @RVA 0xf790) on EP 0x03/0x83 - the PU/OD");
-        println!("      traffic never seen in any capture (the license gates kept the");
-        println!("      app out of the game state). ONE capture with the kit-37");
-        println!("      unlocked app in a running game pins its wire bytes, and the");
-        println!("      driver replays them the same way flash_mcu replays the hex.");
+        println!("      VERDICT B: no type-0xF0 record stream on EP 0x83 - the DSP");
+        println!("      needs the runtime ens_code.ldr upload first (the vendor state");
+        println!("      machine @0xf790, turn 49: decoded from xEyeUSB.dll).");
+        if no_ldr || probe_only {
+            println!("      --no-ldr/--probe-only: upload refused, T12 behavior kept.");
+            println!("FAIL: probe exhausted (--no-ldr)");
+            std::process::exit(2);
+        }
         println!();
-        println!("FAIL: probe exhausted (expected outcome until the ldr machine is pinned)");
-        std::process::exit(2);
+        println!("[5/6] cold start: the 8-state ens_code.ldr upload (sha256-pinned)");
+        let set = match idong::firmware::load_set() {
+            Ok(s) => s,
+            Err(e) => {
+                println!("      FAIL: firmware set: {e}");
+                std::process::exit(2);
+            }
+        };
+        println!(
+            "      loader image: {} B (crc32_ens 0x{:08X}, {} chunks of 64)",
+            set.ldr.len(),
+            idong::protocol::ens::crc32_ens(&set.ldr),
+            set.ldr.len().div_ceil(64)
+        );
+        let mut cs = ColdStart::new(&mut t, &set.ldr);
+        match cs.run(!no_match) {
+            Ok(out) => {
+                for m in &cs.milestones {
+                    println!("      milestone: {m}");
+                }
+                println!(
+                    "      DSP version {} device ID {}",
+                    String::from_utf8_lossy(&out.dsp_version),
+                    String::from_utf8_lossy(&out.device_id)
+                );
+                println!(
+                    "      lens params: {} B (first: {})",
+                    out.lens_params.len(),
+                    hex_head(&out.lens_params[..8.min(out.lens_params.len())])
+                );
+                println!("      PASS: the cold start completed (the DSP runs)");
+            }
+            Err(e) => {
+                println!("      FAIL: {e}");
+                println!("      (the vendor machine retries each state once and restarts");
+                println!("      on double failure - rerun the bench the same way)");
+                std::process::exit(2);
+            }
+        }
+        startup_done(&mut t, frames, outdir, true);
+        return;
     };
-    println!("      PASS: the record plane is ALIVE (type-0xF0 frames flow)");
 
+    // ---- VERDICT A: the stream is alive -> the hot start ----
+    println!("      PASS: the record plane is ALIVE (type-0xF0 frames flow)");
     if probe_only {
         println!();
-        println!("PASS: probe-only run (--probe-only). Rerun with --frames N for the");
-        println!("handshake loop (status -> 640-B record -> type-7 ACK).");
+        println!("PASS: probe-only run (--probe-only).");
         return;
     }
+    println!();
+    println!("[5/6] hot start: 3 record cycles + lens/DID exchange (0x10640 + 0x10900)");
+    let mut hs = HotStart::new(&mut t);
+    match hs.run() {
+        Ok(Some(out)) => {
+            for m in &hs.milestones {
+                println!("      milestone: {m}");
+            }
+            println!(
+                "      DSP version {} device ID {}",
+                String::from_utf8_lossy(&out.dsp_version),
+                String::from_utf8_lossy(&out.device_id)
+            );
+            println!("      PASS: the hot start completed");
+        }
+        Ok(None) => {
+            println!("      FAIL: the stream vanished mid-probe - rerun");
+            std::process::exit(2);
+        }
+        Err(e) => {
+            println!("      FAIL: {e}");
+            std::process::exit(2);
+        }
+    }
+    startup_done(&mut t, frames, outdir, false);
+}
 
-    println!("[5/5] handshake loop: {frames} records (status -> 640-B record -> type-7 ACK)");
+#[cfg(feature = "usb")]
+fn startup_done(t: &mut idong::UsbTransport, frames: usize, outdir: String, cold: bool) {
+    use std::time::Duration;
+
+    use idong::protocol::{EP_RECORD_IN, EP_RECORD_OUT, RECORD_FRAME_LEN, RECORD_WIRE_LEN};
+
+    let how = if cold { "cold start" } else { "hot start" };
+    println!();
+    println!(
+        "[6/6] handshake loop after {how}: {frames} records (status -> 640-B record -> type-7 ACK)"
+    );
     let _ = std::fs::create_dir_all(&outdir);
     let mut ack = idong::protocol::ens::Type7Command::ack_zeros();
     let mut ok = 0usize;
@@ -249,7 +327,7 @@ fn main() {
 
     println!();
     if ok == frames {
-        println!("PASS: {ok}/{frames} records exchanged, raw dumps in {outdir}/.");
+        println!("PASS: {ok}/{frames} records exchanged after the {how}, raw dumps in {outdir}/.");
         println!("The marker plane is LIVE. The blob layout (classifier input) is");
         println!("the next decode: pair these dumps with a running game capture.");
     } else if ok > 0 {
@@ -257,8 +335,8 @@ fn main() {
         println!("dumps in {outdir}/ still decide the blob layout. Check the");
         println!("self-reboot window (31-157 s) if this ran long.");
     } else {
-        println!("FAIL: no complete record exchanged (the announcement answered");
-        println!("but the 640-B read or the ACK failed) - rerun on a fresh landing.");
+        println!("FAIL: no complete record exchanged after the {how} - the DSP may");
+        println!("need a full power cycle (the loader upload is volatile).");
     }
 }
 

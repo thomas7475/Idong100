@@ -1,0 +1,114 @@
+### extracted/$_6_/crc.dll RVA 0x1010  init_crc32_table
+00001010  53                   push ebx
+00001011  56                   push esi
+00001012  57                   push edi
+00001013  33db                 xor ebx, ebx
+00001015  be50330010           mov esi, 0x10003350
+0000101a  8d9b00000000         lea ebx, [ebx]
+00001020  33c9                 xor ecx, ecx
+00001022  f6c301               test bl, 1
+00001025  7405                 je 0x1000102c
+00001027  b980000000           mov ecx, 0x80
+0000102c  8bc3                 mov eax, ebx
+0000102e  d1e8                 shr eax, 1
+00001030  a801                 test al, 1
+00001032  7403                 je 0x10001037
+00001034  83c940               or ecx, 0x40
+00001037  d1e8                 shr eax, 1
+00001039  a801                 test al, 1
+0000103b  7403                 je 0x10001040
+0000103d  83c920               or ecx, 0x20
+00001040  d1e8                 shr eax, 1
+00001042  a801                 test al, 1
+00001044  7403                 je 0x10001049
+00001046  83c910               or ecx, 0x10
+00001049  d1e8                 shr eax, 1
+0000104b  a801                 test al, 1
+0000104d  7403                 je 0x10001052
+0000104f  83c908               or ecx, 8
+00001052  d1e8                 shr eax, 1
+00001054  a801                 test al, 1
+00001056  7403                 je 0x1000105b
+00001058  83c904               or ecx, 4
+0000105b  d1e8                 shr eax, 1
+0000105d  a801                 test al, 1
+0000105f  7403                 je 0x10001064
+00001061  83c902               or ecx, 2
+00001064  a802                 test al, 2
+00001066  7403                 je 0x1000106b
+00001068  83c901               or ecx, 1
+0000106b  8bc1                 mov eax, ecx
+0000106d  c1e018               shl eax, 0x18
+00001070  8906                 mov dword ptr [esi], eax
+00001072  ba02000000           mov edx, 2
+00001077  eb07                 jmp 0x10001080  ; ->0x1080
+00001079  8da42400000000       lea esp, [esp]
+00001080  8d0c00               lea ecx, [eax + eax]
+00001083  2500000080           and eax, 0x80000000
+00001088  f7d8                 neg eax
+0000108a  1bc0                 sbb eax, eax
+0000108c  25b71dc104           and eax, 0x4c11db7
+00001091  33c1                 xor eax, ecx
+00001093  8d0c00               lea ecx, [eax + eax]
+00001096  2500000080           and eax, 0x80000000
+0000109b  f7d8                 neg eax
+0000109d  1bc0                 sbb eax, eax
+0000109f  25b71dc104           and eax, 0x4c11db7
+000010a4  33c1                 xor eax, ecx
+000010a6  8d0c00               lea ecx, [eax + eax]
+000010a9  2500000080           and eax, 0x80000000
+000010ae  f7d8                 neg eax
+000010b0  1bc0                 sbb eax, eax
+000010b2  25b71dc104           and eax, 0x4c11db7
+000010b7  33c1                 xor eax, ecx
+000010b9  8d0c00               lea ecx, [eax + eax]
+000010bc  2500000080           and eax, 0x80000000
+000010c1  f7d8                 neg eax
+000010c3  1bc0                 sbb eax, eax
+000010c5  25b71dc104           and eax, 0x4c11db7
+000010ca  33c1                 xor eax, ecx
+000010cc  83ea01               sub edx, 1
+000010cf  75af                 jne 0x10001080
+000010d1  8906                 mov dword ptr [esi], eax
+000010d3  8d4a1f               lea ecx, [edx + 0x1f]
+000010d6  a801                 test al, 1
+000010d8  7409                 je 0x100010e3
+000010da  bf01000000           mov edi, 1
+000010df  d3e7                 shl edi, cl
+000010e1  0bd7                 or edx, edi
+000010e3  83e901               sub ecx, 1
+000010e6  d1e8                 shr eax, 1
+000010e8  83f9ff               cmp ecx, -1
+000010eb  7fe9                 jg 0x100010d6
+000010ed  8916                 mov dword ptr [esi], edx
+000010ef  83c604               add esi, 4
+000010f2  83c301               add ebx, 1
+000010f5  81fe4c370010         cmp esi, 0x1000374c
+000010fb  0f8e1fffffff         jle 0x10001020
+00001101  5f                   pop edi
+00001102  5e                   pop esi
+00001103  5b                   pop ebx
+00001104  c3                   ret 
+
+### extracted/$_6_/crc.dll RVA 0x1110  GenerateCRC32
+00001110  8b4c2408             mov ecx, dword ptr [esp + 8]
+00001114  33c0                 xor eax, eax
+00001116  85c9                 test ecx, ecx
+00001118  7426                 je 0x10001140
+0000111a  8b542404             mov edx, dword ptr [esp + 4]
+0000111e  56                   push esi
+0000111f  57                   push edi
+00001120  0fb63a               movzx edi, byte ptr [edx]
+00001123  8bf0                 mov esi, eax
+00001125  c1e008               shl eax, 8
+00001128  c1ee18               shr esi, 0x18
+0000112b  0bc7                 or eax, edi
+0000112d  3304b550330010       xor eax, dword ptr [esi*4 + 0x10003350]
+00001134  83e901               sub ecx, 1
+00001137  83c201               add edx, 1
+0000113a  85c9                 test ecx, ecx
+0000113c  75e2                 jne 0x10001120
+0000113e  5f                   pop edi
+0000113f  5e                   pop esi
+00001140  c3                   ret 
+

@@ -32,7 +32,7 @@ deliverables/            PDF reports (+ the turn-13 scaffold, historical)
 |---|---|---|
 | `software/src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the V4L2 sysfs matcher (`src/transport/v4l2.rs`) + the V4L2 ioctl engine (`src/transport/v4l2_stream.rs`) + the usbfs ISO engine (`src/transport/usbfs_iso.rs`) + the firmware folder lookup (`src/firmware.rs`) + the ROS 2 adapter's pure data layer (`src/ros/`: params, lifecycle, pubsub shapes, diagnostics, node core - no rclrs, unit-tested) | thiserror, log, crossbeam-channel; rusb + libc only with `--features usb` |
 | `software/src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2 + `--iso` raw + `--recover` self-healing + `--rate` measurement, turns 44-45), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | png (dev-dep, examples only) |
-| `software/src/tests/` | golden replays: mock, runtime, video, plus `firmware_files` (the shipped vendor files) - hardware-free | - |
+| `software/src/tests/` | golden replays: mock, runtime, video, `ens_replay` (the turn-49 ENS startup machine: the ens_code.ldr code-load + hot start, byte-exact), plus `firmware_files` (the shipped vendor files) - hardware-free | - |
 | `software/firmware/` | the vendor device files the driver targets: the three pinned images (`ens_code.ldr`, `A_a_v4.4_BG0313.bit`, `app_m8051_2611.hex`), `app_m8051_2500.hex` and the other MCU images, the vendor file map and register tables; `README.md` + `SHA256SUMS` | - |
 | `software/docs/` | PROTOCOL (wire facts), BRINGUP, LINUX_TESTS, DRIVER_STATUS, CAPTURE_KIT, SOLVE_DIALOG | - |
 | `software/idong_msgs` | ROS message/service definitions (rosidl, colcon) | rosidl runtime |
@@ -55,15 +55,50 @@ next to the crate.
 
 ```
 cd software
-cargo test                                   # 119 tests, hardware-free
+cargo test                                   # 158 tests, hardware-free
 cargo test --features usb                    # the same + the rusb transport + the ioctl engines
 cargo +nightly fmt --check
 cargo run --features usb --example flash_mcu                # T8 dry run: pins only, no device
 cargo run --features usb --example flash_mcu -- --confirm   # T8: the controlled flash
-cargo run --features usb --example records -- --cmos        # T12: the record-plane verdict
+cargo run --features usb --example records -- --cmos        # T13: cold start + the record plane
 ```
 
-The bench ladder T2-T12 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+The bench ladder T2-T13 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+
+## Status (turn 49, 2026-11-28) - P3b: the ens_code.ldr upload decoded from the vendor DLL itself, the capture ask retired
+
+The T12 bench returned **VERDICT B** (silence on EP 0x83 after the
+session init - the DSP needs its runtime loader upload before the
+marker records flow), which under the old plan made a kit-37
+game capture the last unpinned wire format. That capture is no longer
+needed: this turn pinned the upload STATICALLY, from the vendor stack
+itself (the v2.6.0.6 DLLs re-extracted from `xeyez_Lobby.dat`,
+byte-verified against the turn-12 manifest; artifacts in
+`research/idong100/agents/21-turn49/`). **The cold machine**
+`0xf790` is a linear 8-state driver - its own GBK log strings name
+the phases: startup-begin (PU 1 -> OD 1), code-load (the
+`ens_code.ldr` upload: PU type 2 {file size, CRC32} -> OD 2 "ready
+to load" -> ceil(size/64) RAW 64-B chunks -> OD 3 with verdict word
+0xF), a skip state, the pairing select (OD 5 -> PU 0x25/0x26 per
+`NeedHandleMatch`), ID & version (PU 0x8001 -> OD 1: the 32-B device
+ID + 8-B DSP version -> `setDeviceID`), the TSOL pairing loop
+(OD 0xFFF/4 -> PU 0xFFE/4) and the lens parameters (OD 6, 128 B ->
+PU 6). **The hot start** `0x10640`+`0x10900` (the probe is a
+hot-start detector: 3 record cycles with 2 ACKs, then PU 0x10 -> OD
+0x10 lens + PU 0x9001 -> OD 0x9001 DID). **The checksum** is the
+vendor crc.dll variant - the reflected 0xEDB88320 table with a
+hybrid MSB-style update, init 0, no final xor (the shipped 54,420-B
+ldr -> 0x63EAA8CA); not a catalog CRC, ported literally. In the
+crate: `protocol::ens::{RecordIo, ColdStart, HotStart, StartupOutcome,
+crc32_ens, ...}` + `RecordIo` for `UsbTransport`/`MockTransport`, the
+`ens_replay` test (byte-exact cold start with the pairing loop,
+match-off, the CRC-verdict failure, the hot start, probe silence),
+and the records example now runs the whole T13 flow: probe -> hot or
+cold start (the shipped SHA-256-pinned ldr; `--no-ldr` keeps the old
+read-only T12 behavior) -> the record handshake loop. 158 tests
+green in both feature states, nightly fmt clean, examples
+warning-free both states. The next bench run (`records -- --cmos`)
+is the one that turns the marker plane on.
 
 ## Status (turn 48, 2026-11-27) - the clock pinned at 48 MHz (T11 closed), P4 ROS 2 pure layer done
 
