@@ -39,6 +39,21 @@
 //! descriptor array. Each received packet = one UVC payload (12-B header
 //! + image data) - exactly what [`VideoAssembler::push_payload`]
 //! consumes.
+//!
+//! # The alt-setting lesson (the turn-43 bench result)
+//!
+//! The capture's no-SET_INTERFACE flow CANNOT be replayed on Linux: the
+//! first live run took MI_01, sent the observed probe/commit, and then
+//! every SUBMITURB on EP 0x85 failed with **ENOENT (os error 2)**. With
+//! the VS interface parked at alt 0 (the zero-bandwidth alt that
+//! declares NO endpoints) the Linux USB stack has no transfer ring for
+//! EP 0x85 and rejects the ISO URB - "No such file or directory" points
+//! at that missing ring, not at the /dev/bus/usb node. The bench
+//! sequence is therefore probe/commit -> `USBDEVFS_SETINTERFACE`
+//! (streaming alt) -> ISO URB ring -> alt 0 on teardown (the standard
+//! UVC order; the Windows vendor stack evidently armed its ISO pipe
+//! before the captured segment began). [`submiturb_hint`] maps the two
+//! decisive errnos.
 
 use crate::protocol::video::ProbeCommit;
 
@@ -162,6 +177,39 @@ pub fn best_streaming_alt<'a>(vs: &[&'a InterfaceAlt]) -> Option<&'a InterfaceAl
         .max_by_key(|a| a.iso_in().map(|e| e.wmax_total).unwrap_or(0))
 }
 
+/// Linux errno values of the SUBMITURB path - stable kernel ABI digits
+/// (the libc values, pinned in digits here: `libc` is a dev-dependency,
+/// the lib itself does not depend on it).
+pub const ERR_ENOENT: i32 = 2;
+pub const ERR_ENOSPC: i32 = 28;
+
+/// Map a raw SUBMITURB errno to the actionable bench hint.
+///
+/// ENOENT (`os error 2`, "No such file or directory") does NOT mean the
+/// /dev/bus/usb node is gone: it is the host controller refusing an ISO
+/// URB whose endpoint has no transfer ring - the VS interface was still
+/// at alt 0 when the ring was submitted (the turn-43 bench result). The
+/// fix is the USBDEVFS_SETINTERFACE that now precedes the ring;
+/// `--no-set-alt` (the capture-mirroring mode) reproduces the failure
+/// on purpose as the A/B control. ENOSPC is bus-bandwidth exhaustion -
+/// retry with the lower-bandwidth alt (`--alt 1`, 812 B/microframe).
+pub fn submiturb_hint(raw: Option<i32>) -> Option<&'static str> {
+    match raw {
+        Some(ERR_ENOENT) => Some(
+            "os error 2 (ENOENT) is NOT a missing file: the host controller has \
+             no transfer ring for EP 0x85 while the VS interface sits at alt 0 \
+             (the zero-bandwidth alt, no endpoints). SET_INTERFACE to the \
+             streaming alt must precede the ISO ring - the default since turn \
+             43 (--no-set-alt replays the capture's no-alt-change flow)",
+        ),
+        Some(ERR_ENOSPC) => Some(
+            "os error 28 (ENOSPC): not enough bus bandwidth for this alt - \
+             retry with --alt 1 (812 B/microframe)",
+        ),
+        _ => None,
+    }
+}
+
 /// One prepared control transfer (mirrors `usbdevfs_ctrltransfer`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsbControl {
@@ -253,13 +301,11 @@ mod tests {
         fn ep(addr: u8, attrs: u8, wmax: u16) -> Vec<u8> {
             // bLength 7: header(2) + address + attributes + wMaxPacketSize
             // + bInterval - exactly 7 bytes, no padding
-            vec![
-                7, 0x05, addr, attrs, (wmax & 0xFF) as u8, (wmax >> 8) as u8, 1,
-            ]
+            vec![7, 0x05, addr, attrs, (wmax & 0xFF) as u8, (wmax >> 8) as u8, 1]
         }
         let mut blob = vec![9, 0x02, 0x69, 0x01]; // wTotalLength 361, 1 config
         blob.extend_from_slice(&[0x64, 0x00, 0x32, 0x01, 0x01]); // attrs, maxpower, iCfg
-        // if0 VC (alt 0, no endpoints)
+                                                                 // if0 VC (alt 0, no endpoints)
         blob.extend(iface(0, 0, 0x0E, 0x01));
         // if1 VS alt 0/1/2
         blob.extend(iface(1, 0, 0x0E, 0x02));
@@ -286,7 +332,8 @@ mod tests {
         assert_eq!(wmax_total(0x0400), 1024);
         assert_eq!(wmax_total(0x1400), 1024 * 3);
         assert_eq!(wmax_total(0x0000), 0);
-    }    #[test]
+    }
+    #[test]
     fn walk_finds_vs_alts_and_vendor_bulk() {
         let alts = walk_config(&sensor_config());
         // if0 VC, if1 alt0/1/2, if4 vendor = 5 interface descriptors
@@ -306,6 +353,26 @@ mod tests {
         let vendor = alts.iter().find(|a| a.number == 4).unwrap();
         assert!(!vendor.endpoints.iter().any(|e| e.is_iso_in()));
         assert!(vendor.endpoints.iter().all(|e| !e.is_iso_in()));
+    }
+
+    #[test]
+    fn submiturb_hint_maps_the_bench_errnos() {
+        // the Linux ABI digits (libc: ENOENT 2, ENOSPC 28)
+        assert_eq!(ERR_ENOENT, 2);
+        assert_eq!(ERR_ENOSPC, 28);
+        // ENOENT names the ring-less alt-0 submit - the turn-43 bench fail
+        let e = submiturb_hint(Some(ERR_ENOENT)).expect("ENOENT hint");
+        assert!(e.contains("transfer ring"));
+        assert!(e.contains("alt 0"));
+        assert!(e.contains("SET_INTERFACE"));
+        assert!(e.contains("--no-set-alt"));
+        // ENOSPC names the bandwidth retry
+        let b = submiturb_hint(Some(ERR_ENOSPC)).expect("ENOSPC hint");
+        assert!(b.contains("--alt 1"));
+        assert!(b.contains("812"));
+        // anything else (EIO 5, ...) and no errno at all: no hint
+        assert_eq!(submiturb_hint(Some(5)), None);
+        assert_eq!(submiturb_hint(None), None);
     }
 
     #[test]

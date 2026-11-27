@@ -21,7 +21,7 @@ interface - one box, one cable, no USBPcap needed. A live USB with
 | T6 `video --probe` | nothing (V4L2 queries only) | no |
 | T7 `video` | T5 + V4L2 streaming | **yes** (`--cmos`) |
 | T8 `flash_mcu` | the 8051 firmware upload (the vendor flash itself) | **yes** (`--confirm`) |
-| T9 `video -- --iso` | T5 + UVC probe/commit + raw ISO reads on EP 0x85 | **yes** (`--cmos`) |
+| T9 `video -- --iso` | T5 + UVC probe/commit + SET_INTERFACE(alt 2) + raw ISO reads on EP 0x85 | **yes** (`--cmos`) |
 
 All writes are the exact observed vendor bytes: T5/T7 send the same
 register tables the vendor engine sends on every session (volatile
@@ -157,24 +157,42 @@ the usbfs-ISO backend).
 
 ```sh
 cargo run --features usb --example video -- --iso --cmos --frames 10
+# alternates for the next A/B rounds:
+cargo run --features usb --example video -- --iso --cmos --frames 10 --alt 1
+cargo run --features usb --example video -- --iso --cmos --frames 10 --no-set-alt
 ```
 
-The P2.5b backend (turn 42): takes the UVC VideoStreaming interface
-from uvcvideo (`USBDEVFS_DISCONNECT_CLAIM` - reversible, uvcvideo
-re-binds after exit), runs the observed probe/commit SET_CURs
-(golden bodies), then submits ISO URBs on EP 0x85 directly (no kernel
-UVC driver in the path). This mirrors the vendor capture exactly: the
-vendor app never issued a SET_INTERFACE alt>0 either - video flowed
-with the interface at alt 0.
+The P2.5b backend (turn 42 + the turn-43 fix): takes the UVC
+VideoStreaming interface from uvcvideo (`USBDEVFS_DISCONNECT_CLAIM` -
+reversible, uvcvideo re-binds after exit), runs the observed
+probe/commit SET_CURs (golden bodies), SELECTS the streaming
+alt-setting (`USBDEVFS_SETINTERFACE` alt 2 = 2412 B/microframe;
+`--alt 1` forces the 812 B alt), then submits ISO URBs on EP 0x85
+directly (no kernel UVC driver in the path); on exit it restores
+alt 0 and releases the claim.
+
+Turn-43 bench result: the first run (turn 42, mirroring the vendor
+capture's no-SET_INTERFACE flow) failed at the first SUBMITURB with
+`No such file or directory (os error 2)` - ENOENT, not a missing
+file: Linux arms an ISO endpoint only in the selected alt setting,
+and at alt 0 (the zero-bandwidth alt, no endpoints) the host
+controller has no transfer ring for EP 0x85. dmesg showed nothing
+else wrong (the uvcvideo entity-registration failure is the separate,
+known reason V4L2 cannot drive this firmware; the bulk-maxpacket
+warnings are vendor-descriptor noise). SET_INTERFACE is therefore
+the default step now; `--no-set-alt` keeps the failing variant as
+the A/B control.
 
 PASS: frames arrive at ~8 fps, 614400 B per frame (640x480x2), channel
 A shows real contrast. The config walk prints the per-alt ISO capacity
 (alt 1 = 812 B/microframe, alt 2 = 2412 B - the capture's exact packet
 stride).
 
-FAIL with output + `dmesg | tail -50`: the next decision is either the
-alt-setting question (a SET_INTERFACE to alt 1/2 before the URBs) or
-the ep 0x03/0x83 bulk path (never observed on the wire).
+FAIL with output + `dmesg | tail -50`: the next decisions are the
+ordering (SET_INTERFACE before the commit instead of after - the
+UVC-standard order is probe -> commit -> alt) and, only if not one
+ISO byte ever moves, the ep 0x03/0x83 bulk path (never observed on
+the wire).
 
 ## T8 - THE P2.3 8051 firmware upload (controlled flash replay)
 

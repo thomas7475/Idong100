@@ -442,3 +442,33 @@ whenever ISO URBs are posted on EP 0x85 (the hypothesis) or does the
 alt-setting matter after all (then a SET_INTERFACE alt 1/2 precedes
 the URBs). A FAIL plus dmesg decides the fallback (ep 0x03/0x83 bulk,
 never observed on the wire).
+
+## Turn 43: the T9 first run answers the alt question - ENOENT at alt 0
+
+The first live T9 run (`video --iso --cmos --frames 10`, turn 42's
+capture-mirroring shape) proved the negative: the run took MI_01 from
+uvcvideo, sent the observed probe/commit SET_CURs (both PASS), and
+then every SUBMITURB on EP 0x85 failed with `No such file or
+directory (os error 2)`.
+
+The errno decoded: ENOENT from the host controller, not the
+/dev/bus/usb node. Linux arms an isochronous endpoint only in the
+SELECTED alternate setting of its interface - the VS interface stood
+at alt 0 (the zero-bandwidth alt that declares no endpoints), so the
+host controller had no transfer ring for EP 0x85 and refused the ISO
+URB. The vendor capture's no-SET_INTERFACE flow cannot be replayed
+through usbfs; the Windows stack evidently armed its ISO pipe outside
+the captured segment. The dmesg the bench sent along confirms nothing
+else moved (the uvcvideo entity-registration failure is the separate,
+known reason V4L2 cannot drive this firmware; the bulk-maxpacket
+warnings are vendor-descriptor noise).
+
+The fix (turn 43): `USBDEVFS_SETINTERFACE` MI_01 -> streaming alt
+(probe -> commit -> alt, the standard UVC order; default alt 2 =
+2412 B/microframe, `--alt 1` = 812) before the ring, and on teardown
+DISCARDURB + drain, alt 0 back, then RELEASEINTERFACE. The pure half
+(`src/transport/usbfs.rs`) gained `submiturb_hint` (ENOENT and ENOSPC
+decoded for the bench); 106 tests green. The next T9 question: does
+the firmware stream under probe -> commit -> alt, or does it need
+the alt BEFORE the commit (the next A/B), or does nothing move at all
+(then EP 0x03/0x83, never observed on the wire).
