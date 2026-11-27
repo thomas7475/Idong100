@@ -692,28 +692,65 @@ mod bench {
                 head.join("/"),
                 idong::protocol::video::PTS_PER_FRAME
             );
-            // the PTS tick-rate cross-check: with a flat cadence and
-            // zero drops, frame period (wall) x PTS_PER_FRAME = the
-            // device clock. The 15.36 MHz constant came from the golden
-            // capture's 8.0 fps; the uvcvideo bench measured ~25 fps -
-            // a clean run settles which is right.
-            if st.drops == 0 && st.got > 1 && wall_s > 0.0 {
-                let frame_period_s = wall_s.max(f64::EPSILON) / (st.got - 1) as f64;
-                let implied_hz = idong::protocol::video::PTS_PER_FRAME as f64 / frame_period_s;
+            // the delta multiset: the run-13 signature was 1.0x246 /
+            // 1.25x8 / 1.5x43 - the device's 480,000-tick skip quantum
+            // showing through (10 ms at 48 MHz; whole quarter-frames,
+            // never fractional ticks).
+            let mut counts: std::collections::BTreeMap<i64, u32> =
+                std::collections::BTreeMap::new();
+            for d in &st.pts_deltas_fr {
+                *counts.entry((d * 100.0).round() as i64).or_insert(0) += 1;
+            }
+            if counts.len() <= 8 {
+                let mset: Vec<String> =
+                    counts.iter().map(|(c, n)| format!("{:.2}x{}", *c as f64 / 100.0, n)).collect();
                 println!(
-                    "pts tick rate   : {implied_hz:.2} MHz implied (PTS_PER_FRAME / wall frame period)"
+                    "                  deltas: {} (skip quantum {} ticks = {:.1} ms at {} MHz)",
+                    mset.join(", "),
+                    idong::protocol::video::PTS_SKIP_QUANTUM,
+                    idong::protocol::video::PTS_SKIP_QUANTUM as f64
+                        / idong::protocol::video::DEVICE_CLOCK_HZ as f64
+                        * 1000.0,
+                    idong::protocol::video::DEVICE_CLOCK_HZ / 1_000_000
                 );
+            } else {
+                println!(
+                    "                  deltas: {} distinct values (irregular cadence)",
+                    counts.len()
+                );
+            }
+            // the PTS tick-rate cross-check (turn 48, the run-13 method):
+            // the ACTUAL summed per-session PTS span over the measured
+            // active wall span. Never (frames-1) x PTS_PER_FRAME - that
+            // form ignores the skip deltas and read a bogus 44.8 MHz on
+            // run 13 (300 x 1.92M assumed vs 615.36M ticks actual).
+            // The wall span still swallows intra-session dead time, so
+            // the implied rate is a LOWER bound on the clock.
+            if st.pts_span_ticks > 0 && wall_s > 0.0 {
+                let implied_hz = st.pts_span_ticks as f64 / wall_s;
                 let assumed = idong::protocol::video::DEVICE_CLOCK_HZ as f64;
-                if (implied_hz - assumed).abs() / assumed > 0.10 {
+                println!(
+                    "pts tick rate   : {implied_hz:.0} Hz implied ({} ticks PTS span / {wall_s:.1} s wall active)",
+                    st.pts_span_ticks
+                );
+                let rel = (implied_hz - assumed).abs() / assumed;
+                if rel > 0.10 {
                     println!(
-                        "                  MISMATCH vs the assumed {assumed} Hz - the DEVICE_CLOCK_HZ"
+                        "                  MISMATCH vs DEVICE_CLOCK_HZ {assumed} Hz ({:.0}% off) -",
+                        rel * 100.0
                     );
+                    println!("                  the constant needs the measured value");
+                } else if rel > 0.02 {
                     println!(
-                        "                  constant needs the measured value (48 MHz would read {:.2}x)",
-                        implied_hz / assumed
+                        "                  near DEVICE_CLOCK_HZ {assumed} Hz ({:.1}% off; the wall",
+                        rel * 100.0
                     );
+                    println!("                  span includes dead time - a lower bound)");
                 } else {
-                    println!("                  agrees with DEVICE_CLOCK_HZ - the constant stands");
+                    println!(
+                        "                  agrees with DEVICE_CLOCK_HZ {assumed} Hz within {:.1}% - the constant stands",
+                        rel * 100.0
+                    );
                 }
             }
         }
@@ -761,10 +798,9 @@ mod bench {
         }
         println!("output: {} (PNGs per channel + raw .bin of the first frames)", outdir.display());
         println!("next steps:");
-        println!("  - rerun the clean rate table: --iso --cmos --rate 300 --recover");
-        println!("    (the worker-thread loop: expect dt 1.0 flat, drops 0)");
         println!("  - offline channel analysis of the saved .bins: --analyze {}", outdir.display());
-        println!("  - the record plane (markers): records --cmos (T12)");
+        println!("  - the record plane (markers): records --cmos (T12; VERDICT B means");
+        println!("    the kit-37 game capture pins the ens_code.ldr wire bytes)");
     }
 
     // ---------------- --probe (unchanged behavior) ----------------

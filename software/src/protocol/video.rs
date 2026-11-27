@@ -19,14 +19,17 @@
 //!   form is `EOH|SCR|PTS` (flags `0x8c`/`0x8d`, FID toggling):
 //!   `[len][flags][pts LE u32][scr 6 B]`.
 //! * **PTS is constant across all payloads of one frame** and advances by
-//!   exactly 1,920,000 per frame. The tick rate behind that quantum is
-//!   OPEN (turn 47): the golden capture's 546 FID transitions over 68 s
-//!   read 8.0 fps (=> 15.36 MHz, 125 ms/frame) on Windows, but the
-//!   uvcvideo bench measured ~25 fps device-side (seq 0..26 in ~1.0 s)
-//!   the same hour - and the negotiated 30 fps is an upper bound only.
-//!   The turn-47 clean `--rate` run pairs wall clock with PTS and
-//!   settles the clock; [`PTS_PER_FRAME`] itself (the per-frame PTS
-//!   advance) is bench-solid either way.
+//!   exactly 1,920,000 per frame (run 13: 110/110 deltas exactly that
+//!   in the undisturbed first session). The tick rate behind the
+//!   quantum is MEASURED at 48 MHz (turn 48, run-13 bench: the summed
+//!   per-session PTS span of the run agrees with the measured
+//!   active-streaming wall span to 0.2% at 48 MHz and at no other
+//!   plausible crystal; 1,920,000 ticks = 40.0 ms = 25 fps nominal).
+//!   The pre-turn-48 15.36 MHz constant was a golden-capture window
+//!   artifact (546 FID transitions / 68 s read 8.0 fps; the golden
+//!   video window is that same anomaly), while both Linux benches
+//!   measured ~23-25 fps device-side. Skip deltas quantize at 480,000
+//!   ticks (10 ms): see [`PTS_SKIP_QUANTUM`].
 //! * Assembled frame bytes form a **640-pixel, byte-interleaved
 //!   two-channel raster** (row stride 1280 B): channel A (even bytes)
 //!   carries the scene image, channel B (odd bytes) a second,
@@ -78,18 +81,36 @@ pub const RASTER_STRIDE: usize = 1280;
 pub const PAYLOAD_DATA: usize = 2400;
 /// PTS advance per video frame - 1,920,000 device-clock units, the
 /// bench-solid quantum of the UVC payload headers (constant within a
-/// frame, +1,920,000 per frame, every capture and bench run).
-/// [`DEVICE_CLOCK_HZ`] (the tick rate) is the OPEN part: 15.36 MHz fits
-/// the golden capture's 8.0 fps, but the uvcvideo bench measured ~25
-/// fps - the turn-47 clean `--rate` run decides, and the example prints
-/// the implied tick rate next to this constant.
+/// frame, +1,920,000 per frame, every capture and bench run; run 13:
+/// 110/110 consecutive deltas exactly 1,920,000 in the undisturbed
+/// first session). Skips are whole multiples of [`PTS_SKIP_QUANTUM`].
 pub const PTS_PER_FRAME: u32 = 1_920_000;
-/// Device clock the PTS counts in - the DEDUCED value (1,920,000 units
-/// per frame at the golden capture's 8.0 fps => 15.36 MHz, a standard
-/// crystal). OPEN (turn 47): the uvcvideo bench measured ~25 fps the
-/// same hour, which implies 48 MHz instead; a clean `--rate` run pairs
-/// wall time with PTS and settles it.
-pub const DEVICE_CLOCK_HZ: u32 = 15_360_000;
+/// Device clock the PTS counts in - MEASURED (turn 48): 48 MHz.
+///
+/// The run-13 bench (`--iso --cmos --rate 300 --recover`, the first
+/// clean run on the turn-47 worker-thread loop) settled the question
+/// the 15.36 MHz guess came from: the golden capture's "546 FID
+/// transitions over 68 s = 8.0 fps" reading was a capture-window
+/// artifact, not the device's production cadence. Run 13's evidence:
+/// * 300 frames across 3 capture sessions, summed per-session PTS span
+///   615,360,000 ticks = **12.820 s at 48 MHz** vs **12.8 s** measured
+///   active wall span - agreement within 0.2%, impossible at 15.36 MHz
+///   (that span would read 40.0 s) or 44.1 MHz (13.95 s).
+/// * 1,920,000 ticks / 48 MHz = 40.0 ms = **25 fps nominal** - the
+///   uvcvideo bench's ~25 fps (seq 0..26 in ~1 s) and the ISO bench's
+///   23.3-25 fps agree; the negotiated 30 fps (interval 333333) is an
+///   upper bound only, and alt 2's 2412 B/microframe = 19.3 MB/s is
+///   exactly the headroom 25 fps x 614,400 B needs (15.36 MB/s).
+pub const DEVICE_CLOCK_HZ: u32 = 48_000_000;
+/// PTS skip granularity - 480,000 ticks = 10 ms at 48 MHz (run 13).
+///
+/// When the device cannot keep the 40-ms cadence (auto-exposure / ISP
+/// beats), it advances PTS by whole quarters of a frame instead: run
+/// 13's deltas were only 1,920,000 / 2,400,000 / 2,880,000 ticks
+/// (= 4 / 5 / 6 quanta; 246 / 8 / 43 occurrences). A delta that is not
+/// a multiple of this quantum would falsify the 48 MHz reading (none
+/// observed).
+pub const PTS_SKIP_QUANTUM: u32 = 480_000;
 /// Nominal (negotiated) frame interval in 100 ns units - 333333 = 30 fps.
 pub const FRAME_INTERVAL_100NS: u32 = 333_333;
 

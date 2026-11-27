@@ -1,5 +1,46 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
+Turn 48, 2026-11-27. Two things closed this turn. (1) The PTS
+tick-rate question - open since turn 44 - is MEASURED: run 13, the
+first clean T11 bench (`--iso --cmos --rate 300 --recover`, 300
+frames, 3 sessions, 0 payload errors), pinned the device clock at
+**48 MHz** (summed per-session PTS span 615,360,000 ticks over 297
+deltas vs 12.8 s measured active wall span - 0.2% at 48 MHz,
+impossible at 15.36 or 44.1 MHz; 1,920,000 ticks = 40.0 ms = 25 fps
+nominal; skips quantize at 480,000 ticks = 10 ms: the run's deltas
+were only 1.92M x246 / 2.4M x8 / 2.88M x43; session 1 undisturbed:
+110/110 deltas exactly 1,920,000). The old 15.36 MHz was a
+golden-capture window artifact; `DEVICE_CLOCK_HZ` = 48,000,000 +
+`PTS_SKIP_QUANTUM` = 480,000 since this turn, the example's
+tick-rate cross-check now divides the actual summed PTS span by the
+active wall span (the old (frames-1) x PTS_PER_FRAME form read a
+bogus 44.85 MHz on run 13 itself), and the test pins the run-13
+numbers. (2) **P4 started: the ROS 2 adapter's pure data layer**
+(`src/ros/`, all of it testable with plain `cargo test`, no rclrs,
+no hardware): `params` (draft table 5: the RosParams model, validate,
+the per-frame TrackingConfig snapshot, and the params.yaml parser
+whose defaults are pinned to the launch file by test), `lifecycle`
+(draft 5.3: the four states + six transitions as a total function,
+the `~/transition` service core), `pubsub` (draft table 4 / 5.1: the
+six-interface surface with QoS, the field-for-field message shapes
++ the core->msg converters incl. the live quality gate, the
+handle-event codes), `diagnostics` (draft table 4: the vendor
+RingSize=200 traffic-light window with the Green=20/Yellow=35
+thresholds as fractions, the publish_hz_min degraded-link floor
+measured over the trailing second, the 500-ms stall timeout,
+DiagnosticsReport + the diagnostic_msgs key/value array), `node`
+(draft 5.2: the executor-side drain/convert/stamp core - NodeCore,
+TimeRefPair for /idong/time_ref, the live parameter reapply, the
+host-assigned event sequence). `idong_msgs/Marker.msg` drops the
+stale `age` field (turn 46 proved record +0x18 is z, not an age
+gate) so the .msg and the pure struct mirror each other
+field-for-field. What remains for P4: only the rclrs GLUE
+(idong-ros2's lib.rs/node.rs - declare parameters, create the six
+interfaces, run the executor loop that calls NodeCore) and a ROS
+install to build it against. 149 tests green both feature states
+(+24: params 5, lifecycle 4, pubsub 5, diagnostics 6, node 4),
+nightly fmt clean, examples warning-free both states.
+
 Turn 47, 2026-11-27. The turn-46 state stands (the protocol fully
 decoded, the record plane on EP 0x83/0x03, open item #4 resolved).
 This turn is the run-11 bench post-mortem + the video-pipeline fixes
@@ -83,10 +124,11 @@ game capture pins them), and P4 ROS 2 (needs a ROS install).**
 | P2.5b raw usbfs-ISO backend (`--iso`, `src/transport/usbfs.rs` + `src/transport/usbfs_iso.rs`) | T9 PASS (turn 44: 1281 payloads, 0 errors, frames per PTS) - the SET_INTERFACE fix held; the engine PROMOTED into the crate (turn 44) |
 | Video frame assembly (`protocol::video::VideoAssembler`) | the turn-44 bench fixed the EOF order: the final payload's data belongs to its own frame (was: split into 612000 + 2400 B under one PTS); golden + bench-shape tests green |
 | P2.4b self-reboot recovery (`video --recover`) | DONE (turn 44): wait bootloader landing -> re-flash the pinned image (ungated `FLASH_CONFIRMED` path) -> wait renum -> re-init -> resume; `session_full` points at it; turn 47: the bootloader/video-node opens RETRY through the fresh-node udev race (run 11: recovery worked 8/9, the 9th hit "Access denied" on the first open) |
-| P2.6 rate measurement (`video --rate N`, turn 45/47) | run 11 (hand-cover bench): 255 frames / 9 recoveries, channel A confirmed a real image (mean 6..153), channel B flat (127.3 +- 6.4, NO image); the rate table itself FAILED honestly - the turn-47 fixes (frame worker thread, `--ring 16`, no in-ring polls, per-session accounting) make run 12 the clean measurement |
+| P2.6 rate measurement (`video --rate N`, turn 45/47) | **CLOSED (turn 48, run 13)**: 300 frames / 3 sessions / 0 payload errors; session 1 undisturbed 110/110 deltas EXACTLY 1,920,000 = flat 25 fps cadence; the device clock pinned at **48 MHz** (`DEVICE_CLOCK_HZ`), the 10-ms skip quantum pinned (`PTS_SKIP_QUANTUM` = 480,000); the negotiated 30 fps is an upper bound only |
 | P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | ACCEPTED - T8 PASS x2 on the turn-41 bench (readback matched, launched, identity intact); `FLASH_CONFIRMED` = true since turn 42 |
 | Marker/3D record plane (P3a, turn 46) | WIRE PLANE DECODED: PU/OD on EP 0x83/0x03 - type-0xF0 announce, 640-B raw record (OD trailer @+0x27C, status @+0x25C), type-7 ACK; open item #4 RESOLVED (x/y/z f64 @ slot +0x08/+0x10/+0x18, quality @+0x24) - the values are HOST-computed (classifying.dll SVM); `protocol::ens` + the T12 bench example ready; the `ens_code.ldr` upload state machine (the startup fallback) is the remaining unpinned wire format |
-| P4 ROS 2 node (idong-ros2, idong_msgs) | NOT STARTED (needs a ROS install) |
+| P4 ROS 2 adapter - pure data layer (`src/ros/`, turn 48) | DONE + unit-tested (149 tests): params (model + params.yaml parser pinned to the launch file), lifecycle (state machine), pubsub (six interfaces + converters), diagnostics (window/floor/stall), node (drain/convert/stamp core) - all rclrs-free, hardware-free |
+| P4 ROS 2 adapter - rclrs glue (`idong-ros2/src`) | REMAINING: lib.rs/node.rs wiring (declare params, create the six interfaces, the executor loop calling `NodeCore`) - needs a ROS 2 install to build against |
 
 ## Layout (turn 40: everything under `software/`)
 
@@ -230,26 +272,14 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
 
 ## What is missing, in order
 
-1. **The T11 rate run (the one open video question, now one command).**
-   The turn-44 bench measured 2.1 fps delivered on the raw ISO path vs
-   ~25 fps produced through uvcvideo, same hour - and turn 45
-   root-caused the gap as OUR OWN loops starving the ring during
-   per-frame PNG work (the 1/5/5/4/4 PTS cadence is the signature:
-   the device made the missing frames, they never reached a URB).
-   The measurement is now clean:
-   `cargo run --features usb --example video -- --iso --cmos --rate 300 --recover`
-   (and the V4L2 A/B without `--iso`) - measure-first loops, drop
-   accounting, packet-error classes, GET_CUR(probe) dump. Read the
-   verdict matrix in `docs/LINUX_TESTS.md` T11: `device drops : 0`
-   with a flat cadence = the true production rate, whatever it is.
-2. **The marker/3D plane - decoded (turn 46), now ONE bench verdict.**
-   The wire plane is fully understood (PU/OD on EP 0x83/0x03: 64-B
-   type-0xF0 announce -> 640-B raw record -> 64-B type-7 ACK; the
-   xEye3Ddata x/y/z are HOST-computed by the vendor SVM). What the
-   vendor does when the startup probe finds NO stream: the
-   `ens_code.ldr` upload state machine on the same endpoint pair -
-   the never-captured PU/OD traffic. The T12 run decides which world
-   we are in:
+1. **The T12 record-plane bench verdict (the one remaining bench
+   run).** The wire plane is fully understood (turn 46: PU/OD on EP
+   0x83/0x03 - 64-B type-0xF0 announce -> 640-B raw record -> 64-B
+   type-7 ACK; the xEye3Ddata x/y/z are HOST-computed by the vendor
+   SVM). What the vendor does when the startup probe finds NO
+   stream: the `ens_code.ldr` upload state machine on the same
+   endpoint pair - the never-captured PU/OD traffic. The T12 run
+   decides which world we are in:
    `cargo run --features usb --example records -- --cmos`
    VERDICT A: records flow -> dump + decode the blob layout (the
    classifier input). VERDICT B: silence -> the ldr upload is needed
@@ -257,12 +287,24 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
    pins its wire bytes (the games' record stream runs while that
    capture is taken), and the driver replays it like `flash_mcu`
    replays the hex.
-3. **P4 ROS 2 node** (idong-ros2 + idong_msgs): lifecycle node,
-   parameters, QoS, diagnostics - blocked on a ROS 2 install, design
-   already in the draft
-   (`deliverables/idong100_RUST_ROS2_DRIVER_DRAFT.pdf`, turn 13). The
-   promoted backends (`transport::v4l2_stream`, `transport::usbfs_iso`)
-   are the node's video seam now.
+2. **P4 ROS 2: the rclrs glue** (`idong-ros2/src/lib.rs` +
+   `node.rs`): declare the table-5 parameters, create the six
+   interfaces with their QoS, run the executor loop that calls
+   `NodeCore` (drain -> convert -> stamp -> publish), the
+   `~/transition` service against the lifecycle machine, and the
+   reader thread on the promoted backends (`transport::v4l2_stream`,
+   `transport::usbfs_iso` are the node's video seam). The pure data
+   layer is DONE (`src/ros/`, turn 48: params/lifecycle/pubsub/
+   diagnostics/node, 24 unit tests); the glue is thin copy code but
+   needs a ROS 2 install to compile against (rclrs + the generated
+   idong_msgs crate exist only inside a colcon workspace).
+3. **Channel-B decode** (optional): the run-11/run-13 benches
+   confirmed channel B is NOT an image (flat 127.3 +- 6.4, sd rising
+   to ~19 only on bright frames - scene-coupled noise, not
+   structure). The marker/3D data lives on the MI_04 record pair
+   0x83/0x03 per the turn-46 disassembly, so B is likely ISP
+   sideband/telemetry; decoding it is a research nicety, not a
+   driver blocker.
 
 DONE on the turn-44 bench day (for the record): the P2.5 promotion
 (#3 of the old list - both ioctl engines moved into the crate behind

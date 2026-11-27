@@ -7,4 +7,6 @@ float32 x               # mm, device frame
 float32 y               # mm
 float32 z               # mm
 int32 quality           # slot+0x24; >= 50 means tracked (vendor gate)
-float64 age             # slot+0x18 gate value (timestamp/distance)
+# No `age` field: turn 46 proved record +0x18 is z, not an age gate
+# (the vendor GetADataFromUSB loop selects the smallest z); the core
+# Marker struct and this definition mirror each other field-for-field.
