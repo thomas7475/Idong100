@@ -1,29 +1,30 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
-Turn 43, 2026-11-27. The one-file answer to "how far are we, what is
+Turn 44, 2026-11-27. The one-file answer to "how far are we, what is
 left". Status line: **the protocol is fully decoded (every plane
-captured), the driver lives under `software/` of the repository (turn
-40: the crate with the vendor device files in `firmware/`, the ROS 2
-packages and `docs/` next to it; all code under `src/` since turn 39),
-106 tests green, and the bench ladder stands: T1-T5, T6 and T8 (x2)
-PASS - T8 flipped `FLASH_CONFIRMED` in turn 42 (P2.3 accepted); T7
-(V4L2 STREAMON) is a documented dead end - uvcvideo cannot stream
-this firmware. The active frontier is T9: the P2.5b raw usbfs-ISO
-backend. Its first live run (turn 42, mirroring the vendor capture's
-no-SET_INTERFACE flow) failed at the first SUBMITURB with ENOENT (os
-error 2 - NOT a missing file: at alt 0 the host controller has no
-transfer ring for EP 0x85); turn 43 root-caused it and made
-`USBDEVFS_SETINTERFACE` (streaming alt) the default step before the
-ISO ring, plus `--alt N` (the 812 B alt 1) and `--no-set-alt` (the
-A/B control) and a proper teardown (alt 0 + release). No protocol
-blocker remains.**
+captured and now FULLY ASSEMBLED), the driver lives under `software/`
+of the repository, 108 tests green, and the bench ladder is complete:
+T1-T10 all PASS - T9 (raw usbfs-ISO) and T7 (uvcvideo STREAMON, the
+former "dead end" - state-dependent after all) both captured real
+frames on the turn-44 bench day, and T10 (`--recover`) makes the run
+self-healing: the sensor's documented 31-157 s self-reboot is absorbed
+by an automatic re-flash + resume, exactly the vendor engine's own
+babysitting job. The video backends are PROMOTED into the crate
+(`transport::v4l2_stream`, `transport::usbfs_iso`, behind the `usb`
+feature - the example is the bench script on top of them), and the
+turn-44 bench exposed + fixed a real assembler bug: the EOF-flagged
+final payload of every frame carries the frame's tail (612000 + 2400
+= exactly 614400 B under one PTS) - `VideoAssembler` now closes the
+frame WITH that payload's data. What remains: the marker/3D record
+plane (needs one capture with a RUNNING GAME - the trigger command is
+unknown) and P4 ROS 2 (needs a ROS install).**
 
 ## The short version
 
 | Layer | Status |
 | --- | --- |
 | Wire protocol (boot flash, session, EEPROM, CMOS, stream poll, UVC video) | DONE - byte-pinned from 5 captures, turn 32/33/35 |
-| P1 pure core (frames, records, calibration, boot + runtime framing, video assembler) | DONE - 106 tests green, no hardware needed |
+| P1 pure core (frames, records, calibration, boot + runtime framing, video assembler) | DONE - 108 tests green, no hardware needed |
 | All-code-in-src/ layout (lib + src/examples/ + src/tests/ - turn 39) | DONE - explicit `[[example]]`/`[[test]]` path targets, commands unchanged |
 | Repository layout (turn 40: `software/` = crate + `firmware/` + `idong-ros2` + `idong_msgs` + `docs/`) | DONE - the 24 vendor device files ship in `firmware/`, pinned by the `firmware_files` test; `flash_mcu` needs no `--hex` |
 | Live bench run T1-T5 (turn 39: list/bringup/session_full --cmos) | PASS on the real sensor (Linux, rusb) |
@@ -35,8 +36,10 @@ blocker remains.**
 | Re-enumeration handling (`src/transport/reenum.rs`) | DECISION CORE DONE + unit-tested; rusb loop coded, untested on hardware |
 | P2.2 live read-only bring-up (`src/examples/bringup.rs`) | LIVE PASS (T3, turn 39) - version 2619, device ID, codes read |
 | P2.4 full-session test (`src/examples/session_full.rs`, turn 38) | LIVE PASS (T5 `--cmos`, turn 39) - register init + 6/6 polls |
-| P2.5 Linux video bring-up (`src/examples/video.rs` + `src/transport/v4l2.rs`) | T6 PASS (turn 41: capture node video0, 640x480 YUYV); T7 FAIL at STREAMON EIO - uvcvideo cannot stream this firmware (the documented decision point) |
-| P2.5b raw usbfs-ISO backend (`--iso`, `src/transport/usbfs.rs`) | T9 run 1 (turn 42): MI_01 claim + probe/commit PASS, SUBMITURB ENOENT at alt 0 root-caused (no xHCI transfer ring); turn 43: SET_INTERFACE default step + `--alt`/`--no-set-alt` controls + alt-0 teardown - awaiting the rerun |
+| P2.5 Linux video bring-up (`src/examples/video.rs` + `src/transport/v4l2.rs` + `src/transport/v4l2_stream.rs`) | T6 PASS (turn 41); T7 PASS (turn 44, right after the T8 re-flash - the turn-41 EIO was state-dependent); the ioctl engine PROMOTED into the crate (turn 44) |
+| P2.5b raw usbfs-ISO backend (`--iso`, `src/transport/usbfs.rs` + `src/transport/usbfs_iso.rs`) | T9 PASS (turn 44: 1281 payloads, 0 errors, frames per PTS) - the SET_INTERFACE fix held; the engine PROMOTED into the crate (turn 44) |
+| Video frame assembly (`protocol::video::VideoAssembler`) | the turn-44 bench fixed the EOF order: the final payload's data belongs to its own frame (was: split into 612000 + 2400 B under one PTS); golden + bench-shape tests green |
+| P2.4b self-reboot recovery (`video --recover`) | DONE (turn 44): wait bootloader landing -> re-flash the pinned image (ungated `FLASH_CONFIRMED` path) -> wait renum -> re-init -> resume; `session_full` points at it |
 | P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | ACCEPTED - T8 PASS x2 on the turn-41 bench (readback matched, launched, identity intact); `FLASH_CONFIRMED` = true since turn 42 |
 | Marker/3D record decoding (xEye3Ddata 10-slot records) | PARSER DONE - never seen on the wire in ANY capture (open) |
 | P4 ROS 2 node (idong-ros2, idong_msgs) | NOT STARTED (needs a ROS install) |
@@ -55,8 +58,8 @@ device files ship in `firmware/` (turn 40; `firmware/README.md`), and
 crate. The rusb transport is a cargo feature:
 
 ```
-cargo test                      # 106 tests, hardware-free, no libusb needed
-cargo test --features usb       # same + compiles the rusb transport
+cargo test                      # 108 tests, hardware-free, no libusb needed
+cargo test --features usb       # the same + compiles the rusb transport + the ioctl engines
 cargo run --features usb --example list            # T2: discovery
 cargo run --features usb --example bringup         # T3: read-only bring-up
 cargo run --features usb --example probe_bootloader # T4: bootloader probe
@@ -96,19 +99,37 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
 - `src/transport/usb.rs` - rusb discovery + bulk I/O with the retry
   policy; `src/transport/udev.rs` - the udev rule for unprivileged
   access.
-- `src/transport/v4l2.rs` (NEW turn 38) - the PURE sysfs side of the
-  video backend: /dev/video* node scan, the sensor cross-match
-  (usb port chain <-> video node interface dir) and fourcc formatting;
-  unit-tested (the matcher rules, incl. the sibling-trap).
+- `src/transport/v4l2.rs` - the PURE sysfs side of the video backend:
+  /dev/video* node scan, the sensor cross-match (usb port chain <->
+  video node interface dir) and fourcc formatting; unit-tested (the
+  matcher rules, incl. the sibling-trap).
+- `src/transport/v4l2_stream.rs` (NEW turn 44) - the V4L2 ioctl engine,
+  PROMOTED from the example after the T7 bench PASS: the
+  ABI-pinned UAPI mirror (every struct size/offset/ioctl number
+  const-asserted) + `V4l2Dev` (QUERYCAP/G_FMT/S_FMT/REQBUFS/mmap/
+  QBUF/DQBUF/STREAMON/STREAMOFF). The crate stays `deny(unsafe_code)`
+  everywhere else; this module is the sanctioned raw-ABI exception.
+- `src/transport/usbfs_iso.rs` (NEW turn 44) - the usbfs ISO engine,
+  PROMOTED from the example after the T9 bench PASS: the
+  ABI-pinned usbdevice_fs mirror + `IsoUrb` (one in-flight ISO URB)
+  + control_out / read_config_descriptor / disconnect_claim /
+  set_interface / release_interface / wait_reap / discard_and_drain.
+  `libc` is an optional regular dependency behind `usb` now (plain
+  `cargo test` still builds neither engine).
 - `src/examples/session_full.rs` (turn 38) - the P2.4 test: full vendor
   session (EEPROM + CMOS register tables, writes gated behind
   `--cmos`) + one poll cycle + 0x0205 probes.
-- `src/examples/video.rs` (turn 38) - the P2.5 test: `--probe` (what
-  does uvcvideo see) and the full stream run (session + V4L2 mmap
-  streaming + 0x0205 at 10 Hz + per-channel PNGs + raw .bin + stats).
-  The V4L2 UAPI mirror is const-asserted against the kernel headers
-  (any ABI drift fails the build, not the bench); kept in the example
-  until the first hardware PASS promotes it behind a crate feature.
+- `src/examples/video.rs` (turns 38-44) - the P2.5/P2.5b bench script
+  on top of the promoted crate engines: `--probe` (read-only), the
+  V4L2 stream run, the `--iso` raw run (`--alt N`, `--no-set-alt`),
+  and `--recover` (turn 44, P2.4b): the self-reboot recovery loop -
+  a gone device re-runs as a fresh attempt (session + backend rebuilt,
+  frame counter / outdir / pooled stats carried over), the landing is
+  re-flashed with the pinned image via the ungated `FLASH_CONFIRMED`
+  path (budget 12 landings/run). PTS cadence reporting on the ISO
+  path (`dt N.N fr` per frame + the deltas summary); pooled plane
+  stats are sample-count-weighted now (the old pairwise mean
+  understated channel A on mixed-size frames).
 - `src/protocol/runtime.rs` - turn 38: `read_until_reply` fails FAST
   on a silent device (`REPLY_EMPTY_BUDGET`, 3 consecutive empty reads
   = ~3 s) instead of spinning 1024 x 1 s (~17 min).
@@ -142,42 +163,36 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
 
 ## What is missing, in order
 
-1. **Pull turn 40 and rerun the fixed bench steps** (the turn-38 run
-   hit two bugs fixed in turn 39; all cargo commands run from
-   `software/` now): T3 `bringup` again (the calibration parse
-   now PASSES - `parse_calibration_payload`), T6 `video --probe` (the
-   sensor ports list is no longer empty - sysfs ids are HEX, not
-   decimal, so the nodes now cross-match: expect `matches sensor:
-   true` on /dev/video0), then T7 the stream test.
-2. **T8 the 8051 firmware upload** (`src/examples/flash_mcu.rs`): dry
-   run + `--confirm` on the real sensor (the hex ships in `firmware/`,
-   no file hunting). ONE clean PASS flips
-   `FLASH_CONFIRMED` (P2.3 acceptance) and from then on the driver
-   brings the sensor up from any bootloader landing itself.
-3. **P2.5 promotion**: after T9 (the `--iso` stream test) PASSes
-   once, promote the usbfs-ISO backend from `src/examples/video.rs`
-   into the crate behind a feature (and wire `VideoSource`/
-   `VideoAssembler` if payload-level access is ever needed). T7 (the
-   uvcvideo side) is a documented dead end; P2.5b (raw usbfs ISO on
-   EP 0x85) is the implemented path - turn 42 built the ioctl engine
-   (rusb has no ISO support; pure helpers in `src/transport/usbfs.rs`,
-   ABI-pinned mirror in the example), the turn-43 run root-caused the
-   ENOENT of the capture-mirroring variant (at alt 0 the host
-   controller has no transfer ring for EP 0x85) and the fix shipped
-   the same turn: SET_INTERFACE is a default step before the ring.
-4. **P2.4b auto-recovery**: `session_full`/`video` currently tell you
-   to rerun after a self-reboot; wire the existing
-   `transport::reenum` waiter into the examples' error path.
-5. **The marker/3D plane**: NOT on the wire in any capture so far.
+1. **The frame-rate A/B (the one open video question).** The turn-44
+   bench measured ~1.8 fps produced on the raw ISO path (golden
+   probe/commit; PTS deltas of 3/4.5/4.5/6 frame periods) vs ~25 fps
+   device-side on the V4L2 path the same hour (uvcvideo's own
+   negotiation). The vendor capture's steady state was 8.0 fps. Next
+   A/Bs, all cheap: the ISO path right after a T8 flash, an usbmon
+   capture of what uvcvideo actually commits (`sudo cat
+   /sys/kernel/debug/usb/usbmon/1u`), and `--alt 1`.
+2. **The marker/3D plane**: NOT on the wire in any capture so far.
    The running games receive the 10-slot records over the engine pipes;
    the likely trigger is a command we have not sent or EP 0x03/0x83
    (512-B vendor endpoints, unused in every capture). A capture with a
    RUNNING GAME decides (the lobby unlock kit 37 makes the game
-   runnable on Windows). The parser exists and is tested.
-6. **P4 ROS 2 node** (idong-ros2 + idong_msgs): lifecycle node,
+   runnable on Windows). The parser exists and is tested. Channel B
+   of the video plane is NOT the marker plane (near-128 chroma, no
+   image - the turn-44 bench).
+3. **P4 ROS 2 node** (idong-ros2 + idong_msgs): lifecycle node,
    parameters, QoS, diagnostics - blocked on a ROS 2 install, design
    already in the draft
-   (`deliverables/idong100_RUST_ROS2_DRIVER_DRAFT.pdf`, turn 13).
+   (`deliverables/idong100_RUST_ROS2_DRIVER_DRAFT.pdf`, turn 13). The
+   promoted backends (`transport::v4l2_stream`, `transport::usbfs_iso`)
+   are the node's video seam now.
+
+DONE on the turn-44 bench day (for the record): the P2.5 promotion
+(#3 of the old list - both ioctl engines moved into the crate behind
+the `usb` feature, `libc` an optional regular dependency), the P2.4b
+auto-recovery (#4 - `video --recover` flashes and resumes on every
+self-reboot landing, budget 12/run), and the T7 rerun that revised
+the "uvcvideo cannot stream this firmware" verdict to
+"state-dependent".
 
 ## Do we need more USB captures?
 

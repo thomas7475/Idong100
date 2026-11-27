@@ -472,3 +472,46 @@ decoded for the bench); 106 tests green. The next T9 question: does
 the firmware stream under probe -> commit -> alt, or does it need
 the alt BEFORE the commit (the next A/B), or does nothing move at all
 (then EP 0x03/0x83, never observed on the wire).
+
+## Turn 44: the T9 rerun PASSes - EOF carries the frame tail
+
+The T9 rerun (`video --iso --cmos --frames 10`, the turn-43 fix) is
+the first full raw-ISO PASS: 1281 payloads, 0 packet errors, frames
+end to end. Three wire facts it decided:
+
+1. **probe -> commit -> SET_INTERFACE(alt 2) -> ring is the working
+   shape.** The capture-mirroring no-alt flow stays the documented
+   dead end (`--no-set-alt`).
+
+2. **The firmware flags the final payload of every frame with EOF,
+   and that payload carries the frame tail.** The bench closed every
+   frame as TWO frames under one PTS: a 612000-B body (255 full
+   payloads) + a 2400-B tail - 256 x 2400 = exactly 614400 B, the
+   committed `dwMaxVideoFrameSize`. That was the assembler's old
+   close-before-append EOF order leaking the last payload into the
+   next frame, not a device quirk. Turn 44 fixed
+   `VideoAssembler::push_payload`: an EOF payload completes the
+   frame WITH its data (an error payload still drops its own bytes;
+   the PTS-advance rule and the golden capture shapes are unchanged
+   - 108 tests green). Reruns now close one 614400-B frame per PTS.
+
+3. **The raw-path cadence:** the PTS advanced 5 times in the window,
+   in steps of exactly 3, 4.5, 4.5 and 6 frame periods
+   (`PTS_PER_FRAME` = 1,920,000 units at the 15.36 MHz device clock =
+   125 ms) - ~1.8 frames/s produced under the golden probe/commit,
+   while the V4L2 path the same hour delivered ~25 frames/s
+   device-side (uvcvideo's own negotiation; seq 0..26 in ~1.0 s,
+   8.7 fps app-side with inline PNG work). The 8.0-fps steady state
+   of the vendor capture sits between the two. The rate difference
+   is an OPEN question: next A/Bs are the ISO path right after a T8
+   flash, an usbmon capture of what uvcvideo actually commits, and
+   `--alt 1`.
+
+The same bench day also resurrected T7: uvcvideo STREAMON - the
+turn-41 EIO "dead end" - PASSED right after the T8 re-flash (10
+frames, 614400 B, real image). The EIO is state-dependent, not
+permanent; both observations are recorded in `docs/LINUX_TESTS.md`.
+The self-reboot the bench saw after every video run (the sensor
+lands on 0471:2600) is the documented 31-157 s cycle, not a teardown
+bug: with `--recover` (P2.4b, turn 44) the driver now re-flashes and
+resumes on every landing, exactly like the vendor engine.

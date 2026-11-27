@@ -48,6 +48,20 @@ pub mod v4l2;
 
 /// usbfs (the /dev/bus/usb device node) - the pure half of the P2.5b
 /// raw ISO backend: config-descriptor walk, wMaxPacketSize decode, UVC
-/// control builders. The ioctl engine lives in src/examples/video.rs
-/// (`--iso`) until its first bench PASS promotes it into the crate.
+/// control builders. The ioctl engine (UAPI mirror + URB ring) lives in
+/// [`usbfs_iso`] (turn 44: promoted after the first T9 bench PASS).
 pub mod usbfs;
+
+/// The usbfs ISO ioctl engine (the `usbdevice_fs` UAPI mirror + the
+/// ISO URB ring machinery). Promoted from `src/examples/video.rs` on
+/// the turn-44 bench PASS (P2.5 acceptance); the pure builders it
+/// drives live in [`usbfs`].
+#[cfg(all(feature = "usb", target_os = "linux"))]
+pub mod usbfs_iso;
+
+/// The V4L2 ioctl streaming engine (the `videodev2` UAPI mirror +
+/// one open node with its mmap'd buffers). Promoted from
+/// `src/examples/video.rs` on the turn-44 bench PASS (P2.5 acceptance);
+/// the pure sysfs matcher lives in [`v4l2`].
+#[cfg(all(feature = "usb", target_os = "linux"))]
+pub mod v4l2_stream;
