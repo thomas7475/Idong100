@@ -78,8 +78,13 @@ folder.
 `app_m8051_2611.hex` is the only MCU image the driver flashes. The other hex
 files are not pinned, so `flash_mcu` refuses them; none of them has been seen on
 the wire of the test unit. The captures also show that the `.bit` and `.ldr`
-files are never uploaded by the host (PROTOCOL.md, turn 32); the driver pins
-them because the vendor host opens them by name.
+files are never uploaded by the host during the captured 7F 55 session
+(PROTOCOL.md, turn 32); the driver pins them because the vendor host opens them
+by name. Turn 49 decoded WHERE the `.ldr` actually travels: `ens_code.ldr` is
+the DSP's runtime loader upload on the record plane (EP 0x83/0x03, PU/OD
+frames, `0xf790` state 2 - see PROTOCOL.md "ENS startup"), so the driver
+uploads it too (`records -- --cmos`, T13) - the 7F 55 flash captures never
+see it because it is a DIFFERENT plane.
 
 ## The vendor's file map
 

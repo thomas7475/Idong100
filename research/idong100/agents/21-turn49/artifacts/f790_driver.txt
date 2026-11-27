@@ -1,0 +1,109 @@
+### ./extracted/$_6_/xEyeUSB.dll RVA 0xf790  
+0000f790  55                   push ebp
+0000f791  8bec                 mov ebp, esp
+0000f793  81ec20010000         sub esp, 0x120
+0000f799  a1a8c20110           mov eax, dword ptr [0x1001c2a8]
+0000f79e  33c5                 xor eax, ebp
+0000f7a0  8945ec               mov dword ptr [ebp - 0x14], eax
+0000f7a3  66c745f40100         mov word ptr [ebp - 0xc], 1
+0000f7a9  c745f000000000       mov dword ptr [ebp - 0x10], 0
+0000f7b0  c745f800000000       mov dword ptr [ebp - 8], 0
+0000f7b7  c745fc88c70110       mov dword ptr [ebp - 4], 0x1001c788
+0000f7be  b801000000           mov eax, 1
+0000f7c3  85c0                 test eax, eax
+0000f7c5  0f8464010000         je 0x1000f92f
+0000f7cb  0fb74df4             movzx ecx, word ptr [ebp - 0xc]
+0000f7cf  898de4feffff         mov dword ptr [ebp - 0x11c], ecx
+0000f7d5  8b95e4feffff         mov edx, dword ptr [ebp - 0x11c]
+0000f7db  83ea01               sub edx, 1
+0000f7de  8995e4feffff         mov dword ptr [ebp - 0x11c], edx
+0000f7e4  83bde4feffff07       cmp dword ptr [ebp - 0x11c], 7
+0000f7eb  7768                 ja 0x1000f855
+0000f7ed  8b85e4feffff         mov eax, dword ptr [ebp - 0x11c]
+0000f7f3  ff248540f90010       jmp dword ptr [eax*4 + 0x1000f940]
+0000f7fa  e831020000           call 0x1000fa30  ; ->0xfa30
+0000f7ff  8945f0               mov dword ptr [ebp - 0x10], eax
+0000f802  eb57                 jmp 0x1000f85b  ; ->0xf85b
+0000f804  8b4d08               mov ecx, dword ptr [ebp + 8]
+0000f807  51                   push ecx
+0000f808  e8d3020000           call 0x1000fae0  ; ->0xfae0
+0000f80d  83c404               add esp, 4
+0000f810  8945f0               mov dword ptr [ebp - 0x10], eax
+0000f813  eb46                 jmp 0x1000f85b  ; ->0xf85b
+0000f815  c745f003000000       mov dword ptr [ebp - 0x10], 3
+0000f81c  eb3d                 jmp 0x1000f85b  ; ->0xf85b
+0000f81e  e8fd050000           call 0x1000fe20  ; ->0xfe20
+0000f823  8945f0               mov dword ptr [ebp - 0x10], eax
+0000f826  eb33                 jmp 0x1000f85b  ; ->0xf85b
+0000f828  e883070000           call 0x1000ffb0  ; ->0xffb0
+0000f82d  8945f0               mov dword ptr [ebp - 0x10], eax
+0000f830  eb29                 jmp 0x1000f85b  ; ->0xf85b
+0000f832  e8f9080000           call 0x10010130  ; ->0x10130
+0000f837  8945f0               mov dword ptr [ebp - 0x10], eax
+0000f83a  eb1f                 jmp 0x1000f85b  ; ->0xf85b
+0000f83c  8b55fc               mov edx, dword ptr [ebp - 4]
+0000f83f  52                   push edx
+0000f840  e89b0c0000           call 0x100104e0  ; ->0x104e0
+0000f845  83c404               add esp, 4
+0000f848  8945f0               mov dword ptr [ebp - 0x10], eax
+0000f84b  eb0e                 jmp 0x1000f85b  ; ->0xf85b
+0000f84d  8b45fc               mov eax, dword ptr [ebp - 4]
+0000f850  e9da000000           jmp 0x1000f92f  ; ->0xf92f
+0000f855  66c745f40100         mov word ptr [ebp - 0xc], 1
+0000f85b  837df000             cmp dword ptr [ebp - 0x10], 0
+0000f85f  0f8e95000000         jle 0x1000f8fa
+0000f865  837df005             cmp dword ptr [ebp - 0x10], 5
+0000f869  7d0c                 jge 0x1000f877
+0000f86b  c705b0cb011001000000 mov dword ptr [0x1001cbb0], 1
+0000f875  eb62                 jmp 0x1000f8d9  ; ->0xf8d9
+0000f877  837df005             cmp dword ptr [ebp - 0x10], 5
+0000f87b  755c                 jne 0x1000f8d9
+0000f87d  c705b0cb011002000000 mov dword ptr [0x1001cbb0], 2
+0000f887  6a01                 push 1
+0000f889  e842daffff           call 0x1000d2d0  ; ->0xd2d0
+0000f88e  83c404               add esp, 4
+0000f891  6a20                 push 0x20
+0000f893  6888cb0110           push 0x1001cb88
+0000f898  8d85e8feffff         lea eax, [ebp - 0x118]
+0000f89e  50                   push eax
+0000f89f  e8b8360000           call 0x10012f5c  ; ->0x12f5c
+0000f8a4  83c40c               add esp, 0xc
+0000f8a7  c68508ffffff00       mov byte ptr [ebp - 0xf8], 0
+0000f8ae  ff1594530110         call dword ptr [0x10015394]  ; xEyeRight.dll!?getSingleton@xEyeRightManager@@SAAAV1@XZ
+0000f8b4  8985e0feffff         mov dword ptr [ebp - 0x120], eax
+0000f8ba  8d8de8feffff         lea ecx, [ebp - 0x118]
+0000f8c0  51                   push ecx
+0000f8c1  68807c0110           push 0x10017c80  ; "setDeviceID"
+0000f8c6  8b95e0feffff         mov edx, dword ptr [ebp - 0x120]
+0000f8cc  8b02                 mov eax, dword ptr [edx]
+0000f8ce  8b8de0feffff         mov ecx, dword ptr [ebp - 0x120]
+0000f8d4  8b5008               mov edx, dword ptr [eax + 8]
+0000f8d7  ffd2                 call edx
+0000f8d9  c745f800000000       mov dword ptr [ebp - 8], 0
+0000f8e0  668b45f4             mov ax, word ptr [ebp - 0xc]
+0000f8e4  66050100             add ax, 1
+0000f8e8  668945f4             mov word ptr [ebp - 0xc], ax
+0000f8ec  8b4df0               mov ecx, dword ptr [ebp - 0x10]
+0000f8ef  51                   push ecx
+0000f8f0  e86b000000           call 0x1000f960  ; ->0xf960
+0000f8f5  83c404               add esp, 4
+0000f8f8  eb28                 jmp 0x1000f922  ; ->0xf922
+0000f8fa  837df801             cmp dword ptr [ebp - 8], 1
+0000f8fe  7c19                 jl 0x1000f919
+0000f900  c745f800000000       mov dword ptr [ebp - 8], 0
+0000f907  66c745f40100         mov word ptr [ebp - 0xc], 1
+0000f90d  c705b0cb0110ffffffff mov dword ptr [0x1001cbb0], 0xffffffff
+0000f917  eb09                 jmp 0x1000f922  ; ->0xf922
+0000f919  8b55f8               mov edx, dword ptr [ebp - 8]
+0000f91c  83c201               add edx, 1
+0000f91f  8955f8               mov dword ptr [ebp - 8], edx
+0000f922  6a32                 push 0x32
+0000f924  ff1534500110         call dword ptr [0x10015034]  ; KERNEL32.dll!Sleep
+0000f92a  e98ffeffff           jmp 0x1000f7be  ; ->0xf7be
+0000f92f  8b4dec               mov ecx, dword ptr [ebp - 0x14]
+0000f932  33cd                 xor ecx, ebp
+0000f934  e82b340000           call 0x10012d64  ; ->0x12d64
+0000f939  8be5                 mov esp, ebp
+0000f93b  5d                   pop ebp
+0000f93c  c3                   ret 
+

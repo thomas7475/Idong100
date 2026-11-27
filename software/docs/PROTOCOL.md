@@ -570,7 +570,7 @@ framing on the second MI_04 bulk pair.
 | ACK | 64-B PU frame type 7 on EP 0x03, payload @ +0xC, first one zeroed | write @0x11cc2, build @0x11d91 |
 | ACK semantics | the ACK for record N carries the type-7 command computed from record N-1 (classifier output) | ClassifyAndTrack receives PU+0xC |
 | startup probe | read 64 B from EP 0x83, 100 ms x <= 10 tries, expect OD type 0xF0 | @0x10640, called @0x11886 |
-| if probe fails | the `ens_code.ldr` upload state machine runs on EP 0x03/0x83 first (7 states, 64-B PU/OD frames) - the PU/OD traffic never seen in captures | @0xf790; the app never reached usbCom (license gates) |
+| if probe fails | the `ens_code.ldr` upload state machine runs on EP 0x03/0x83 first (8 states incl. a skip, 64/128-B PU/OD frames) - DECODED turn 49, see "ENS startup" | @0xf790; the app never reached usbCom (license gates) |
 | record payload | RAW blob data (the classifier input; `SVM_Class_ball/head_*.dat`), status byte u8 @ +0x25C | f660 transform @0xf660 |
 | status byte | bit 7 gates flags = (bit4/5/3 == 0) -> +0x378/+0x37C/+0x380; bit 0 -> mode word @ +0x3B0 | f660 @0xf660 |
 | classification | `classifying.dll!ClassifyAndTrack` runs ON THE HOST: 640-B record -> 10 x 0x48 slots -> remapped into the 10 x 0x58 xEye3Ddata slots | remap loop @0x11de2 |
@@ -579,7 +579,65 @@ framing on the second MI_04 bulk pair.
 
 Implemented: `protocol::ens` (StatusFrame / WireRecord / Type7Command,
 all constants above), `transport::usb::{read_bulk_ep, write_bulk_ep}`,
-the T12 bench example `records.rs`
-(`cargo run --features usb --example records -- --cmos`). The ldr
-upload state machine wire bytes stay open (one kit-37 unlocked game
-capture pins them).
+the bench example `records.rs`
+(`cargo run --features usb --example records -- --cmos`).
+
+## ENS startup (turn 49: the record-plane bring-up, decoded)
+
+The T12 bench (user, turn 48/49) returned **VERDICT B** - silence on EP
+0x83 after the session init - so the runtime `ens_code.ldr` upload is
+required. Its wire format, previously "the last unpinned bytes", is
+now fully decoded STATICALLY from the vendor stack itself (no game
+capture needed): the 7z-extracted v2.6.0.6 engine DLLs, byte-verified
+against the turn-12 manifest, disassembled with
+`research/scripts/dis46.py`. Full walkthrough:
+`research/idong100/agents/21-turn49/FINDINGS.md`.
+
+`usbCom` brings the record plane up one of two ways:
+
+**Hot start** (probe @0x10640 + finish @0x10900) - the stream is
+already alive (a previous app session loaded the DSP):
+
+| step | exchange | source |
+|---|---|---|
+| probe | expect OD 0xF0 (10 x 100 ms), read the 640-B record, trailer check | 0x10640 |
+| cycle x3 | 0xF0 + record; the first two cycles ACKed with `{PU magic, type 7}` 64-B frames on EP 0x03 | 0x10640 @0x1089a |
+| finish 1 | TX PU type 0x10 (the hot-start cmd) | 0x10900 |
+| finish 2 | RX OD type 0x10, 128 B = the lens frame (0x78 B params @ +8) | 0x10900 |
+| finish 3 | TX PU type 0x9001, RX OD type 0x9001 = DID (32 B @ +8, 8 B @ +0x28) -> `setDeviceID` | 0x10900 |
+
+**Cold start** (the 8-state machine @0xf790, driver loop with jmp
+table @0xf940, per-state retry, 50 ms pacing, progress flag at
+0x1001cbb0: -1 error / 1..5 milestones). The state handlers' own GBK
+log strings name every state:
+
+| state | handler | milestone | exchange |
+|---|---|---|---|
+| 1 | 0xfa30 | 启动开始 startup-begin | TX PU type 1 ("Tx DSP Start"), 3 s -> RX OD type 1 (device ID) |
+| 2 | 0xfae0 | 代码加载 code-load | TX PU type 2 {u32 size @+8, u32 CRC32 @+0xC} -> RX OD type 2 ("Ready to load program!") -> ceil(size/64) RAW 64-B chunks (6 s each, no framing) -> RX OD type 3 with u16 0xF @+8 (the CRC verdict) |
+| 3 | skip | ... | returns 3, no I/O |
+| 4 | 0xfe20 | 手柄配对选择 pairing select | poll RX OD type 5 (11 x 300 ms, 100 ms apart) -> TX PU type 0x25 (NeedHandleMatch=1) / 0x26 -> RX OD type 5 |
+| 5 | 0xffb0 | ID及版本 ID & version | TX PU type 0x8001 -> RX OD type 1: 32-B ID @+8, 8-B version @+0x28, `setDeviceID` |
+| 6 | 0x10130 | 手柄配对 pairing (only when match on) | loop: RX OD 0xFFF -> TX PU 0xFFE ("IDLE msg"); RX OD 4 with sub-word @+8: 1/2/0xF/8 -> TX PU 4 word 0x11/3/0xFF/9; sub 8 exits |
+| 7 | 0x104e0 | 镜头参数 lens params | RX OD type 6, 128 B (0x78 params @ +8) -> TX PU type 6 |
+| 8 | exit | 启动流程结束 finished | returns the ens block; usbCom Sleep(1000) then `SetLensParam(ens+8, 0x78)` |
+
+Frame builders: TX `0x105f0` = {PU magic, u16 type @ +4} on pipe 3
+(EP 0x03), 3 s; RX `0x10590` = pipe 2 (EP 0x83), exact length + OD
+magic + one expected type (returns -1 read / -2 frame). The
+code-load checksum is `crc.dll!GenerateCRC32` - a vendor variant:
+the standard reflected 0xEDB88320 table, but the hybrid MSB-style
+update `crc = ((crc << 8) | byte) ^ table[crc >> 24]`, init 0, no
+final XOR ("123456789" -> 0x4D3A139E; the shipped 54,420-B ldr ->
+0x63EAA8CA). Not a catalog CRC - the port in `protocol::ens::crc32_ens`
+is literal and test-pinned.
+
+Implemented (turn 49): `protocol::ens::{RecordIo, StartupOutcome,
+ColdStart, HotStart, crc32_ens, pu_frame, pu_frame_word,
+pu_codeload_announce, codeload_chunks, OdFrame}` + the `RecordIo`
+impls (`UsbTransport` behind `usb`, `MockTransport`), the replay test
+`src/tests/ens_replay.rs` (byte-exact cold start, match-off, the CRC
+verdict failure, the full hot start, probe silence), and the T13 bench
+flow in `records.rs`: probe -> hot start / cold start (the shipped,
+SHA-256-pinned ldr) -> the record handshake loop (`--no-ldr` keeps the
+old read-only T12 behavior, `--no-match` mirrors NeedHandleMatch=0).

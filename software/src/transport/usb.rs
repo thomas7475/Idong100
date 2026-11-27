@@ -160,6 +160,19 @@ impl UsbTransport {
     }
 }
 
+// The ENS startup machine's wire seam (turn 49): EP 0x83 IN reads /
+// EP 0x03 OUT writes through the same raw bulk pair the usbCom worker
+// uses (EasyUSB read pipe 2 / write pipe 3).
+impl crate::protocol::ens::RecordIo for UsbTransport {
+    fn read_record_ep(&mut self, len: usize, timeout: Duration) -> crate::Result<Vec<u8>> {
+        self.read_bulk_ep(crate::protocol::EP_RECORD_IN, len, timeout)
+    }
+
+    fn write_record_ep(&mut self, buf: &[u8], timeout: Duration) -> crate::Result<usize> {
+        self.write_bulk_ep(crate::protocol::EP_RECORD_OUT, buf, timeout)
+    }
+}
+
 impl Transport for UsbTransport {
     /// Write to EP 0x02 with the EasyUSB retry policy.
     fn write(&mut self, buf: &[u8]) -> crate::Result<()> {

@@ -429,12 +429,60 @@ The verdict matrix:
 | --- | --- |
 | VERDICT A: type-0xF0 answers, records read, trailer OK | the record plane streams spontaneously after the session init - dump the blob records, the classifier-input layout is the next decode |
 | 64 B arrive but not OD/0xF0 | something else lives on EP 0x83 - send the hex head printed by the run |
-| VERDICT B: silence for all 10 probes (read-only, no writes happened) | the runtime `ens_code.ldr` upload must run first - the ONE capture with the kit-37 unlocked app in a running game pins its wire bytes (T12 decides whether that capture is needed at all) |
+| VERDICT B: silence for all 10 probes (read-only, no writes happened) | the runtime `ens_code.ldr` upload must run first - DECODED TURN 49 (no capture needed); T13 (below) performs it |
 | records stop mid-run | check the self-reboot window (31-157 s); rerun on a fresh landing (the run is short on purpose) |
 
 PASS criteria: VERDICT A with `records N/N` and raw dumps, or VERDICT B
 recorded as the capture request (both are decisive outcomes - that is
 the point of the probe).
+
+**BENCH RESULT (user, turn 48/49): VERDICT B** - steps 1-3 PASS
+(runtime present, identity + calibration, register init + 6/6 polls),
+then all ten 100-ms probes silent. No type-0xF0 stream after the
+session init: the DSP needs the runtime loader upload. The turn-49
+decode of the 8-state machine (from the vendor DLL itself) makes that
+upload possible without the kit-37 game capture - the follow-up bench
+is T13.
+
+## T13 - THE P3b record-plane COLD START (records --cmos, turn 49)
+
+```
+# the full flow: session init -> probe -> (VERDICT B) the 8-state
+# ens_code.ldr upload -> the record handshake loop:
+cargo run --features usb --example records -- --cmos --frames 10
+# the old T12 read-only behavior (no upload, report and stop):
+cargo run --features usb --example records -- --cmos --no-ldr
+# NeedHandleMatch = 0 (type 0x26, no pairing loop):
+cargo run --features usb --example records -- --cmos --no-match
+```
+
+The turn-49 decode (full walkthrough:
+`research/idong100/agents/21-turn49/FINDINGS.md`): the vendor
+`0xf790` 8-state machine - startup-begin (PU 1 -> OD 1), the
+`ens_code.ldr` code-load (PU 2 {size, CRC32} -> OD 2 -> raw 64-B
+chunks -> OD 3 word 0xF), the skip, the pairing select (OD 5 -> PU
+0x25/0x26 -> OD 5), ID & version (PU 0x8001 -> OD 1: 32-B ID, 8-B
+version), the pairing/link loop (OD 0xFFF/4 -> PU 0xFFE/4) and the
+lens parameters (OD 6, 128 B -> PU 6). The CRC is the vendor crc.dll
+variant (`crc32_ens`: reflected 0xEDB88320 table, hybrid MSB update,
+init 0, no final xor - "123456789" -> 0x4D3A139E, the shipped ldr ->
+0x63EAA8CA). The driver replays it exactly, with the shipped,
+SHA-256-pinned `ens_code.ldr`.
+
+The verdict matrix:
+
+| observation | verdict |
+| --- | --- |
+| probe silent -> the cold start runs -> all milestones -> `records N/N` | PASS: the DSP runs, the marker record stream is LIVE - the blob layout decode is next |
+| probe silent -> the cold start runs -> the OD type-2 go-ahead never answers | the device is not in the boot state the vendor expects - full power cycle, then rerun (the loader upload is volatile RAM state) |
+| probe ALIVE (hot start path) -> `records N/N` | PASS: the previous session's DSP is still running - the hot start finished it (lens + DID) |
+| the code-load CRC verdict word != 0xF | the device computed a different CRC - send the printed announce CRC; a mismatch here means wrong ldr bytes (impossible: SHA-256-pinned) or a different firmware generation |
+| records stop mid-run | check the self-reboot window (31-157 s); the loader upload adds ~9 s (851 chunks at ~10 Hz device pace) - rerun on a fresh landing |
+
+PASS criteria: the milestones print in order, the DID/version/lens
+lines decode, and at least one complete record exchange follows
+(`--frames 10` at the 35-fps pacing runs ~1 s; the run stays well
+inside the self-reboot window).
 
 ## T8 - THE P2.3 8051 firmware upload (controlled flash replay)
 
@@ -511,3 +559,9 @@ captures exactly like we did with USBPcap on Windows.
 - T12: the record plane (P3a) - either the marker records stream and we
   hold the raw blob data, or the one remaining unpinned wire format (the
   runtime `ens_code.ldr` upload) is isolated as the single capture ask.
+  RESULT: VERDICT B (turn 48/49) - and the turn-49 static decode retired
+  the capture ask before it was ever needed.
+- T13: the record plane (P3b) - the cold start replays the vendor's own
+  8-state loader upload (decoded from xEyeUSB.dll, not captured), the
+  DSP runs, and the marker record stream goes LIVE without any vendor
+  software.

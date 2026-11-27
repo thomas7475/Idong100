@@ -1,5 +1,43 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
+Turn 49, 2026-11-28. **P3b: the `ens_code.ldr` upload decoded and
+implemented - the capture ask is retired.** The T12 bench (user turn
+48/49) returned VERDICT B (silence on EP 0x83 after the session init),
+which under the old plan made "one capture with the kit-37 unlocked
+app in a running game" the last unpinned wire format. Instead the
+format was pinned STATICALLY this turn, from the vendor stack itself:
+the v2.6.0.6 engine DLLs re-extracted from `xeyez_Lobby.dat`
+(byte-verified against the turn-12 manifest) and the missing pieces
+disassembled (`research/idong100/agents/21-turn49/FINDINGS.md`):
+**the cold machine** `0xf790` - a linear 8-state driver (jmp table
+@0xf940, per-state retry, 50 ms pacing, the progress flag at
+0x1001cbb0) whose state handlers' own GBK logs name every phase -
+startup-begin (PU 1 -> OD 1), code-load (the `ens_code.ldr` upload: PU
+2 {size, CRC32} -> OD 2 -> ceil(size/64) RAW 64-B chunks -> OD 3 with
+word 0xF), a skip, pairing-select (OD 5 -> PU 0x25/0x26 per
+`NeedHandleMatch`), ID & version (PU 0x8001 -> OD 1: 32-B ID + 8-B
+version -> `setDeviceID`), the pairing/link loop (OD 0xFFF/4 -> PU
+0xFFE/4 with reply words 0x11/3/0xFF/9; sub 8 exits) and lens params
+(OD 6, 128 B -> PU 6; usbCom then `SetLensParam(ens+8, 0x78)`);
+**the hot start** `0x10640`+`0x10900` - the "probe" is a hot-start
+detector: 3 record cycles (2 ACKs), then PU 0x10 -> OD 0x10 (lens) ->
+PU 0x9001 -> OD 0x9001 (DID); **the checksum** - `crc.dll!GenerateCRC32`:
+the reflected 0xEDB88320 table with a hybrid MSB-style update, init 0,
+no final xor ("123456789" -> 0x4D3A139E; the shipped ldr -> 0x63EAA8CA).
+NEW in the crate: `protocol::ens::{RecordIo, StartupOutcome, ColdStart,
+HotStart, crc32_ens, pu_frame, pu_codeload_announce, codeload_chunks,
+OdFrame}` + the `RecordIo` impls for `UsbTransport` (usb) and
+`MockTransport`, the replay test `src/tests/ens_replay.rs` (byte-exact
+cold start incl. the pairing loop, match-off, the CRC-verdict failure
+mapped to the vendor -11, the full hot start, probe silence), and the
+records example now runs the whole T13 flow: probe -> hot/cold start
+(the shipped SHA-256-pinned ldr; `--no-ldr` keeps the old read-only
+T12 behavior, `--no-match` mirrors NeedHandleMatch=0) -> the record
+handshake loop. 158 tests green both feature states (+9: 4 ens unit +
+5 ens_replay), nightly fmt clean, examples warning-free both states.
+NEXT BENCH: `cargo run --features usb --example records -- --cmos`
+(the T13 run decides everything the capture would have).
+
 Turn 48, 2026-11-27. Two things closed this turn. (1) The PTS
 tick-rate question - open since turn 44 - is MEASURED: run 13, the
 first clean T11 bench (`--iso --cmos --rate 300 --recover`, 300
@@ -126,7 +164,7 @@ game capture pins them), and P4 ROS 2 (needs a ROS install).**
 | P2.4b self-reboot recovery (`video --recover`) | DONE (turn 44): wait bootloader landing -> re-flash the pinned image (ungated `FLASH_CONFIRMED` path) -> wait renum -> re-init -> resume; `session_full` points at it; turn 47: the bootloader/video-node opens RETRY through the fresh-node udev race (run 11: recovery worked 8/9, the 9th hit "Access denied" on the first open) |
 | P2.6 rate measurement (`video --rate N`, turn 45/47) | **CLOSED (turn 48, run 13)**: 300 frames / 3 sessions / 0 payload errors; session 1 undisturbed 110/110 deltas EXACTLY 1,920,000 = flat 25 fps cadence; the device clock pinned at **48 MHz** (`DEVICE_CLOCK_HZ`), the 10-ms skip quantum pinned (`PTS_SKIP_QUANTUM` = 480,000); the negotiated 30 fps is an upper bound only |
 | P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | ACCEPTED - T8 PASS x2 on the turn-41 bench (readback matched, launched, identity intact); `FLASH_CONFIRMED` = true since turn 42 |
-| Marker/3D record plane (P3a, turn 46) | WIRE PLANE DECODED: PU/OD on EP 0x83/0x03 - type-0xF0 announce, 640-B raw record (OD trailer @+0x27C, status @+0x25C), type-7 ACK; open item #4 RESOLVED (x/y/z f64 @ slot +0x08/+0x10/+0x18, quality @+0x24) - the values are HOST-computed (classifying.dll SVM); `protocol::ens` + the T12 bench example ready; the `ens_code.ldr` upload state machine (the startup fallback) is the remaining unpinned wire format |
+| Marker/3D record plane (P3a/P3b, turns 46/49) | WIRE PLANE FULLY DECODED: PU/OD on EP 0x83/0x03 - type-0xF0 announce, 640-B raw record (OD trailer @+0x27C, status @+0x25C), type-7 ACK; open item #4 RESOLVED (x/y/z f64 @ slot +0x08/+0x10/+0x18, quality @+0x24, HOST-computed); the ENS startup fully decoded turn 49 - the 8-state cold machine `0xf790` (the `ens_code.ldr` upload + pairing + ID + lens params), the hot start `0x10640`/`0x10900`, the vendor crc.dll checksum; `protocol::ens::{ColdStart, HotStart, crc32_ens, RecordIo}` + the `ens_replay` test; the T13 bench flow in the records example - awaiting its bench run |
 | P4 ROS 2 adapter - pure data layer (`src/ros/`, turn 48) | DONE + unit-tested (149 tests): params (model + params.yaml parser pinned to the launch file), lifecycle (state machine), pubsub (six interfaces + converters), diagnostics (window/floor/stall), node (drain/convert/stamp core) - all rclrs-free, hardware-free |
 | P4 ROS 2 adapter - rclrs glue (`idong-ros2/src`) | REMAINING: lib.rs/node.rs wiring (declare params, create the six interfaces, the executor loop calling `NodeCore`) - needs a ROS 2 install to build against |
 
@@ -272,21 +310,14 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
 
 ## What is missing, in order
 
-1. **The T12 record-plane bench verdict (the one remaining bench
-   run).** The wire plane is fully understood (turn 46: PU/OD on EP
-   0x83/0x03 - 64-B type-0xF0 announce -> 640-B raw record -> 64-B
-   type-7 ACK; the xEye3Ddata x/y/z are HOST-computed by the vendor
-   SVM). What the vendor does when the startup probe finds NO
-   stream: the `ens_code.ldr` upload state machine on the same
-   endpoint pair - the never-captured PU/OD traffic. The T12 run
-   decides which world we are in:
-   `cargo run --features usb --example records -- --cmos`
-   VERDICT A: records flow -> dump + decode the blob layout (the
-   classifier input). VERDICT B: silence -> the ldr upload is needed
-   first; ONE capture with the kit-37 unlocked app in a running game
-   pins its wire bytes (the games' record stream runs while that
-   capture is taken), and the driver replays it like `flash_mcu`
-   replays the hex.
+1. **The T13 bench run** (the one remaining bench run):
+   `cargo run --features usb --example records -- --cmos` - the
+   probe (VERDICT B is expected after a fresh flash) runs the 8-state
+   cold start with the shipped, SHA-256-pinned `ens_code.ldr` (the
+   turn-49 static decode - no game capture needed any more), then the
+   record handshake loop. The verdict matrix: `docs/LINUX_TESTS.md`
+   T13. If records flow, the marker plane is LIVE end-to-end and the
+   blob layout (the classifier input) is the next decode.
 2. **P4 ROS 2: the rclrs glue** (`idong-ros2/src/lib.rs` +
    `node.rs`): declare the table-5 parameters, create the six
    interfaces with their QoS, run the executor loop that calls
@@ -316,18 +347,14 @@ the "uvcvideo cannot stream this firmware" verdict to
 
 ## Do we need more USB captures?
 
-For the driver core: **no** - boot, session, EEPROM, CMOS, stream
-poll and the video plane are all byte-pinned. Two captures would
-still add value (both optional):
-
-- a capture with a RUNNING GAME - only needed if the T12 record-plane
-  run returns VERDICT B (no type-0xF0 stream): it pins the
-  `ens_code.ldr` runtime-upload state machine wire bytes (the PU/OD
-  traffic on EP 0x03/0x83 that no capture ever saw, because the
-  license gates kept the app out of the game state);
-- a capture of the lobby actually passing the hardware test with the
-  kit-37 patch applied (validates the unlock end-to-end and shows the
-  MC-calibration exchange).
+For the driver core: **no** - every layer is now byte-pinned, and the
+one remaining unknown (the `ens_code.ldr` runtime-upload state machine
+that the T12 verdict made relevant) was decoded statically from the
+vendor DLL in turn 49 - the game capture the old plan asked for is
+retired. One capture would still add value (optional): a capture of
+the lobby actually passing the hardware test with the kit-37 patch
+applied (validates the unlock end-to-end and shows the MC-calibration
+exchange).
 
 ## Hardware notes for the bench day
 
