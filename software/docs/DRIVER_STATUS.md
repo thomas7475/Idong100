@@ -1,28 +1,29 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
-Turn 42, 2026-11-27. The one-file answer to "how far are we, what is
+Turn 43, 2026-11-27. The one-file answer to "how far are we, what is
 left". Status line: **the protocol is fully decoded (every plane
 captured), the driver lives under `software/` of the repository (turn
 40: the crate with the vendor device files in `firmware/`, the ROS 2
 packages and `docs/` next to it; all code under `src/` since turn 39),
-105 tests green, and the turn-41 bench run settled the ladder:
-T1-T5 PASS again, T8 (the 8051 flash) PASS TWICE -> P2.3 accepted,
-`FLASH_CONFIRMED` = true (the ungated flash path is open; the
-consent-gated example stays for interactive use), T6 PASS (uvcvideo
-binds 640x480 YUYV) - but T7 failed at STREAMON with EIO: uvcvideo
-cannot stream this firmware. The active frontier is T9: the P2.5b raw
-usbfs-ISO backend (`cargo run --features usb --example video -- --iso
---cmos --frames 10`), implemented turn 42 (DISCONNECT_CLAIM of MI_01 +
-the observed probe/commit + ISO URBs on EP 0x85 - the exact
-no-SET_INTERFACE shape the vendor capture shows). No protocol blocker
-remains.**
+106 tests green, and the bench ladder stands: T1-T5, T6 and T8 (x2)
+PASS - T8 flipped `FLASH_CONFIRMED` in turn 42 (P2.3 accepted); T7
+(V4L2 STREAMON) is a documented dead end - uvcvideo cannot stream
+this firmware. The active frontier is T9: the P2.5b raw usbfs-ISO
+backend. Its first live run (turn 42, mirroring the vendor capture's
+no-SET_INTERFACE flow) failed at the first SUBMITURB with ENOENT (os
+error 2 - NOT a missing file: at alt 0 the host controller has no
+transfer ring for EP 0x85); turn 43 root-caused it and made
+`USBDEVFS_SETINTERFACE` (streaming alt) the default step before the
+ISO ring, plus `--alt N` (the 812 B alt 1) and `--no-set-alt` (the
+A/B control) and a proper teardown (alt 0 + release). No protocol
+blocker remains.**
 
 ## The short version
 
 | Layer | Status |
 | --- | --- |
 | Wire protocol (boot flash, session, EEPROM, CMOS, stream poll, UVC video) | DONE - byte-pinned from 5 captures, turn 32/33/35 |
-| P1 pure core (frames, records, calibration, boot + runtime framing, video assembler) | DONE - 100 tests green, no hardware needed |
+| P1 pure core (frames, records, calibration, boot + runtime framing, video assembler) | DONE - 106 tests green, no hardware needed |
 | All-code-in-src/ layout (lib + src/examples/ + src/tests/ - turn 39) | DONE - explicit `[[example]]`/`[[test]]` path targets, commands unchanged |
 | Repository layout (turn 40: `software/` = crate + `firmware/` + `idong-ros2` + `idong_msgs` + `docs/`) | DONE - the 24 vendor device files ship in `firmware/`, pinned by the `firmware_files` test; `flash_mcu` needs no `--hex` |
 | Live bench run T1-T5 (turn 39: list/bringup/session_full --cmos) | PASS on the real sensor (Linux, rusb) |
@@ -35,7 +36,7 @@ remains.**
 | P2.2 live read-only bring-up (`src/examples/bringup.rs`) | LIVE PASS (T3, turn 39) - version 2619, device ID, codes read |
 | P2.4 full-session test (`src/examples/session_full.rs`, turn 38) | LIVE PASS (T5 `--cmos`, turn 39) - register init + 6/6 polls |
 | P2.5 Linux video bring-up (`src/examples/video.rs` + `src/transport/v4l2.rs`) | T6 PASS (turn 41: capture node video0, 640x480 YUYV); T7 FAIL at STREAMON EIO - uvcvideo cannot stream this firmware (the documented decision point) |
-| P2.5b raw usbfs-ISO backend (`--iso`, `src/transport/usbfs.rs`) | CODE DONE (turn 42) - pure walker + UVC builders unit-tested, ioctl engine ABI-pinned; T9 is the first bench run |
+| P2.5b raw usbfs-ISO backend (`--iso`, `src/transport/usbfs.rs`) | T9 run 1 (turn 42): MI_01 claim + probe/commit PASS, SUBMITURB ENOENT at alt 0 root-caused (no xHCI transfer ring); turn 43: SET_INTERFACE default step + `--alt`/`--no-set-alt` controls + alt-0 teardown - awaiting the rerun |
 | P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | ACCEPTED - T8 PASS x2 on the turn-41 bench (readback matched, launched, identity intact); `FLASH_CONFIRMED` = true since turn 42 |
 | Marker/3D record decoding (xEye3Ddata 10-slot records) | PARSER DONE - never seen on the wire in ANY capture (open) |
 | P4 ROS 2 node (idong-ros2, idong_msgs) | NOT STARTED (needs a ROS install) |
@@ -54,7 +55,7 @@ device files ship in `firmware/` (turn 40; `firmware/README.md`), and
 crate. The rusb transport is a cargo feature:
 
 ```
-cargo test                      # 100 tests, hardware-free, no libusb needed
+cargo test                      # 106 tests, hardware-free, no libusb needed
 cargo test --features usb       # same + compiles the rusb transport
 cargo run --features usb --example list            # T2: discovery
 cargo run --features usb --example bringup         # T3: read-only bring-up
@@ -132,8 +133,10 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
   name is looked up in the folder, anything else is a path. Pinned in
   `src/tests/firmware_files.rs` together with every shipped vendor file.
 - `src/protocol/runtime.rs` (turn 39) - `FlashPermit` +
-  `flash_mcu_permitted` + `FirmwareSet::verify_hex`; `flash_mcu` itself
-  stays compile-gated (`FLASH_CONFIRMED`) until the first T8 PASS.
+  `flash_mcu_permitted` + `FirmwareSet::verify_hex`; `flash_mcu`'s
+  ungated path is open since the turn-41 double PASS
+  (`FLASH_CONFIRMED` = true, flipped turn 42) - the consent-gated
+  example stays the recommended interactive path.
 - `src/{marker,records,handle,stream}.rs` - the xEye3Ddata record
   parser, marker model, handle events, reader thread.
 
@@ -151,14 +154,17 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
    no file hunting). ONE clean PASS flips
    `FLASH_CONFIRMED` (P2.3 acceptance) and from then on the driver
    brings the sensor up from any bootloader landing itself.
-3. **P2.5 promotion**: after T7 PASSes once, promote the video backend
-   from `src/examples/video.rs` into the crate behind a feature (and
-   wire `VideoSource`/`VideoAssembler` if payload-level access is
-   ever needed). If T6/T7 FAIL on the uvcvideo side, the fallback is
-   P2.5b: raw usbfs ISO on EP 0x85 - IMPLEMENTED (turn 42, the
-   `--iso` mode: raw usbfs URB ioctls, since rusb has no ISO support;
-   pure helpers in `src/transport/usbfs.rs`, ioctl engine in the
-   example, ABI-pinned).
+3. **P2.5 promotion**: after T9 (the `--iso` stream test) PASSes
+   once, promote the usbfs-ISO backend from `src/examples/video.rs`
+   into the crate behind a feature (and wire `VideoSource`/
+   `VideoAssembler` if payload-level access is ever needed). T7 (the
+   uvcvideo side) is a documented dead end; P2.5b (raw usbfs ISO on
+   EP 0x85) is the implemented path - turn 42 built the ioctl engine
+   (rusb has no ISO support; pure helpers in `src/transport/usbfs.rs`,
+   ABI-pinned mirror in the example), the turn-43 run root-caused the
+   ENOENT of the capture-mirroring variant (at alt 0 the host
+   controller has no transfer ring for EP 0x85) and the fix shipped
+   the same turn: SET_INTERFACE is a default step before the ring.
 4. **P2.4b auto-recovery**: `session_full`/`video` currently tell you
    to rerun after a self-reboot; wire the existing
    `transport::reenum` waiter into the examples' error path.

@@ -20,8 +20,19 @@
 //!                    experiment (the result is informative either way).
 //! * `--iso`          the P2.5b raw usbfs-ISO backend (turn 42): take
 //!                    the VS interface from uvcvideo, run the observed
-//!                    probe/commit, stream EP 0x85 directly. Use this
-//!                    when V4L2 STREAMON fails (T7 bench, EIO).
+//!                    probe/commit, select the streaming alt-setting
+//!                    (turn 43 - the bench-proven Linux requirement),
+//!                    stream EP 0x85 directly. Use this when V4L2
+//!                    STREAMON fails (T7 bench, EIO).
+//! * `--alt N`        stream from this VS alt-setting instead of the
+//!                    auto pick (alt 1 = 812 B/microframe, alt 2 =
+//!                    2412). `--iso` only.
+//! * `--no-set-alt`   skip the SET_INTERFACE before the ISO ring - the
+//!                    turn-42 capture-mirroring mode. The turn-43 bench
+//!                    proved it cannot work on Linux (SUBMITURB ENOENT:
+//!                    the host controller has no transfer ring for EP
+//!                    0x85 at alt 0); kept as the A/B control. `--iso`
+//!                    only.
 //! * `--device PATH`  use this /dev/videoN instead of the sysfs
 //!                    auto-match (src/transport/v4l2.rs). Ignored with
 //!                    --iso.
@@ -42,10 +53,15 @@
 //! interface untouched (turn-35 capture) - so the hypothesis is the
 //! firmware streams whenever ISO URBs are posted. The --iso path opens
 //! /dev/bus/usb/<bus>/<addr>, DISCONNECT_CLAIMs the VS interface from
-//! uvcvideo, runs the observed probe/commit SET_CURs, and submits ISO
-//! URBs on EP 0x85 with ASAP scheduling - no kernel UVC driver in the
-//! way. If THAT streams, P2.5 is accepted and the backend is promoted
-//! into the crate; if it fails, dmesg + the errno decide the next move.
+//! uvcvideo, runs the observed probe/commit SET_CURs, SELECTS the
+//! streaming alt-setting (turn 43: the first live run proved the
+//! capture's no-SET_INTERFACE flow cannot be replayed - SUBMITURB
+//! returned ENOENT while the VS interface sat at alt 0, because Linux
+//! arms an ISO endpoint only in the selected alt setting), and submits
+//! ISO URBs on EP 0x85 with ASAP scheduling - no kernel UVC driver in
+//! the way. If THAT streams, P2.5 is accepted and the backend is
+//! promoted into the crate; if it fails, dmesg + the errno decide the
+//! next move.
 //!
 //! What PASS looks like (the turn-35 capture predicts): 640x480 frames,
 //! 614400 B each, ~8 fps, a two-channel byte-interleaved raster - channel
@@ -315,6 +331,8 @@ mod bench {
         probe: bool,
         cmos: bool,
         iso: bool,
+        alt: Option<u8>,
+        no_set_alt: bool,
         frames: u32,
         device: Option<String>,
         outdir: Option<String>,
@@ -327,6 +345,8 @@ mod bench {
                 probe: false,
                 cmos: false,
                 iso: false,
+                alt: None,
+                no_set_alt: false,
                 frames: 10,
                 device: None,
                 outdir: None,
@@ -337,7 +357,8 @@ mod bench {
                     "--probe" => args.probe = true,
                     "--cmos" => args.cmos = true,
                     "--iso" => args.iso = true,
-                    "--frames" | "--device" | "--outdir" => {
+                    "--no-set-alt" => args.no_set_alt = true,
+                    "--frames" | "--device" | "--outdir" | "--alt" => {
                         let val = a.get(i + 1).cloned();
                         match (a[i].as_str(), val) {
                             ("--frames", Some(v)) => {
@@ -345,6 +366,10 @@ mod bench {
                             }
                             ("--device", Some(v)) => args.device = Some(v),
                             ("--outdir", Some(v)) => args.outdir = Some(v),
+                            ("--alt", Some(v)) => match v.parse::<u8>() {
+                                Ok(n) => args.alt = Some(n),
+                                Err(_) => eprintln!("warning: --alt {v:?} is not 0-255"),
+                            },
                             _ => eprintln!("warning: {} needs a value", a[i]),
                         }
                         i += 1;
@@ -1083,18 +1108,17 @@ mod bench {
         }
 
         // The full request-number set is pinned for documentation; the
-        // --iso path uses CONTROL / DISCONNECT_CLAIM / SUBMITURB /
-        // REAPURBNDELAY (and RELEASEINTERFACE on drop - wired below).
+        // --iso path uses CONTROL / DISCONNECT_CLAIM / SETINTERFACE /
+        // SUBMITURB / REAPURBNDELAY (and DISCARDURB + SETINTERFACE alt 0
+        // + RELEASEINTERFACE on teardown - wired below).
         #[allow(dead_code)]
         pub const USBDEVFS_CONTROL: u32 = 0xc018_5500;
-        #[allow(dead_code)]
         pub const USBDEVFS_SETINTERFACE: u32 = 0x8008_5504;
         #[allow(dead_code)]
         pub const USBDEVFS_CLAIMINTERFACE: u32 = 0x8004_550f;
         pub const USBDEVFS_RELEASEINTERFACE: u32 = 0x8004_5510;
         pub const USBDEVFS_SUBMITURB: u32 = 0x8038_550a;
         pub const USBDEVFS_REAPURBNDELAY: u32 = 0x4008_550d;
-        #[allow(dead_code)]
         pub const USBDEVFS_DISCARDURB: u32 = 0x0000_550b;
         pub const USBDEVFS_DISCONNECT_CLAIM: u32 = 0x8108_551b;
 
@@ -1153,14 +1177,11 @@ mod bench {
             use std::alloc::{alloc, Layout};
             let desc_off = size_of::<usbfs_api::UrbHeader>();
             let total = desc_off + npackets * size_of::<usbfs_api::IsoPacketDesc>();
-            let layout = Layout::from_size_align(total, 8).map_err(|e| {
-                io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
-            })?;
+            let layout = Layout::from_size_align(total, 8)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
             let ptr = unsafe { alloc(layout) } as *mut usbfs_api::UrbHeader;
-            let buf_layout =
-                Layout::from_size_align(npackets * packet_size, 8).map_err(|e| {
-                    io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
-                })?;
+            let buf_layout = Layout::from_size_align(npackets * packet_size, 8)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
             let buf = unsafe { alloc(buf_layout) };
             if ptr.is_null() || buf.is_null() {
                 return Err(io::Error::new(io::ErrorKind::OutOfMemory, "URB alloc"));
@@ -1227,14 +1248,14 @@ mod bench {
         println!("=== idong P2.5b raw usbfs-ISO bring-up ===");
         println!();
 
-        // [1/4] session init on MI_04 (same as the V4L2 path, --cmos)
+        // [1/5] session init on MI_04 (same as the V4L2 path, --cmos)
         // the transport slot is kept alive to the end: dropping it frees
         // MI_04 AFTER the stream stops (the session owns no resource)
         #[allow(unused_assignments)]
         let mut transport: Option<UsbTransport> = None;
         let mut session: Option<Session> = None;
         if args.cmos {
-            println!("[1/4] session init on MI_04 (--cmos: EEPROM reads + CMOS registers)");
+            println!("[1/5] session init on MI_04 (--cmos: EEPROM reads + CMOS registers)");
             let t = match UsbTransport::open_runtime() {
                 Ok(t) => t,
                 Err(e) => {
@@ -1267,14 +1288,14 @@ mod bench {
             println!("      PASS: session init complete");
             session = Some(s);
         } else {
-            println!("[1/4] session init SKIPPED (no --cmos)");
+            println!("[1/5] session init SKIPPED (no --cmos)");
             println!("      the vendor flow always inits the sensor registers before");
             println!("      video; without it the stream may stay empty (still a valid");
             println!("      experiment - a FAIL here does not reject the backend).");
         }
 
-        // [2/4] the raw device node + descriptors
-        println!("[2/4] raw device node (/dev/bus/usb)");
+        // [2/5] the raw device node + descriptors
+        println!("[2/5] raw device node (/dev/bus/usb)");
         // rusb discovery finds bus/addr; the session transport holds MI_04
         // on the SAME node - the usbfs fd must be a SECOND open of it.
         let devices = idong::transport::usb::list_devices();
@@ -1325,12 +1346,34 @@ mod bench {
                 println!("      VS iface {} alt {} : no endpoint", iface, a.alt);
             }
         }
-        let best = pure::best_streaming_alt(&vs).expect("an ISO alt exists");
-        let packet_size = best.iso_in().map(|e| e.wmax_total).unwrap_or(0) as usize;
-        println!("      streaming alt {} -> {} B per microframe", best.alt, packet_size);
+        // the streaming alt: the auto pick (largest ISO IN bandwidth) or
+        // the --alt override
+        let auto_alt = pure::best_streaming_alt(&vs).expect("an ISO alt exists");
+        let stream_alt: &pure::InterfaceAlt = match args.alt {
+            None => auto_alt,
+            Some(n) => match vs.iter().copied().find(|a| a.alt == n) {
+                Some(a) if a.iso_in().is_some() => {
+                    println!("      --alt {n} overrides the auto pick (alt {})", auto_alt.alt);
+                    a
+                }
+                Some(_) => {
+                    println!("      FAIL: --alt {n} has no ISO IN endpoint (alt 0 is the");
+                    println!("      zero-bandwidth alt - use alt 1 or 2)");
+                    std::process::exit(1);
+                }
+                None => {
+                    let have: Vec<u8> = vs.iter().map(|a| a.alt).collect();
+                    println!("      FAIL: --alt {n}: no such alt (VS alts: {have:?})");
+                    std::process::exit(1);
+                }
+            },
+        };
+        let ep_addr = stream_alt.iso_in().expect("an ISO alt was checked").address;
+        let packet_size = stream_alt.iso_in().map(|e| e.wmax_total).unwrap_or(0) as usize;
+        println!("      streaming alt {} -> {} B per microframe", stream_alt.alt, packet_size);
 
-        // [3/4] claim the VS interface + UVC negotiation
-        println!("[3/4] DISCONNECT_CLAIM MI_{:02} + UVC probe/commit", iface);
+        // [3/5] claim the VS interface + UVC negotiation
+        println!("[3/5] DISCONNECT_CLAIM MI_{:02} + UVC probe/commit", iface);
         let fd = node.as_raw_fd();
         let mut dc = usbfs_api::DisconnectClaim {
             interface: iface as u32,
@@ -1380,23 +1423,56 @@ mod bench {
                 }
             }
         }
-        // restore alt 0 then raise to the streaming alt (alt 1) - the
-        // observed vendor state (they never left alt 0 on the wire, but
-        // the ISO endpoint only exists in alt >= 1 - the kernel needs to
-        // route ISO packets to the endpoint... no: usbfs ISO URBs are
-        // endpoint-addressed, not interface-routed. The capture's truth:
-        // video flowed with NO alt change. We mirror the capture: no
-        // SET_INTERFACE at all.)
-        println!("      (no SET_INTERFACE - mirroring the vendor capture: video");
-        println!("      flowed on EP 0x85 with the interface at alt 0)");
+        // [4/5] SET_INTERFACE - the question the first bench run
+        // decided (turn 43): the vendor capture streams with NO alt
+        // change, but Linux arms an ISO endpoint only in the selected
+        // alt setting - with the VS interface at alt 0 (no endpoints)
+        // the host controller has no transfer ring for EP 0x85 and every
+        // SUBMITURB fails with ENOENT (os error 2). Default: select the
+        // streaming alt like any UVC host; --no-set-alt keeps the
+        // capture-mirroring mode as the A/B control.
+        println!("[4/5] SET_INTERFACE MI_{iface:02} -> alt {}", stream_alt.alt);
+        let mut alt_set = false;
+        if args.no_set_alt {
+            println!("      SKIPPED (--no-set-alt: capture-mirroring mode - expect the");
+            println!("      SUBMITURB ENOENT of the turn-43 run; A/B control only)");
+        } else {
+            let mut si = usbfs_api::SetInterface {
+                interface: iface as u32,
+                altsetting: stream_alt.alt as u32,
+            };
+            match unsafe {
+                usbfs_api::ioctl(
+                    fd,
+                    usbfs_api::USBDEVFS_SETINTERFACE,
+                    &mut si as *mut usbfs_api::SetInterface as *mut u8,
+                )
+            } {
+                Ok(_) => {
+                    alt_set = true;
+                    println!(
+                        "      PASS: alt {} selected - ISO IN 0x{ep_addr:02x} armed ({} B/microframe)",
+                        stream_alt.alt, packet_size
+                    );
+                }
+                Err(e) => {
+                    println!("      FAIL: SET_INTERFACE alt {}: {e}", stream_alt.alt);
+                    if e.raw_os_error() == Some(pure::ERR_ENOSPC) {
+                        println!("      (bus bandwidth - retry with --alt 1)");
+                    }
+                    println!("      collect dmesg | tail -50 - this decides P2.5b");
+                    std::process::exit(1);
+                }
+            }
+        }
 
-        // [4/4] the ISO URB ring
-        println!("[4/4] ISO URB ring on EP 0x85 ({} frames)", args.frames);
+        // [5/5] the ISO URB ring
+        println!("[5/5] ISO URB ring on EP 0x{ep_addr:02x} ({} frames)", args.frames);
         let npackets = 8usize; // 8 microframes per URB = 1 ms per re-submission
         let ring = 4usize; // four URBs in flight
         let mut urbs: Vec<IsoUrb> = Vec::new();
         for _ in 0..ring {
-            match IsoUrb::new(0x85, npackets, packet_size) {
+            match IsoUrb::new(ep_addr, npackets, packet_size) {
                 Ok(u) => urbs.push(u),
                 Err(e) => {
                     println!("      FAIL: URB alloc: {e}");
@@ -1407,6 +1483,9 @@ mod bench {
         for u in urbs.iter_mut() {
             if let Err(e) = unsafe { u.submit(fd) } {
                 println!("      FAIL: SUBMITURB: {e}");
+                if let Some(hint) = pure::submiturb_hint(e.raw_os_error()) {
+                    println!("      {hint}");
+                }
                 println!("      collect dmesg | tail -50 - this decides P2.5b");
                 std::process::exit(1);
             }
@@ -1510,8 +1589,16 @@ mod bench {
                     if got < 3 {
                         let _ = fs::write(outdir.join(format!("frame{got:04}.bin")), &frame.data);
                     }
-                    write_plane_png(&outdir.join(format!("frame{got:04}_chA.png")), &a, &pix_for(&frame));
-                    write_plane_png(&outdir.join(format!("frame{got:04}_chB.png")), &b, &pix_for(&frame));
+                    write_plane_png(
+                        &outdir.join(format!("frame{got:04}_chA.png")),
+                        &a,
+                        &pix_for(&frame),
+                    );
+                    write_plane_png(
+                        &outdir.join(format!("frame{got:04}_chB.png")),
+                        &b,
+                        &pix_for(&frame),
+                    );
                     any_a = merge(any_a, sa);
                     any_b = merge(any_b, sb);
                     got += 1;
@@ -1523,12 +1610,53 @@ mod bench {
             // re-submit the reaped URB
             if let Err(e) = unsafe { urbs[idx].submit(fd) } {
                 println!("      re-submit failed: {e}");
+                if let Some(hint) = pure::submiturb_hint(e.raw_os_error()) {
+                    println!("      {hint}");
+                }
                 break;
             }
         }
 
-        // release the VS claim so uvcvideo can rebind (the kernel
-        // re-probes on the next open of /dev/video*)
+        // stop the ring before touching the interface state: discard
+        // every still-submitted URB and drain the reaps (unlink is
+        // asynchronous), then return the VS interface to alt 0 (the
+        // standard UVC teardown - frees the ISO bandwidth) and release
+        // the claim so uvcvideo can rebind (the kernel re-probes on the
+        // next open of /dev/video*).
+        for u in urbs.iter_mut() {
+            let _ =
+                unsafe { usbfs_api::ioctl(fd, usbfs_api::USBDEVFS_DISCARDURB, u.ptr as *mut u8) };
+        }
+        let drain_end = Instant::now() + Duration::from_millis(200);
+        while Instant::now() < drain_end {
+            let mut reaped: *mut usbfs_api::UrbHeader = std::ptr::null_mut();
+            let rr = unsafe {
+                usbfs_api::ioctl(
+                    fd,
+                    usbfs_api::USBDEVFS_REAPURBNDELAY,
+                    &mut reaped as *mut *mut usbfs_api::UrbHeader as *mut u8,
+                )
+            };
+            match rr {
+                Ok(_) => continue, // reaped one more discarded URB
+                _ => break,        // EAGAIN: the ring is drained
+            }
+        }
+        if alt_set {
+            let mut si = usbfs_api::SetInterface { interface: iface as u32, altsetting: 0 };
+            match unsafe {
+                usbfs_api::ioctl(
+                    fd,
+                    usbfs_api::USBDEVFS_SETINTERFACE,
+                    &mut si as *mut usbfs_api::SetInterface as *mut u8,
+                )
+            } {
+                Ok(_) => println!("      teardown: VS alt 0 restored (ISO bandwidth freed)"),
+                Err(e) => {
+                    println!("      teardown: alt 0 restore: {e} (ignored - replug resets it)")
+                }
+            }
+        }
         let mut ifn = iface as u32;
         let _ = unsafe {
             usbfs_api::ioctl(
@@ -1544,7 +1672,8 @@ mod bench {
         if got == 0 {
             println!("FAIL: no frames within 30 s via the raw ISO path.");
             println!("      collect: dmesg | tail -50, lsusb -v -d 0471:2500,");
-            println!("      rerun with --cmos if it was absent above.");
+            println!("      rerun with --cmos if it was absent above; next A/Bs:");
+            println!("      --alt 1 (812 B/microframe), SET_INTERFACE before commit.");
             std::process::exit(1);
         }
         if let Some(a) = any_a {

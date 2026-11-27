@@ -55,14 +55,29 @@ next to the crate.
 
 ```
 cd software
-cargo test                                   # 100 tests, hardware-free
-cargo test --features usb                    # the same 100 + the rusb transport
+cargo test                                   # 106 tests, hardware-free
+cargo test --features usb                    # the same 106 + the rusb transport
 cargo +nightly fmt --check
 cargo run --features usb --example flash_mcu                # T8 dry run: pins only, no device
 cargo run --features usb --example flash_mcu -- --confirm   # T8: the controlled flash
 ```
 
 The bench ladder T2-T8 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+
+## Status (turn 43, 2026-11-27) - P2.5b ISO: the first bench run decides the alt question
+
+The turn-42 T9 run (`video --iso --cmos`, mirroring the vendor
+capture's no-SET_INTERFACE flow) took MI_01 from uvcvideo, PASSed the
+observed UVC probe/commit, and then failed at the first SUBMITURB
+with `No such file or directory (os error 2)`: ENOENT, not a missing
+file - Linux arms an ISO endpoint only in the selected alt setting,
+and at alt 0 the host controller has no transfer ring for EP 0x85.
+Turn 43 makes `USBDEVFS_SETINTERFACE` (streaming alt 2 =
+2412 B/microframe) the default step before the ISO ring, adds
+`--alt N` (the 812 B alt 1) and `--no-set-alt` (the A/B control),
+and restores alt 0 + releases the claim on teardown. 106 tests
+green in both feature states. Next: the T9 rerun -
+`software/docs/LINUX_TESTS.md`.
 
 ## Status (turn 40, 2026-11-26) - repository reorganized
 
