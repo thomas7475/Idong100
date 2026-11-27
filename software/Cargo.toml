@@ -27,20 +27,25 @@ repository = "https://github.com/thomas7475/Idong100"
 [features]
 default = []
 # The rusb/libusb transport (src/transport/usb.rs) + the live examples
-# (list, probe_bootloader, bringup). Build on the bench:
+# (list, probe_bootloader, bringup) + (Linux) the promoted ioctl engines
+# (src/transport/v4l2_stream.rs, src/transport/usbfs_iso.rs - turn 44:
+# libc is a regular optional dep for them). Build on the bench:
 #   cargo run --features usb --example bringup
-usb = ["dep:rusb"]
+usb = ["dep:rusb", "dep:libc"]
 
 [dependencies]
 thiserror = "2"
 log = "0.4"
 crossbeam-channel = "0.5"
 rusb = { version = "0.9", optional = true }
+# The promoted ioctl engines (turn 44): the raw /dev/video and
+# /dev/bus/usb UAPI calls behind the `usb` feature. Plain
+# `cargo test` never builds them.
+libc = { version = "0.2", optional = true }
 
-# Examples only (src/examples/video.rs: the V4L2 ioctl layer + PNG output).
+# Examples only (src/examples/video.rs: PNG output).
 # Plain `cargo test` stays hardware-free - these never enter the lib build.
 [dev-dependencies]
-libc = "0.2"
 png = "0.17"
 
 # ---- examples (src/examples/, turn 39 - explicit paths) ----

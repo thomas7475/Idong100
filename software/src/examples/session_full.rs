@@ -131,7 +131,8 @@ fn fail_reboot_note(e: idong::IdongError) -> ! {
     println!("      note: the sensor self-reboots every 31-157 s - if this ran");
     println!("      longer than half a minute, the device simply went away;");
     println!("      RERUN the example (this is normal, not a driver bug).");
-    println!("      (automatic re-enumeration recovery is P2.4b, transport/reenum.)");
+    println!("      (the automatic recovery ships in the video example: run it");
+    println!("      with --recover - it re-flashes and resumes on every landing)");
     std::process::exit(1);
 }
 

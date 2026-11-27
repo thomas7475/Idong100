@@ -30,8 +30,8 @@ deliverables/            PDF reports (+ the turn-13 scaffold, historical)
 
 | Path | Duty | Depends on |
 |---|---|---|
-| `software/src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the pure V4L2 sysfs matcher (`src/transport/v4l2.rs`) + the firmware folder lookup (`src/firmware.rs`) | thiserror, log, crossbeam-channel; rusb only with `--features usb` |
-| `software/src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | libc + png (dev-deps, examples only) |
+| `software/src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the V4L2 sysfs matcher (`src/transport/v4l2.rs`) + the V4L2 ioctl engine (`src/transport/v4l2_stream.rs`) + the usbfs ISO engine (`src/transport/usbfs_iso.rs`) + the firmware folder lookup (`src/firmware.rs`) | thiserror, log, crossbeam-channel; rusb + libc only with `--features usb` |
+| `software/src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2 + `--iso` raw + `--recover` self-healing, turn 44), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | png (dev-dep, examples only) |
 | `software/src/tests/` | golden replays: mock, runtime, video, plus `firmware_files` (the shipped vendor files) - hardware-free | - |
 | `software/firmware/` | the vendor device files the driver targets: the three pinned images (`ens_code.ldr`, `A_a_v4.4_BG0313.bit`, `app_m8051_2611.hex`), `app_m8051_2500.hex` and the other MCU images, the vendor file map and register tables; `README.md` + `SHA256SUMS` | - |
 | `software/docs/` | PROTOCOL (wire facts), BRINGUP, LINUX_TESTS, DRIVER_STATUS, CAPTURE_KIT, SOLVE_DIALOG | - |
@@ -55,14 +55,49 @@ next to the crate.
 
 ```
 cd software
-cargo test                                   # 106 tests, hardware-free
-cargo test --features usb                    # the same 106 + the rusb transport
+cargo test                                   # 108 tests, hardware-free
+cargo test --features usb                    # the same + the rusb transport + the ioctl engines
 cargo +nightly fmt --check
 cargo run --features usb --example flash_mcu                # T8 dry run: pins only, no device
 cargo run --features usb --example flash_mcu -- --confirm   # T8: the controlled flash
 ```
 
-The bench ladder T2-T8 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+The bench ladder T2-T10 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+
+## Status (turn 44, 2026-11-27) - the bench ladder completes: T9 + T7 PASS, the backends are in the crate, the run self-heals
+
+The turn-44 bench day decided everything the ladder had left:
+
+- **T9 PASS** (the raw usbfs-ISO rerun with the turn-43
+  SET_INTERFACE fix): MI_01 taken from uvcvideo, probe/commit PASS,
+  alt 2 armed, 1281 payloads / 0 errors, frames closed per PTS.
+- **T7 PASS** (the surprise): uvcvideo STREAMON - the turn-41
+  "documented dead end" EIO - streamed 10 real frames right after the
+  T8 re-flash. The EIO is state-dependent; the deterministic path
+  stays `--iso`.
+- **An assembler bug found and fixed**: the firmware flags the FINAL
+  payload of every frame with EOF, and that payload carries the
+  frame's tail (the bench showed every frame split into a 612000-B
+  body + a 2400-B tail under one PTS = exactly 614400 B together).
+  `VideoAssembler` now closes the frame WITH the EOF payload's data;
+  reruns deliver one full 640x480 frame per PTS.
+- **P2.5 promotion**: both ioctl engines moved from the example into
+  the crate behind `usb` + linux (`src/transport/v4l2_stream.rs`,
+  `src/transport/usbfs_iso.rs`; `libc` an optional regular
+  dependency). The example is the bench script on top of them.
+- **P2.4b auto-recovery**: `video --recover` absorbs the sensor's
+  documented 31-157 s self-reboot (the reset-to-bootloader the bench
+  saw after every video run): wait for the bootloader landing,
+  re-flash the pinned image (the ungated `FLASH_CONFIRMED` path),
+  wait for the renum, re-init, RESUME - up to 12 landings per run.
+  108 tests green in both feature states (the 2 new ones pin the
+  EOF/error payload semantics).
+
+Next: the frame-rate A/B (the raw path produced ~1.8 fps under the
+  golden probe/commit vs ~25 fps device-side on uvcvideo's own
+  negotiation - see `docs/LINUX_TESTS.md`), the marker/3D record
+  capture (needs a running game), then P4 ROS 2 -
+  `software/docs/DRIVER_STATUS.md`.
 
 ## Status (turn 43, 2026-11-27) - P2.5b ISO: the first bench run decides the alt question
 

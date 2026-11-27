@@ -33,6 +33,14 @@
 //!   toggles FID only at ISO-transfer boundaries, so frames span 2-3
 //!   transfers; [`VideoAssembler`] closes on PTS like the vendor's
 //!   DirectShow filter does.
+//! * **EOF carries the frame tail (turn-44 bench fact).** The Linux
+//!   T9 run (turn 44) showed the firmware flags the final payload of
+//!   EVERY frame with EOF from the first frame on: 255 full payloads
+//!   + one short EOF payload of the same PTS = exactly 614400 B.
+//!   [`VideoAssembler`] therefore completes the frame ON the EOF
+//!   payload, with that payload's data included (the capture-era
+//!   close-before-append order split every frame into a 612000-B body
+//!   + a 2400-B tail under one PTS).
 //!
 //! # Transport seam
 //!
@@ -186,6 +194,11 @@ pub struct PlaneStats {
     pub min: u8,
     pub max: u8,
     pub stddev: f64,
+    /// Sample count of the plane - the merge weight. Turn 44: the
+    /// bench summary averaged per-frame means pair-wise, so a 1200-B
+    /// tail frame outweighed its 612000-B sibling; weighting by `n`
+    /// keeps pooled summaries honest across mixed-size frames.
+    pub n: u64,
 }
 
 impl PlaneStats {
@@ -199,7 +212,7 @@ impl PlaneStats {
 /// (defined, never NaN).
 pub fn plane_stats(p: &[u8]) -> PlaneStats {
     if p.is_empty() {
-        return PlaneStats { mean: 0.0, min: 0, max: 0, stddev: 0.0 };
+        return PlaneStats { mean: 0.0, min: 0, max: 0, stddev: 0.0, n: 0 };
     }
     let mut min = u8::MAX;
     let mut max = u8::MIN;
@@ -214,12 +227,16 @@ pub fn plane_stats(p: &[u8]) -> PlaneStats {
     let n = p.len() as f64;
     let mean = sum as f64 / n;
     let var = (sq as f64 / n - mean * mean).max(0.0);
-    PlaneStats { mean, min, max, stddev: var.sqrt() }
+    PlaneStats { mean, min, max, stddev: var.sqrt(), n: p.len() as u64 }
 }
 
-/// Incremental frame assembler over UVC payloads - closes a frame when
-/// the PTS advances (the vendor's own boundary rule), on an EOF-flagged
-/// payload, or on a payload error (frame emitted, flagged dropped).
+/// Incremental frame assembler over UVC payloads. A frame closes when
+/// the PTS advances (the vendor's own boundary rule) or on an
+/// EOF-flagged payload - and an EOF payload's data belongs to the
+/// frame it completes (UVC semantics; the turn-44 bench proved the
+/// firmware sets EOF on every frame's final payload, carrying the
+/// frame's tail bytes). An error-flagged payload closes the frame but
+/// its own bytes are dropped with the payload.
 ///
 /// UVC payload headers carry **no length field**: one payload = one ISO
 /// packet, delivered whole by [`VideoSource::read_payload`] (the Linux
@@ -244,8 +261,8 @@ impl VideoAssembler {
         VideoAssembler::default()
     }
 
-    /// Feed one UVC payload (header + data). Returns the completed frame
-    /// when this payload starts a new one.
+    /// Feed one UVC payload (header + data). Returns a completed frame
+    /// when this payload closes one (PTS advance, EOF or error).
     pub fn push_payload(&mut self, payload: &[u8]) -> Option<VideoFrame> {
         let (hdr, data) = match UvcHeader::parse(payload) {
             Some(x) => x,
@@ -257,28 +274,40 @@ impl VideoAssembler {
         self.payloads += 1;
 
         let pts_change = matches!(self.pending_pts, Some(prev) if hdr.pts != prev);
-        let close = pts_change || hdr.is_eof() || hdr.is_error();
 
-        let out = if close && !self.pending.is_empty() {
-            let f = VideoFrame {
-                pts: self.pending_pts.unwrap_or(0),
-                fid: self.pending_fid,
-                data: std::mem::take(&mut self.pending),
-            };
-            self.frames += 1;
-            Some(f)
-        } else {
-            None
-        };
-
+        // A PTS advance closes the pending frame BEFORE this payload:
+        // the new PTS starts the new frame (the vendor boundary rule).
+        let mut out =
+            if pts_change && !self.pending.is_empty() { Some(self.take_pending()) } else { None };
         if self.pending_pts.is_none() || pts_change {
             self.pending_pts = Some(hdr.pts);
             self.pending_fid = hdr.fid();
         }
+        // An EOF payload COMPLETES the frame: its data belongs to the
+        // closing frame. The turn-44 bench run proved the firmware
+        // flags the final payload of every frame this way - the old
+        // close-before-append order split each frame into a 612000-B
+        // body + a 2400-B tail under the SAME PTS (255 + 1 payloads =
+        // exactly 614400 B). An error payload's own bytes are dropped
+        // with the payload; the frame still closes.
         if !hdr.is_error() {
             self.pending.extend_from_slice(data);
         }
+        if (hdr.is_eof() || hdr.is_error()) && !self.pending.is_empty() {
+            out = out.or_else(|| Some(self.take_pending()));
+        }
         out
+    }
+
+    /// Emit the pending accumulation as a frame (the single close path).
+    fn take_pending(&mut self) -> VideoFrame {
+        let f = VideoFrame {
+            pts: self.pending_pts.unwrap_or(0),
+            fid: self.pending_fid,
+            data: std::mem::take(&mut self.pending),
+        };
+        self.frames += 1;
+        f
     }
 
     /// Capture-replay path: split one USBPcap ISO record (the
@@ -439,6 +468,7 @@ mod tests {
         assert_eq!((s.min, s.max), (0x7f, 0x7f));
         assert_eq!(s.stddev, 0.0);
         assert!(!s.has_contrast());
+        assert_eq!(s.n, 1000);
     }
 
     #[test]
@@ -449,12 +479,13 @@ mod tests {
         assert_eq!((s.min, s.max), (0x00, 0xff));
         assert!((s.stddev - 127.5).abs() < 1e-9);
         assert!(s.has_contrast());
+        assert_eq!(s.n, 4);
     }
 
     #[test]
     fn plane_stats_empty_plane_is_defined() {
         let s = plane_stats(&[]);
-        assert_eq!((s.mean, s.min, s.max, s.stddev), (0.0, 0, 0, 0.0));
+        assert_eq!((s.mean, s.min, s.max, s.stddev, s.n), (0.0, 0, 0, 0.0, 0));
     }
 
     #[test]
@@ -467,5 +498,65 @@ mod tests {
         assert_eq!((s.min, s.max), (0, 15));
         let want = 21.25f64.sqrt();
         assert!((s.stddev - want).abs() < 1e-9, "stddev {} vs {want}", s.stddev);
+        assert_eq!(s.n, 16);
+    }
+
+    /// A 12-B UVC payload header (EOH|SCR|PTS base) + data, at a given
+    /// PTS with extra flag bits - the bench header form.
+    fn bench_payload(pts: u32, extra_flags: u8, data: &[u8]) -> Vec<u8> {
+        let mut p = vec![12u8, 0x8c | extra_flags];
+        p.extend_from_slice(&pts.to_le_bytes());
+        p.extend_from_slice(&[0u8; 6]); // SCR
+        p.extend_from_slice(data);
+        p
+    }
+
+    #[test]
+    fn eof_payload_carries_the_frame_tail() {
+        // The turn-44 T9 bench shape (video_run1): one PTS group = 255
+        // full 2400-B payloads + ONE short payload of the SAME PTS
+        // flagged EOF - 256 x 2400 = exactly 614400 B. The EOF
+        // payload's data belongs to the closing frame; the old
+        // close-before-append order split every frame into a
+        // 612000-B body + a 2400-B tail under one PTS.
+        let pts = 1_778_368_910u32;
+        let mut asm = VideoAssembler::new();
+        for _ in 0..255 {
+            assert!(asm.push_payload(&bench_payload(pts, 0, &[0xA5; 2400])).is_none());
+        }
+        let closed = asm
+            .push_payload(&bench_payload(pts, uvc_flags::EOF, &[0x5A; 2400]))
+            .expect("the EOF payload completes the frame");
+        assert_eq!(closed.pts, pts);
+        assert_eq!(closed.data.len(), 256 * 2400); // = dwMaxVideoFrameSize
+        assert_eq!(&closed.data[..2400], &[0xA5; 2400]);
+        assert_eq!(&closed.data[255 * 2400..], &[0x5A; 2400]);
+        assert_eq!(asm.frames, 1);
+        assert_eq!(asm.payloads, 256);
+        assert_eq!(asm.errors, 0);
+        // no tail leaks into the next frame: the next PTS group starts
+        // and closes with exactly its own bytes
+        let pts2 = pts + PTS_PER_FRAME;
+        assert!(asm.push_payload(&bench_payload(pts2, 0, &[0x11; 100])).is_none());
+        let closed2 = asm
+            .push_payload(&bench_payload(pts2, uvc_flags::EOF, &[0x22; 20]))
+            .expect("EOF closes frame 2");
+        assert_eq!(closed2.data.len(), 120);
+        assert_eq!(&closed2.data[..100], &[0x11; 100]);
+        assert_eq!(&closed2.data[100..], &[0x22; 20]);
+    }
+
+    #[test]
+    fn error_payload_closes_without_its_bytes() {
+        // An ERR-flagged payload closes the frame but its own bytes are
+        // dropped with the payload (UVC: the payload is bad).
+        let pts = 1_778_368_910u32;
+        let mut asm = VideoAssembler::new();
+        assert!(asm.push_payload(&bench_payload(pts, 0, &[0x33; 100])).is_none());
+        let closed = asm
+            .push_payload(&bench_payload(pts, uvc_flags::ERR, &[0x99; 50]))
+            .expect("the error payload closes the frame");
+        assert_eq!(closed.data.len(), 100);
+        assert!(closed.data.iter().all(|&v| v == 0x33));
     }
 }

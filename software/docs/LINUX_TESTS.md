@@ -2,12 +2,15 @@
 
 What to run on the Linux box with the real sensor, in what order, what
 PASS looks like, and what to send back. This is the full ladder from
-zero to video; `docs/BRINGUP.md` stays the detailed P2.2 procedure.
+zero to self-healing video; `docs/BRINGUP.md` stays the detailed P2.2
+procedure.
 
 Why Linux: nothing claims the sensor's vendor interface (MI_04), so the
 driver takes it directly while the kernel (uvcvideo) owns the video
 interface - one box, one cable, no USBPcap needed. A live USB with
-`rustup` is enough.
+`rustup` is enough. The ladder runs from zero to self-healing video
+(T10: the driver babysits the sensor through its own reboots, exactly
+like the vendor engine does).
 
 ## The risk ladder (what each test sends)
 
@@ -22,6 +25,7 @@ interface - one box, one cable, no USBPcap needed. A live USB with
 | T7 `video` | T5 + V4L2 streaming | **yes** (`--cmos`) |
 | T8 `flash_mcu` | the 8051 firmware upload (the vendor flash itself) | **yes** (`--confirm`) |
 | T9 `video -- --iso` | T5 + UVC probe/commit + SET_INTERFACE(alt 2) + raw ISO reads on EP 0x85 | **yes** (`--cmos`) |
+| T10 `video -- --recover` | T7/T9 + the automatic self-reboot recovery (re-flash + resume) | **yes** (`--cmos`, `--recover`) |
 
 All writes are the exact observed vendor bytes: T5/T7 send the same
 register tables the vendor engine sends on every session (volatile
@@ -142,16 +146,24 @@ Runs the full session init (as T5), picks the sensor's video node
 mmap buffers while polling 0x0205 at ~10 Hz, and writes per-channel
 PNGs + raw .bin frames into `video_runN/`.
 
+Turn-41 bench result: the node + format negotiation PASS (640x480 YUYV,
+uvcvideo), then `STREAMON: Input/output error (os error 5)` - then the
+documented decision point. **Turn-44 bench result: PASS** - right after
+the T8 re-flash (video_run2): 10 frames, 614400 B each, 8.7 fps
+app-side (~25 fps device-side, seq 0..26), channel A a real image.
+The turn-41 EIO was therefore state-dependent, not permanent: both
+observations stand, and the deterministic path stays T9 (`--iso`).
+
 PASS (per the turn-35 capture predictions):
 
-- frames arrive (~8 fps; 30 fps is only the negotiated upper bound),
+- frames arrive (~8-25 fps device-side; 30 fps is only the negotiated
+  upper bound),
 - `614400 B` per frame = 640x480x2 (the two-channel raster),
 - channel A stats show real contrast (non-flat scene image),
 - channel B stats are present (the unidentified second channel).
 
 Anything else is still valuable: a FAIL with its console output + the
-generated PNGs decides the next move (V4L2 promotion into the crate vs
-the usbfs-ISO backend).
+generated PNGs decides the next move.
 
 ## T9 - THE P2.5b raw usbfs-ISO stream test (the active frontier)
 
@@ -162,37 +174,83 @@ cargo run --features usb --example video -- --iso --cmos --frames 10 --alt 1
 cargo run --features usb --example video -- --iso --cmos --frames 10 --no-set-alt
 ```
 
-The P2.5b backend (turn 42 + the turn-43 fix): takes the UVC
-VideoStreaming interface from uvcvideo (`USBDEVFS_DISCONNECT_CLAIM` -
-reversible, uvcvideo re-binds after exit), runs the observed
-probe/commit SET_CURs (golden bodies), SELECTS the streaming
-alt-setting (`USBDEVFS_SETINTERFACE` alt 2 = 2412 B/microframe;
-`--alt 1` forces the 812 B alt), then submits ISO URBs on EP 0x85
-directly (no kernel UVC driver in the path); on exit it restores
-alt 0 and releases the claim.
+The P2.5b backend: takes the UVC VideoStreaming interface from uvcvideo
+(`USBDEVFS_DISCONNECT_CLAIM` - reversible, uvcvideo re-binds after
+exit), runs the observed probe/commit SET_CURs (golden bodies),
+SELECTS the streaming alt-setting (`USBDEVFS_SETINTERFACE` alt 2 =
+2412 B/microframe; `--alt 1` forces the 812 B alt), then submits ISO
+URBs on EP 0x85 directly (no kernel UVC driver in the path); on exit
+it restores alt 0 and releases the claim.
 
 Turn-43 bench result: the first run (turn 42, mirroring the vendor
 capture's no-SET_INTERFACE flow) failed at the first SUBMITURB with
 `No such file or directory (os error 2)` - ENOENT, not a missing
 file: Linux arms an ISO endpoint only in the selected alt setting,
-and at alt 0 (the zero-bandwidth alt, no endpoints) the host
-controller has no transfer ring for EP 0x85. dmesg showed nothing
-else wrong (the uvcvideo entity-registration failure is the separate,
-known reason V4L2 cannot drive this firmware; the bulk-maxpacket
-warnings are vendor-descriptor noise). SET_INTERFACE is therefore
-the default step now; `--no-set-alt` keeps the failing variant as
-the A/B control.
+and at alt 0 (the zero-bandwidth alt, no endpoints) the host controller
+has no transfer ring for EP 0x85. SET_INTERFACE became the default
+step; `--no-set-alt` keeps the failing variant as the A/B control.
 
-PASS: frames arrive at ~8 fps, 614400 B per frame (640x480x2), channel
-A shows real contrast. The config walk prints the per-alt ISO capacity
-(alt 1 = 812 B/microframe, alt 2 = 2412 B - the capture's exact packet
-stride).
+**Turn-44 bench result: PASS** (video_run1, the fix built): MI_01
+taken, probe/commit PASS, alt 2 selected, 1281 payloads / 0 errors,
+frames closed per PTS. The run also exposed the assembler's EOF
+order (every frame split into a 612000-B body + a 2400-B tail under
+one PTS = exactly 614400 B together) - fixed in turn 44 (`docs/`
+`PROTOCOL.md` "Turn 44"): a rerun closes ONE FULL 614400-B frame per
+PTS and prints the PTS cadence (`dt N.N fr` per frame + the deltas
+summary - the bench showed 3/4.5/4.5/6 frame periods between frames,
+~1.8 fps produced under the golden probe/commit vs ~25 fps on the
+V4L2 path the same hour; that difference is the open A/B).
+
+PASS: frames arrive, 614400 B each (one per PTS, EOF-closed), channel
+A shows real contrast, full 640x480 PNGs per channel.
 
 FAIL with output + `dmesg | tail -50`: the next decisions are the
-ordering (SET_INTERFACE before the commit instead of after - the
-UVC-standard order is probe -> commit -> alt) and, only if not one
-ISO byte ever moves, the ep 0x03/0x83 bulk path (never observed on
-the wire).
+negotiation A/Bs (the uvcvideo commit bytes via usbmon, `--alt 1`,
+ISO right after a flash) and, only if not one ISO byte ever moves,
+the ep 0x03/0x83 bulk path (never observed on the wire).
+
+## T10 - THE P2.4b self-reboot recovery soak (video --recover)
+
+```sh
+# the V4L2 backend, 40+ frames - crosses at least one 31-157 s cycle:
+cargo run --features usb --example video -- --cmos --frames 40 --recover
+# the raw ISO backend (start it with the sensor in the bootloader - it
+# flashes it itself and goes on):
+cargo run --features usb --example video -- --iso --cmos --frames 12 --recover
+```
+
+What this proves: the sensor self-reboots to its 0471:2600 bootloader
+every 31-157 s (documented firmware behavior, observed 3x in cap7 and
+1x in cap8, and on every turn-44 bench run) and STAYS there until
+something flashes it - the vendor engine's whole babysitting job.
+With `--recover` the driver takes that job: on a mid-run landing it
+waits for the bootloader, re-flashes the pinned 8051 image (the ungated
+`FLASH_CONFIRMED` path - the exact vendor sequence, readback-verified
+before the commit key; the pins are checked once at startup, before
+any device is touched), waits for the 2500 re-enumeration, re-inits
+the session and RESUMES capture. The frame counter, output folder
+and pooled stats carry across recoveries; the summary reports how
+many landings were absorbed (budget: 12 per run).
+
+PASS: the run crosses at least one self-reboot - watch for
+
+```
+      self-reboot #1/12 mid-run (...)
+      recovery: bootloader landing - re-flashing (the vendor sequence)
+      recovery: flash ok (readback matched), launched
+      recovery: runtime re-enumerated (bus 1, addr NN)
+```
+
+- and still ends with `frames captured : 40 (1 self-reboot
+recovery/recoveries)`. Starting the command on an already-landed
+bootloader is the same test (the first attempt reports the gone
+device, the recovery flashes, the capture starts).
+
+FAIL notes: a recovery that never finds the bootloader within 180 s
+= the sensor is absent/unplugged; a flash that fails twice in a row
+= collect `lsusb -v -d 0471:2600` + the output. Without `--recover`
+the run still ends exactly like the old one (a gone device = the
+"self-reboots every 31-157 s - just rerun" note).
 
 ## T8 - THE P2.3 8051 firmware upload (controlled flash replay)
 
