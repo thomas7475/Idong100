@@ -377,7 +377,7 @@ on EP 0x85 @ 52.0 s to the end (82.8 MB, 1358 ISO records, 63960 B each).
 | streaming EP | 0x85 IN, isochronous; NO SET_INTERFACE alt>0 observed | capture 52.02 s+ |
 | UVC payload header | 12 B: `[len=0x0c][flags 0x8c/0x8d][pts LE u32][scr 6 B]`; flags = EOH|SCR|PTS(+FID) | every payload |
 | payload size | <= 2400 B image data; ISO record = up to 27 payloads, 2412 B apart (last one short, 1236 B) | record walk |
-| PTS | constant within a frame; +1,920,000 per frame; device clock 15.36 MHz -> 125 ms -> 8.0 fps steady state | 546 FID transitions over 68 s |
+| PTS | constant within a frame; +1,920,000 per frame; TICK RATE OPEN: 15.36 MHz -> 125 ms -> 8.0 fps (golden capture, 546 FID transitions / 68 s) vs ~25 fps through uvcvideo (seq 0..26 in ~1.0 s) - the turn-47 clean `--rate` run pairs wall clock with PTS and settles it | 546 FID transitions over 68 s + the turn-44 uvcvideo bench |
 | raster | 1280-B rows = 640 px x 2 byte-interleaved channels; row-to-row corr 0.998 (A) / 0.97 (B); planes mutually uncorrelated | correlation analysis |
 | channels | A (even bytes) = the scene image (a room + hand is visible when rendered); B (odd bytes) = a second, low-contrast channel, range 104-154 peaked at 128 | rendered PNGs |
 | stream poll | cmd 0x0205 on the vendor interface at ~30 Hz; 64-B reply: code 04 = new frame with 4-B LE frame counter, code 00 = empty; trailer `FF FF FF 00 1F 00 05/04 00` | 2963 OUT/2961 IN @ 0-13.3 s |
@@ -514,6 +514,22 @@ end to end. Three wire facts it decided:
    is an OPEN question: next A/Bs are the ISO path right after a T8
    flash, an usbmon capture of what uvcvideo actually commits, and
    `--alt 1`.
+
+   **Turn 47 decoded the turn-46 run-11 cadence:** the constant
+   ~4.0-4.5-period deltas of run 11 were STILL host starvation, not
+   device pacing - `--rate` parsed its flag but never suppressed the
+   per-frame work (two PNG encodes, two plane-stats passes, a
+   console line per frame, all on the reap thread), and a 4-URB ring
+   is only 4 ms of ISO buffer. 86.8% of the device's frames never
+   arrived (1675 gap-counted "drops", ~1000 of which were actually
+   reboot gaps the old accounting wrongly included). The turn-47 loop
+   moves ALL per-frame work to a worker thread, deepens the ring to
+   `--ring N` (default 16 URBs = 16 ms), drops the in-ring 0x0205
+   polls (each unanswered poll blocked the reap loop ~3 s), and
+   prints the wall-vs-PTS rate table. A clean rerun (dt 1.0 flat,
+   intra-session drops 0) then measures the REAL device rate and the
+   implied PTS tick (15.36 vs 48 MHz) in one shot; the run-11 bench
+   could not tell them apart.
 
 The same bench day also resurrected T7: uvcvideo STREAMON - the
 turn-41 EIO "dead end" - PASSED right after the T8 re-flash (10

@@ -1,5 +1,30 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
+Turn 47, 2026-11-27. The turn-46 state stands (the protocol fully
+decoded, the record plane on EP 0x83/0x03, open item #4 resolved).
+This turn is the run-11 bench post-mortem + the video-pipeline fixes
+it demanded: the `--rate 300 --recover` hand-cover run delivered 255
+frames across 9 self-reboots with recovery working 8/9 - but its own
+rate table exposed that the turn-45 "measure-first" promise was only
+half-implemented (`--rate` parsed its flag and never used it, PNG +
+stats per frame never left the reap thread, 4-URB ring = 4 ms of ISO
+buffer -> 86.8% of the device's frames never arrived), three summary
+accounting bugs (host-wall-rate divided total frames by the last
+session's span; device-rate divided delivered by a PTS span with
+reboot gaps inside; the drop counter counted the reboot gaps), and a
+udev permission race on the 9th bootloader re-enumeration that ended
+the run at 255/300. All fixed: per-frame work moved to a frame
+WORKER thread (both backends), `--ring N` (default 16 URBs), the
+in-ring 0x0205 polls replaced by one pre-flight poll (the device
+never answers mid-stream; each unanswered poll starved the ring ~3
+s), honest per-session rate accounting + the implied-PTS-tick
+cross-check (15.36 vs 48 MHz - the open tick-rate question), `--save
+N` + the offline `--analyze DIR` channel analysis (the hand-cover
+run's verdict: channel A a real image sweeping mean 6..153, channel B
+flat at 127.3 +- 6.4 - no image; `protocol::video::channel_report`
+with the row-structure + correlation evidence). 125 tests green,
+both feature states, nightly fmt clean.
+
 Turn 46, 2026-11-27. The one-file answer to "how far are we, what is
 left". Status line: **the protocol is fully decoded - including the
 last open plane: turn 46 decoded the marker/record stream from the
@@ -57,7 +82,8 @@ game capture pins them), and P4 ROS 2 (needs a ROS install).**
 | P2.5 Linux video bring-up (`src/examples/video.rs` + `src/transport/v4l2.rs` + `src/transport/v4l2_stream.rs`) | T6 PASS (turn 41); T7 PASS (turn 44, right after the T8 re-flash - the turn-41 EIO was state-dependent); the ioctl engine PROMOTED into the crate (turn 44) |
 | P2.5b raw usbfs-ISO backend (`--iso`, `src/transport/usbfs.rs` + `src/transport/usbfs_iso.rs`) | T9 PASS (turn 44: 1281 payloads, 0 errors, frames per PTS) - the SET_INTERFACE fix held; the engine PROMOTED into the crate (turn 44) |
 | Video frame assembly (`protocol::video::VideoAssembler`) | the turn-44 bench fixed the EOF order: the final payload's data belongs to its own frame (was: split into 612000 + 2400 B under one PTS); golden + bench-shape tests green |
-| P2.4b self-reboot recovery (`video --recover`) | DONE (turn 44): wait bootloader landing -> re-flash the pinned image (ungated `FLASH_CONFIRMED` path) -> wait renum -> re-init -> resume; `session_full` points at it |
+| P2.4b self-reboot recovery (`video --recover`) | DONE (turn 44): wait bootloader landing -> re-flash the pinned image (ungated `FLASH_CONFIRMED` path) -> wait renum -> re-init -> resume; `session_full` points at it; turn 47: the bootloader/video-node opens RETRY through the fresh-node udev race (run 11: recovery worked 8/9, the 9th hit "Access denied" on the first open) |
+| P2.6 rate measurement (`video --rate N`, turn 45/47) | run 11 (hand-cover bench): 255 frames / 9 recoveries, channel A confirmed a real image (mean 6..153), channel B flat (127.3 +- 6.4, NO image); the rate table itself FAILED honestly - the turn-47 fixes (frame worker thread, `--ring 16`, no in-ring polls, per-session accounting) make run 12 the clean measurement |
 | P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | ACCEPTED - T8 PASS x2 on the turn-41 bench (readback matched, launched, identity intact); `FLASH_CONFIRMED` = true since turn 42 |
 | Marker/3D record plane (P3a, turn 46) | WIRE PLANE DECODED: PU/OD on EP 0x83/0x03 - type-0xF0 announce, 640-B raw record (OD trailer @+0x27C, status @+0x25C), type-7 ACK; open item #4 RESOLVED (x/y/z f64 @ slot +0x08/+0x10/+0x18, quality @+0x24) - the values are HOST-computed (classifying.dll SVM); `protocol::ens` + the T12 bench example ready; the `ens_code.ldr` upload state machine (the startup fallback) is the remaining unpinned wire format |
 | P4 ROS 2 node (idong-ros2, idong_msgs) | NOT STARTED (needs a ROS install) |

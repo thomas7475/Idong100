@@ -60,11 +60,31 @@
 //! * `--frames N`    stop after N frames (default 10).
 //! * `--rate N`      P2.6 (turn 45): rate-measurement mode - capture N
 //!                    frames with the ring never starved by host work
-//!                    (requeue/resubmit first; stats + PNGs only for the
-//!                    first 3 frames) and report the full rate table:
-//!                    host wall-clock fps, PTS-cadence fps, and the
-//!                    device-side drop count (seq/PTS gap accounting).
-//!                    Sets the frame budget to N (overrides --frames).
+//!                    and report the full rate table: host-wall-clock
+//!                    fps, device-made fps (PTS/seq gap accounting),
+//!                    and the PTS cadence summary. Sets the frame
+//!                    budget to N (overrides --frames). Turn 47: the
+//!                    promise is now real - per-frame work (stats,
+//!                    console lines, PNG/bin writes) runs on a WORKER
+//!                    thread, and PNGs are written only for the first 3
+//!                    frames; the reap/QBUF loop only copies bytes.
+//! * `--ring N`      `--iso` only: URB ring depth (default 16, 2..=64).
+//!                    Each URB is 8 microframes x wMaxPacketSize, so N
+//!                    URBs = N ms of ISO buffer. Run 11 ran with 4
+//!                    (= 4 ms): any host hiccup longer than that
+//!                    starved the ring and 86.8% of the device's frames
+//!                    never arrived (1675 dropped / 255 delivered).
+//! * `--save N`      keep the raw .bin of frame N (repeatable, any
+//!                    mode). Normally only the first 3 frames get a
+//!                    .bin - `--save 106 --save 107` keeps the frames
+//!                    whose channel-B sd spiked in run 11 for the
+//!                    offline `--analyze` pass.
+//! * `--analyze DIR` no device touched: run the channel analysis
+//!                    (turn 47) over the frameNNNN.bin files a run
+//!                    left in DIR - per-frame A/B stats, row-mean
+//!                    structure, A/B correlation, and the channel-B
+//!                    image verdict (`is B an image too?` - the run-11
+//!                    hand-cover question, answered from the bytes).
 //! * `--outdir PATH` output folder (default: video_runN - the first
 //!                    nonexistent or EMPTY one, the kit-37 runN rule).
 //! * `--recover`     P2.4b (turn 44): survive the sensor's self-reboot.
@@ -115,9 +135,7 @@ mod bench {
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
 
-    use idong::protocol::video::{
-        plane_stats, split_channels, PlaneStats, VideoAssembler, VideoFrame,
-    };
+    use idong::protocol::video::{PlaneStats, VideoAssembler};
     use idong::protocol::{PID_BOOTLOADER, PID_RUNTIME, VID};
     use idong::transport::usbfs_iso;
     use idong::transport::v4l2::{
@@ -137,12 +155,24 @@ mod bench {
         no_set_alt: bool,
         recover: bool,
         frames: u32,
-        /// `--rate N`: rate-measurement mode - capture N frames with the
-        /// ring NEVER starved by per-frame work (PNG writes and plane
-        /// stats happen only for the first 3 frames), reporting
-        /// host-wall-clock fps, PTS-cadence fps, and drop accounting.
-        /// The P2.6 answer to "what does the device actually produce?"
+        /// `--rate N`: rate-measurement mode - capture N frames with
+        /// the ring never starved by per-frame work (all reporting and
+        /// file writes run on a worker thread; PNGs only for the first
+        /// 3 frames), reporting host-wall fps, device-made fps (gap
+        /// accounting), and the PTS cadence summary. The P2.6 answer
+        /// to "what does the device actually produce?"
         rate_probe: Option<u32>,
+        /// `--ring N` (--iso): URB ring depth. Run 11 starved a 4-URB
+        /// ring (4 ms of ISO buffer) with per-frame PNG work and lost
+        /// 86.8% of the frames; 16 URBs of buffer plus the worker
+        /// thread make the ring drought-proof.
+        ring: usize,
+        /// `--save N` (repeatable): always keep frame N's raw .bin (for
+        /// `--analyze`), whatever the mode's normal .bin policy is.
+        save: Vec<u32>,
+        /// `--analyze DIR`: offline channel analysis of saved
+        /// frameNNNN.bin files - no device touched.
+        analyze: Option<String>,
         device: Option<String>,
         outdir: Option<String>,
     }
@@ -159,6 +189,9 @@ mod bench {
                 recover: false,
                 frames: 10,
                 rate_probe: None,
+                ring: 16,
+                save: Vec::new(),
+                analyze: None,
                 device: None,
                 outdir: None,
             };
@@ -170,7 +203,8 @@ mod bench {
                     "--iso" => args.iso = true,
                     "--no-set-alt" => args.no_set_alt = true,
                     "--recover" => args.recover = true,
-                    "--frames" | "--device" | "--outdir" | "--alt" | "--rate" => {
+                    "--frames" | "--device" | "--outdir" | "--alt" | "--rate" | "--ring"
+                    | "--save" | "--analyze" => {
                         let val = a.get(i + 1).cloned();
                         match (a[i].as_str(), val) {
                             ("--frames", Some(v)) => {
@@ -178,16 +212,26 @@ mod bench {
                             }
                             ("--device", Some(v)) => args.device = Some(v),
                             ("--outdir", Some(v)) => args.outdir = Some(v),
+                            ("--analyze", Some(v)) => args.analyze = Some(v),
                             ("--alt", Some(v)) => match v.parse::<u8>() {
                                 Ok(n) => args.alt = Some(n),
                                 Err(_) => eprintln!("warning: --alt {v:?} is not 0-255"),
                             },
                             ("--rate", Some(v)) => {
-                                // --rate stands alone: capture & count N frames,
-                                // no saving beyond the first 3 (the PNG work is
-                                // exactly what the old loops starved on).
+                                // --rate stands alone: capture & count N
+                                // frames; the worker thread + the
+                                // first-3-PNG policy is what keeps the
+                                // ring full (the turn-45 promise, really
+                                // implemented in turn 47).
                                 args.rate_probe = Some(v.parse().unwrap_or(60).clamp(1, 3000));
                             }
+                            ("--ring", Some(v)) => {
+                                args.ring = v.parse().unwrap_or(16).clamp(2, 64);
+                            }
+                            ("--save", Some(v)) => match v.parse::<u32>() {
+                                Ok(n) => args.save.push(n),
+                                Err(_) => eprintln!("warning: --save {v:?} is not a frame number"),
+                            },
                             _ => eprintln!("warning: {} needs a value", a[i]),
                         }
                         i += 1;
@@ -210,32 +254,256 @@ mod bench {
     }
 
     /// What survives a self-reboot recovery: the output folder, the
-    /// frame counter, the pooled plane stats and the per-attempt rate
-    /// measurement. Everything else (session, transports, URB ring,
-    /// video node) dies with the device and is rebuilt per attempt.
+    /// frame counter, the pooled plane stats and the rate measurement.
+    /// Everything else (session, transports, URB ring, video node,
+    /// frame worker) dies with the device and is rebuilt per attempt.
+    ///
+    /// Turn 47: the accounting is PER SESSION now. The run-11 numbers
+    /// were misleading because the old RunState mixed them across
+    /// recoveries - the "device rate 1.0 fps" divided delivered frames
+    /// by a PTS span that included ~30 s reboot gaps each, the "host
+    /// wall rate 51.5 fps" divided the TOTAL frame count by the LAST
+    /// attempt's span, and the "1675 drops" counted the reboot gaps
+    /// (the device was OFF then - nothing was dropped) on top of the
+    /// real starvation losses.
     #[derive(Default)]
     struct RunState {
+        /// Frames delivered to our loop (all sessions summed).
         got: u32,
         any_a: Option<PlaneStats>,
         any_b: Option<PlaneStats>,
-        /// (frames_in_span, span_us) of the last attempt - the fps line.
+        /// V4L2 last attempt: (frames_in_span, span_us) - the kernel
+        /// timestamp rate line.
         rate: Option<(u32, f64)>,
-        /// ISO: the PTS of the last closed frame, for cadence deltas.
-        last_pts: Option<u32>,
-        first_pts: Option<u32>,
+        /// PTS cadence deltas in PTS_PER_FRAME units (all sessions,
+        /// in order - the worker appends per session).
         pts_deltas_fr: Vec<f64>,
         recoveries: u32,
-        /// Wall-clock frame timestamps (Instant) of the last attempt -
-        /// the host-side rate, independent of any device clock.
-        wall_start: Option<Instant>,
-        wall_end: Option<Instant>,
+        /// Captures that produced frames (recovery separates them).
+        sessions: u32,
+        /// Frames the DEVICE made (delivered + intra-session gaps) -
+        /// the honest device-side production count.
+        made: u64,
         /// Device-side frames the bus delivered but the loop did NOT
         /// process in time: V4L2 buffer seq gaps (uvcvideo counted a
-        /// buffer, our loop missed it), ISO PTS gaps > 1 frame period.
+        /// buffer, our loop missed it), ISO PTS gaps > 1 frame period
+        /// WITHIN one session (reboot gaps are not drops - the device
+        /// was in its bootloader).
         drops: u64,
-        /// V4L2: first seq seen this run + last seq (gap accounting).
+        /// Sum of the per-session PTS spans (ticks) - first to last
+        /// frame of each session, no reboot gaps inside.
+        pts_span_ticks: u64,
+        /// Sum of the per-session ACTIVE wall spans (first frame
+        /// delivered to last frame of the session).
+        wall_active: Duration,
+        /// The whole run's wall time (boot to summary).
+        run_started: Option<Instant>,
+        /// The last frame's full channel report (the B verdict,
+        /// turn 47).
+        last_report: Option<idong::protocol::video::ChannelReport>,
+    }
+
+    /// One frame handed to the worker thread: everything the per-frame
+    /// reporting needs. The reap/QBUF loop NEVER does per-frame host
+    /// work beyond building this struct (a Vec allocation + memcpy) -
+    /// run 11 proved what happens otherwise: two PNG encodes + two
+    /// plane-stats passes + a println per frame starved a 4-ms ISO
+    /// ring and 86.8% of the device's frames never arrived.
+    struct FrameJob {
+        /// Global frame number (the output file name + counter).
+        no: u32,
+        /// ISO: the frame's PTS (the cadence accounting).
+        pts: Option<u32>,
+        /// V4L2: the kernel's buffer sequence number.
+        seq: Option<u32>,
+        /// V4L2: the kernel buffer timestamp (us) - the measured-rate line.
+        ts: Option<i64>,
+        bytes: Vec<u8>,
+    }
+
+    /// The per-session tally the frame worker returns when the
+    /// capture loop is done (or the device went away).
+    #[derive(Default)]
+    struct SessionTally {
+        /// Frames the worker processed this session.
+        delivered: u32,
+        any_a: Option<PlaneStats>,
+        any_b: Option<PlaneStats>,
+        /// Intra-session PTS gaps only (ISO).
+        dropped: u64,
+        /// first..last frame PTS of THIS session (ISO).
+        first_pts: Option<u32>,
+        last_pts: Option<u32>,
+        pts_deltas_fr: Vec<f64>,
+        /// V4L2: the session's seq range (drop accounting).
         seq_first: Option<u32>,
         seq_last: Option<u32>,
+        /// V4L2: first/last kernel buffer timestamp (us) of the session.
+        ts_first: Option<i64>,
+        ts_last: Option<i64>,
+        /// The last frame's full channel report (the B verdict).
+        last_report: Option<idong::protocol::video::ChannelReport>,
+        /// PNGs skipped because the worker fell behind (long
+        /// normal-mode runs; --rate never writes PNGs beyond frame 3).
+        pngs_skipped: u32,
+    }
+
+    /// The per-frame work horse: stats, console line, .bin + PNG
+    /// writes, PTS/seq accounting - everything the streaming loop
+    /// must NOT do. One worker per capture session, ordered.
+    struct FrameSink {
+        tx: crossbeam_channel::Sender<FrameJob>,
+        tally: crossbeam_channel::Receiver<SessionTally>,
+        handle: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl FrameSink {
+        /// Spawn the session's worker. `iso` picks the console-line
+        /// format; `png_first3_only` is the --rate policy; `save` is
+        /// the --save frame list (always keep those .bins).
+        fn spawn(outdir: PathBuf, iso: bool, png_first3_only: bool, save: Vec<u32>) -> FrameSink {
+            let (tx, rx) = crossbeam_channel::bounded::<FrameJob>(256);
+            let (ttx, tally) = crossbeam_channel::bounded::<SessionTally>(1);
+            let handle = std::thread::spawn(move || {
+                let mut t = SessionTally::default();
+                let pix = pix_for();
+                for job in rx.iter() {
+                    let r = idong::protocol::video::channel_report(&job.bytes);
+                    let dt = match t.last_pts {
+                        Some(prev) if job.pts.is_some() => format!(
+                            " (dt {:4.1} fr)",
+                            job.pts.unwrap().wrapping_sub(prev) as f64
+                                / idong::protocol::video::PTS_PER_FRAME as f64
+                        ),
+                        _ => String::new(),
+                    };
+                    if iso {
+                        println!(
+                            "      frame {:3}: pts {}{dt} {} B  chA mean {:6.1} sd {:5.1}  chB mean {:6.1} sd {:5.1}",
+                            job.no,
+                            job.pts.unwrap_or(0),
+                            job.bytes.len(),
+                            r.a.mean,
+                            r.a.stddev,
+                            r.b.mean,
+                            r.b.stddev
+                        );
+                    } else {
+                        println!(
+                            "      frame {:3}: seq {:3} {} B  chA mean {:6.1} sd {:5.1} [{:3},{:3}]  chB mean {:6.1} sd {:5.1} [{:3},{:3}]",
+                            job.no,
+                            job.seq.unwrap_or(0),
+                            job.bytes.len(),
+                            r.a.mean,
+                            r.a.stddev,
+                            r.a.min,
+                            r.a.max,
+                            r.b.mean,
+                            r.b.stddev,
+                            r.b.min,
+                            r.b.max
+                        );
+                    }
+                    // intra-session drop accounting (ISO): a PTS jump
+                    // larger than one frame period = frames the device
+                    // made that our starved loop never saw. The FIRST
+                    // frame of a session has no delta.
+                    if let Some(pts) = job.pts {
+                        if let Some(prev) = t.last_pts {
+                            t.dropped += idong::protocol::video::count_dropped_frames(
+                                prev,
+                                pts,
+                                idong::protocol::video::PTS_PER_FRAME,
+                                true,
+                            );
+                            t.pts_deltas_fr.push(
+                                pts.wrapping_sub(prev) as f64
+                                    / idong::protocol::video::PTS_PER_FRAME as f64,
+                            );
+                        }
+                    }
+                    if let Some(seq) = job.seq {
+                        // the first delta of a session is not a drop
+                        if t.seq_last.is_some() {
+                            t.dropped += idong::protocol::video::count_dropped_frames(
+                                t.seq_last.unwrap(),
+                                seq,
+                                1,
+                                false,
+                            );
+                        }
+                        t.seq_first.get_or_insert(seq);
+                        t.seq_last = Some(seq);
+                    }
+                    if let Some(ts) = job.ts {
+                        // first..last kernel timestamp of the session
+                        if t.ts_first.is_none() {
+                            t.ts_first = Some(ts);
+                        }
+                        t.ts_last = Some(ts);
+                    }
+                    // .bin policy: first 3 frames + every --save frame
+                    if job.no < 3 || save.contains(&job.no) {
+                        let _ =
+                            fs::write(outdir.join(format!("frame{:04}.bin", job.no)), &job.bytes);
+                    }
+                    // PNG policy: all frames (normal mode), first 3
+                    // only (--rate) - and never when the worker is
+                    // behind (the channel backlog says so), so a long
+                    // normal run degrades to stats-only instead of
+                    // starving the ring via a full channel.
+                    let want_png = !png_first3_only || job.no < 3;
+                    if want_png {
+                        if png_first3_only || rx.len() < 32 {
+                            let (a, b) = idong::protocol::video::split_channels(&job.bytes);
+                            write_plane_png(
+                                &outdir.join(format!("frame{:04}_chA.png", job.no)),
+                                &a,
+                                &pix,
+                            );
+                            write_plane_png(
+                                &outdir.join(format!("frame{:04}_chB.png", job.no)),
+                                &b,
+                                &pix,
+                            );
+                        } else {
+                            t.pngs_skipped += 1;
+                        }
+                    }
+                    t.any_a = merge(t.any_a, r.a);
+                    t.any_b = merge(t.any_b, r.b);
+                    if job.pts.is_some() {
+                        t.first_pts.get_or_insert(job.pts.unwrap());
+                        t.last_pts = job.pts;
+                    }
+                    t.last_report = Some(r);
+                    t.delivered += 1;
+                }
+                // the channel closed: hand the tally back
+                let _ = ttx.send(t);
+            });
+            FrameSink { tx, tally, handle: Some(handle) }
+        }
+
+        /// Queue one frame. Crossbeam `send` on a bounded channel
+        /// BLOCKS while 256 frames are already queued - that backpressure
+        /// is the safety valve: a worker that somehow falls behind slows
+        /// the reap loop (visible in the cadence) instead of exhausting
+        /// memory; --rate mode never queues PNG work at all.
+        fn send(&self, job: FrameJob) {
+            let _ = self.tx.send(job);
+        }
+
+        /// End the session: close the job channel, wait for the worker
+        /// to drain it, return the tally.
+        fn finish(mut self) -> SessionTally {
+            drop(self.tx);
+            let t = self.tally.recv().unwrap_or_default();
+            if let Some(h) = self.handle.take() {
+                let _ = h.join();
+            }
+            t
+        }
     }
 
     /// One capture attempt ends either complete or with the device gone
@@ -250,6 +518,10 @@ mod bench {
 
     pub fn run() {
         let args = Args::parse();
+        if let Some(dir) = &args.analyze {
+            analyze_dir(&PathBuf::from(dir));
+            return;
+        }
         if args.probe {
             probe(&args);
             return;
@@ -259,7 +531,7 @@ mod bench {
         // between attempts. Without it the behavior is exactly the old
         // one: a gone device ends the run with the summary of what was
         // captured.
-        let mut st = RunState::default();
+        let mut st = RunState { run_started: Some(Instant::now()), ..RunState::default() };
         let outdir = match &args.outdir {
             Some(d) => PathBuf::from(d),
             None => next_run_dir(),
@@ -357,95 +629,142 @@ mod bench {
             "frames captured : {}{}",
             st.got,
             if st.recoveries > 0 {
-                format!(" ({} self-reboot recovery/recoveries)", st.recoveries)
+                format!(
+                    " ({} self-reboot recovery/recoveries, {} capture session(s))",
+                    st.recoveries, st.sessions
+                )
+            } else if st.sessions > 1 {
+                format!(" ({} capture sessions)", st.sessions)
             } else {
                 String::new()
             }
         );
-        if args.iso {
-            if let (Some(first), Some(last)) = (st.first_pts, st.last_pts) {
-                let deltas = &st.pts_deltas_fr;
-                if !deltas.is_empty() {
-                    let joined: Vec<String> = deltas.iter().map(|d| format!("{d:.1}")).collect();
-                    // device-clock seconds between the first and last
-                    // frame PTS: the device-side production rate
-                    let span_s = last.wrapping_sub(first) as f64
-                        / idong::protocol::video::DEVICE_CLOCK_HZ as f64;
-                    let fps = if span_s > 0.0 { (st.got - 1) as f64 / span_s } else { 0.0 };
-                    println!(
-                        "pts cadence     : deltas {} frame periods (125 ms base)",
-                        joined.join("/")
-                    );
-                    println!("device rate     : {fps:.1} fps over the captured span (pts clock)");
-                }
-            }
-        } else if let Some((n, span_us)) = st.rate {
-            if n > 1 && span_us > 0.0 {
-                let fps = (n - 1) as f64 * 1_000_000.0 / span_us;
-                println!("measured rate   : {fps:.1} fps (capture timestamps, last attempt)");
-            }
-        }
-        // host wall-clock rate (turn 45): the honest host-side number,
-        // independent of device clocks - our loop's delivery rate.
-        if let (Some(w0), Some(w1)) = (st.wall_start, st.wall_end) {
-            if st.got > 1 {
-                let span_s = w1.duration_since(w0).as_secs_f64();
-                if span_s > 0.0 {
-                    println!(
-                        "host wall rate  : {:.1} fps over {span_s:.1} s ({} frames delivered to our loop)",
-                        (st.got - 1) as f64 / span_s, st.got
-                    );
-                }
-            }
-        }
-        // device-side drop accounting (turn 45): frames the DEVICE
-        // produced but our loop never saw. V4L2: buffer-seq gaps.
-        // ISO: PTS gaps beyond one frame period.
-        if st.drops > 0 {
-            let (mode, detail) = if args.iso {
-                ("PTS", format!("{} frames lost on the bus/reassembly", st.drops))
-            } else {
-                (
-                    "seq",
-                    format!(
-                        "{} frames: seq {}..{} = {} counted, {} delivered",
-                        st.drops,
-                        st.seq_first.map(|v| v.to_string()).unwrap_or_default(),
-                        st.seq_last.map(|v| v.to_string()).unwrap_or_default(),
-                        st.seq_last.unwrap_or(0).saturating_sub(st.seq_first.unwrap_or(0)) + 1,
-                        st.got
-                    ),
-                )
-            };
+        // host wall-clock rate over the ACTIVE streaming spans (turn 47):
+        // every capture session's first..last frame delivery, summed.
+        // The run-11 line divided the TOTAL frame count by the LAST
+        // session's span and printed 51.5 fps - 10x the truth.
+        let wall_s = st.wall_active.as_secs_f64();
+        if wall_s > 0.0 && st.got > 1 {
+            let delivered_fps = (st.got - 1) as f64 / wall_s.max(f64::EPSILON);
             println!(
-                "device drops    : {mode} gap accounting: {detail} - the device made them, our loop missed them"
+                "host wall rate  : {delivered_fps:.1} fps over {wall_s:.1} s active streaming ({} frames delivered to our loop)",
+                st.got
+            );
+        }
+        if let Some(t0) = st.run_started {
+            println!(
+                "total wall time : {:.1} s (includes recoveries + setup)",
+                t0.elapsed().as_secs_f64()
+            );
+        }
+        // device-made accounting (turn 47): delivered + intra-session
+        // gap losses; the reboot gaps count nowhere (the device was in
+        // its bootloader - run 11's "1675 drops" wrongly included them).
+        if st.drops > 0 {
+            println!(
+                "device drops    : {} frames the device made, our loop missed (intra-session PTS/seq gaps)",
+                st.drops
             );
         } else {
             println!("device drops    : 0 (every frame the device made was delivered)");
         }
+        // the device's true production rate: frames made over the ACTIVE
+        // wall spans - assumption-free, the number T11 exists for.
+        let made = st.made.max(st.got as u64);
+        if wall_s > 0.0 && made > 1 {
+            let device_fps = (made - 1) as f64 / wall_s.max(f64::EPSILON);
+            println!(
+                "device rate     : {device_fps:.1} fps ({} made / active span, wall clock)",
+                made
+            );
+        }
+        // PTS cadence summary (ISO): the deltas in PTS_PER_FRAME units,
+        // summarized - the run-11 full dump was a 250-entry line.
+        if !st.pts_deltas_fr.is_empty() {
+            let mut sorted = st.pts_deltas_fr.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let median = sorted[sorted.len() / 2];
+            let max = sorted[sorted.len() - 1];
+            let head: Vec<String> =
+                st.pts_deltas_fr.iter().take(10).map(|d| format!("{d:.1}")).collect();
+            println!(
+                "pts cadence     : first 10: {} ... median {median:.1}, max {max:.1} frame periods (PTS_PER_FRAME = {} units)",
+                head.join("/"),
+                idong::protocol::video::PTS_PER_FRAME
+            );
+            // the PTS tick-rate cross-check: with a flat cadence and
+            // zero drops, frame period (wall) x PTS_PER_FRAME = the
+            // device clock. The 15.36 MHz constant came from the golden
+            // capture's 8.0 fps; the uvcvideo bench measured ~25 fps -
+            // a clean run settles which is right.
+            if st.drops == 0 && st.got > 1 && wall_s > 0.0 {
+                let frame_period_s = wall_s.max(f64::EPSILON) / (st.got - 1) as f64;
+                let implied_hz = idong::protocol::video::PTS_PER_FRAME as f64 / frame_period_s;
+                println!(
+                    "pts tick rate   : {implied_hz:.2} MHz implied (PTS_PER_FRAME / wall frame period)"
+                );
+                let assumed = idong::protocol::video::DEVICE_CLOCK_HZ as f64;
+                if (implied_hz - assumed).abs() / assumed > 0.10 {
+                    println!(
+                        "                  MISMATCH vs the assumed {assumed} Hz - the DEVICE_CLOCK_HZ"
+                    );
+                    println!(
+                        "                  constant needs the measured value (48 MHz would read {:.2}x)",
+                        implied_hz / assumed
+                    );
+                } else {
+                    println!("                  agrees with DEVICE_CLOCK_HZ - the constant stands");
+                }
+            }
+        }
+        if !args.iso {
+            if let Some((n, span_us)) = st.rate {
+                if n > 1 && span_us > 0.0 {
+                    let fps = (n - 1) as f64 * 1_000_000.0 / span_us;
+                    println!("measured rate   : {fps:.1} fps (kernel timestamps, last session)");
+                }
+            }
+        }
         println!(
             "session         : {}",
-            if args.cmos { "held (MI_04 + 0x0205 polls)" } else { "none (--cmos absent)" }
+            if args.cmos { "held (MI_04 claim)" } else { "none (--cmos absent)" }
         );
         println!("channel A stats : {:?}", st.any_a);
         println!("channel B stats : {:?}", st.any_b);
+        // the channel-B verdict (turn 47): pixel sd AND row-mean
+        // structure must BOTH be present for an image - the run-11
+        // hand-cover data answered this one (B: 127.3 +- 6.4, no image).
+        if let Some(r) = st.last_report {
+            println!(
+                "channel B       : {} (last frame: sd {:.1}, row spread {:.2}, A/B corr {:+.2})",
+                r.b_verdict(),
+                r.b.stddev,
+                r.b_rows.spread_vs_sd,
+                r.corr_ab
+            );
+            if !r.b_is_image() {
+                println!(
+                    "                  full pass over the saved .bins: --analyze {}",
+                    outdir.display()
+                );
+            }
+        }
         if let Some(a) = st.any_a {
             if a.has_contrast() {
                 println!("PASS: channel A carries a real image (contrast present).");
             } else {
                 println!("WARN: channel A is flat - registers not initialized? (use --cmos)");
             }
-        }
-        if let Some(a) = st.any_a {
             if a.n > 0 {
                 println!("PASS: {} channel-A samples pooled.", a.n);
             }
         }
         println!("output: {} (PNGs per channel + raw .bin of the first frames)", outdir.display());
         println!("next steps:");
-        println!("  - send the PNGs + this console output back");
-        println!("  - the long-run soak: add --recover and --frames 60+");
-        println!("  - if channel B decodes as an image too, the marker/3D plane is next");
+        println!("  - rerun the clean rate table: --iso --cmos --rate 300 --recover");
+        println!("    (the worker-thread loop: expect dt 1.0 flat, drops 0)");
+        println!("  - offline channel analysis of the saved .bins: --analyze {}", outdir.display());
+        println!("  - the record plane (markers): records --cmos (T12)");
     }
 
     // ---------------- --probe (unchanged behavior) ----------------
@@ -551,6 +870,7 @@ mod bench {
         // the point (it holds the MI_04 claim for the Session).
         #[allow(unused_assignments)]
         let mut transport: Option<UsbTransport> = None;
+        #[allow(unused_assignments)]
         let mut session: Option<Session> = None;
         if args.cmos {
             println!("[1/4] session init on MI_04 (--cmos: EEPROM reads + CMOS registers)");
@@ -582,6 +902,16 @@ mod bench {
             println!("      device ID {}", s.info().device_id);
             println!("      PASS: session init complete (register tables + readbacks)");
             session = Some(s);
+            // pre-flight 0x0205 poll (turn 47): ONE attempt while not
+            // streaming - the old ~10 Hz in-stream loop only ever
+            // starved the DQBUF loop ~3 s per unanswered poll (the
+            // device never answers mid-stream on this bench).
+            if let Some(s) = session.as_mut() {
+                match s.poll_stream() {
+                    Ok(_) => println!("      0x0205: answered pre-stream - session held"),
+                    Err(_) => println!("      0x0205: silent pre-stream (not fatal) - no polls"),
+                }
+            }
         } else {
             println!("[1/4] session init SKIPPED (no --cmos)");
             println!("      the vendor flow always inits the sensor registers before");
@@ -658,18 +988,44 @@ mod bench {
 
         // [3/4] open + negotiate
         println!("[3/4] open + format");
-        let mut dev = match V4l2Dev::open(&node) {
-            Ok(d) => d,
-            Err(e) => {
-                if e.kind() == io::ErrorKind::NotFound || e.raw_os_error() == Some(libc_enodev()) {
-                    return AttemptOutcome::Gone(format!("open {}: {e}", node.display()));
+        // open with retry (turn 47): after a recovery the /dev/video
+        // node is fresh, and udev can take a moment to apply its
+        // permissions - a PermissionDenied right after a re-enumeration
+        // is the same settle race the bootloader node shows. Retry
+        // 3x/1 s before treating it as fatal.
+        let mut dev = None;
+        for attempt in 0..3u32 {
+            match V4l2Dev::open(&node) {
+                Ok(d) => {
+                    dev = Some(d);
+                    break;
                 }
-                println!("      FAIL: cannot open {}: {e}", node.display());
-                if e.kind() == io::ErrorKind::PermissionDenied {
-                    println!("      permissions: sudo usermod -aG video $USER, then re-login");
+                Err(e) => {
+                    let gone = e.kind() == io::ErrorKind::NotFound
+                        || e.raw_os_error() == Some(libc_enodev());
+                    if gone || attempt == 2 {
+                        if gone {
+                            return AttemptOutcome::Gone(format!("open {}: {e}", node.display()));
+                        }
+                        println!("      FAIL: cannot open {}: {e}", node.display());
+                        if e.kind() == io::ErrorKind::PermissionDenied {
+                            println!(
+                                "      permissions: sudo usermod -aG video $USER, then re-login"
+                            );
+                        }
+                        std::process::exit(1);
+                    }
+                    println!(
+                        "      open {}: {e} - retrying ({} of 2, udev settle)",
+                        node.display(),
+                        attempt + 1
+                    );
+                    std::thread::sleep(Duration::from_millis(1000));
                 }
-                std::process::exit(1);
             }
+        }
+        let Some(mut dev) = dev else {
+            return AttemptOutcome::Gone(format!("open {}: no node", node.display()));
         };
         let c = dev.caps();
         println!(
@@ -764,109 +1120,69 @@ mod bench {
         println!("      PASS: streaming started ({} mmap buffers)", nbufs);
 
         let t_start = Instant::now();
-        let mut t_last_poll = Instant::now() - Duration::from_secs(1);
-        let mut poll_errors = 0u32;
-        let mut polls_live = true;
-        let mut first_ts: Option<i64> = None;
-        let mut last_ts: Option<i64> = None;
         let mut attempt_frames = 0u32;
-        st.wall_start = Some(t_start);
+        let mut wall_first: Option<Instant> = None;
+        let mut wall_last: Option<Instant> = None;
+        let mut gone: Option<String> = None;
+        // the frame worker (turn 47): the DQBUF loop only copies bytes
+        // and requeues; stats, console lines and file writes happen on
+        // the worker thread.
+        let sink = FrameSink::spawn(
+            outdir.to_path_buf(),
+            false,
+            args.rate_probe.is_some(),
+            args.save.clone(),
+        );
 
-        while st.got < args.frames && t_start.elapsed() < Duration::from_secs(30) {
-            // keep the 0x0205 stream poll alive (~10 Hz) while streaming,
-            // exactly the vendor pattern (30 Hz on the wire); stop after
-            // three consecutive unanswered polls (it is not required for
-            // V4L2 streaming - the vendor engine sends it, we observe).
-            if polls_live
-                && session.is_some()
-                && t_last_poll.elapsed() >= Duration::from_millis(100)
-            {
-                match session.as_mut().unwrap().poll_stream() {
-                    Ok(st8) => {
-                        poll_errors = 0;
-                        if st8.new_frame {
-                            println!(
-                                "      0x0205: new frame #{} (frame counter advanced)",
-                                st8.frame_no
-                            );
-                        }
-                    }
-                    Err(_) => {
-                        poll_errors += 1;
-                        if poll_errors >= 3 {
-                            polls_live = false;
-                            println!("      0x0205: unanswered x3 - stream polls off (not fatal)");
-                        }
-                    }
-                }
-                t_last_poll = Instant::now();
-            }
+        while st.got + attempt_frames < args.frames && t_start.elapsed() < Duration::from_secs(30) {
             match dev.dq(500) {
                 Ok(Some((idx, bytesused, seq, ts))) => {
-                    // MEASURE-FIRST (turn 45): return the buffer to the
-                    // driver BEFORE any per-frame host work (stats,
-                    // PNG encode) - the old order starved the driver's
-                    // buffer pool during our own processing, which is
-                    // exactly the +3 seq jumps of the turn-44 run6. The
+                    // MEASURE-FIRST: return the buffer to the driver
+                    // BEFORE any per-frame host work (turn 45) - and the
+                    // per-frame work now runs on the worker anyway. The
                     // frame bytes are copied out first (the buffer is
                     // reused the moment it is requeued).
                     let bytes = dev.buffer_bytes(idx, bytesused).to_vec();
                     if let Err(e) = dev.queue(idx) {
                         println!("      FAIL: requeue: {e}");
+                        gone = Some(format!("requeue: {e}"));
                         break;
                     }
-                    // drop accounting: the driver's buffer sequence
-                    // counts EVERY frame it produced; a gap means the
-                    // device made a frame our loop did not see (slow
-                    // consumer, not a device stall).
-                    if st.seq_first.is_none() {
-                        st.seq_first = Some(seq);
-                    }
-                    if let Some(last) = st.seq_last {
-                        st.drops +=
-                            idong::protocol::video::count_dropped_frames(last, seq, 1, false);
-                    }
-                    st.seq_last = Some(seq);
-                    let (a, b) = split_channels(&bytes);
-                    let sa = plane_stats(&a);
-                    let sb = plane_stats(&b);
-                    println!(
-                        "      frame {:3}: seq {:3} {} B  chA mean {:6.1} sd {:5.1} [{:3},{:3}]  chB mean {:6.1} sd {:5.1} [{:3},{:3}]",
-                        st.got, seq, bytesused, sa.mean, sa.stddev, sa.min, sa.max, sb.mean, sb.stddev, sb.min, sb.max
-                    );
-                    if st.got < 3 {
-                        let raw = outdir.join(format!("frame{:04}.bin", st.got));
-                        let _ = fs::write(&raw, &bytes);
-                        write_plane_png(
-                            &outdir.join(format!("frame{:04}_chA.png", st.got)),
-                            &a,
-                            &pix,
-                        );
-                        write_plane_png(
-                            &outdir.join(format!("frame{:04}_chB.png", st.got)),
-                            &b,
-                            &pix,
-                        );
-                    }
-                    st.any_a = merge(st.any_a, sa);
-                    st.any_b = merge(st.any_b, sb);
-                    first_ts.get_or_insert(ts);
-                    last_ts = Some(ts);
-                    st.got += 1;
+                    let now = Instant::now();
+                    wall_first.get_or_insert(now);
+                    wall_last = Some(now);
+                    sink.send(FrameJob {
+                        no: st.got + attempt_frames,
+                        pts: None,
+                        seq: Some(seq),
+                        ts: Some(ts),
+                        bytes,
+                    });
                     attempt_frames += 1;
                 }
                 Ok(None) => continue,
                 Err(e) => {
-                    dev.stream_off();
-                    return AttemptOutcome::Gone(format!("DQBUF: {e}"));
+                    gone = Some(format!("DQBUF: {e}"));
+                    break;
                 }
             }
         }
         dev.stream_off();
-        st.wall_end = Some(Instant::now());
-        if attempt_frames > 1 {
-            let span_us = (last_ts.unwrap_or(0) - first_ts.unwrap_or(0)).max(1) as f64;
-            st.rate = Some((attempt_frames, span_us));
+        let tally = sink.finish();
+        if attempt_frames > 0 {
+            st.sessions += 1;
+            if let (Some(w0), Some(w1)) = (wall_first, wall_last) {
+                st.wall_active += w1.duration_since(w0);
+            }
+            if let (Some(t0), Some(t1)) = (tally.ts_first, tally.ts_last) {
+                if t1 > t0 {
+                    st.rate = Some((attempt_frames, (t1 - t0) as f64));
+                }
+            }
+        }
+        merge_tally(st, tally);
+        if let Some(e) = gone {
+            return AttemptOutcome::Gone(e);
         }
         AttemptOutcome::Done
     }
@@ -891,6 +1207,7 @@ mod bench {
         // MI_04 AFTER the stream stops (the session owns no resource)
         #[allow(unused_assignments)]
         let mut transport: Option<UsbTransport> = None;
+        #[allow(unused_assignments)]
         let mut session: Option<Session> = None;
         if args.cmos {
             println!("[1/5] session init on MI_04 (--cmos: EEPROM reads + CMOS registers)");
@@ -916,6 +1233,22 @@ mod bench {
             println!("      device ID {}", s.info().device_id);
             println!("      PASS: session init complete");
             session = Some(s);
+            // pre-flight 0x0205 poll (turn 47): the ONE poll while not
+            // streaming. The old ~10 Hz loop inside the ring was pure
+            // loss: the device never answers mid-stream on this bench
+            // (every run since turn 42), and each unanswered poll
+            // blocked the reap loop ~3 s (the reply-timeout budget) -
+            // run 11 shows exactly that as the first dt 4.0/5.0/6.0
+            // staircase after every recovery.
+            if let Some(s) = session.as_mut() {
+                match s.poll_stream() {
+                    Ok(_) => println!("      0x0205: answered pre-stream - session held"),
+                    Err(_) => println!("      0x0205: silent pre-stream (not fatal) - no polls"),
+                }
+            }
+            println!("      (no 0x0205 polls during the ring - the device ignores them");
+            println!("       while streaming; the golden capture answers mid-stream on");
+            println!("       Windows, one open difference)");
         } else {
             println!("[1/5] session init SKIPPED (no --cmos)");
             println!("      the vendor flow always inits the sensor registers before");
@@ -1084,7 +1417,12 @@ mod bench {
         // [5/5] the ISO URB ring
         println!("[5/5] ISO URB ring on EP 0x{ep_addr:02x} ({} frames wanted)", args.frames);
         let npackets = 8usize; // 8 microframes per URB = 1 ms per re-submission
-        let ring = 4usize; // four URBs in flight
+                               // ring depth: --ring N (turn 47). Run 11 ran 4 URBs = 4 ms of
+                               // ISO buffer; two PNG encodes on the reap thread later the ring
+                               // was dry for ~100 ms at a time and 86.8% of the device's
+                               // frames never arrived. 16 URBs = 16 ms of bus buffer, and the
+                               // per-frame work lives on the worker thread now anyway.
+        let ring = args.ring;
         let mut urbs: Vec<usbfs_iso::IsoUrb> = Vec::new();
         for _ in 0..ring {
             match usbfs_iso::IsoUrb::new(ep_addr, npackets, packet_size) {
@@ -1105,7 +1443,7 @@ mod bench {
                 std::process::exit(1);
             }
         }
-        println!("      PASS: {ring} URBs x {npackets} microframes submitted (ASAP)");
+        println!("      PASS: {ring} URBs x {npackets} microframes submitted (ASAP, {ring} ms of ISO buffer)");
         println!("      output dir: {}", outdir.display());
 
         let mut assembler = VideoAssembler::new();
@@ -1118,30 +1456,24 @@ mod bench {
         let mut pkt_proto = 0u64;
         let mut pkt_overflow = 0u64;
         let mut pkt_nilseq = 0u64;
-        let mut t_last_poll = Instant::now() - Duration::from_secs(1);
-        let mut poll_errors = 0u32;
-        let mut polls_live = true;
+        let mut attempt_frames = 0u32;
+        let mut wall_first: Option<Instant> = None;
+        let mut wall_last: Option<Instant> = None;
         let mut gone: Option<String> = None;
+        // the frame worker (turn 47): the reap loop copies packet bytes,
+        // resubmits, assembles and hands closed frames over - the stats,
+        // console lines and PNG/bin writes happen on the worker thread,
+        // NEVER between a reap and its resubmit.
+        let sink = FrameSink::spawn(
+            outdir.to_path_buf(),
+            true,
+            args.rate_probe.is_some(),
+            args.save.clone(),
+        );
         let t_start = Instant::now();
-        st.wall_start = Some(t_start);
-        'outer: while st.got < args.frames && t_start.elapsed() < Duration::from_secs(30) {
-            // keep the 0x0205 stream poll alive (~10 Hz) as in the V4L2 run
-            if polls_live
-                && session.is_some()
-                && t_last_poll.elapsed() >= Duration::from_millis(100)
-            {
-                match session.as_mut().unwrap().poll_stream() {
-                    Ok(_) => poll_errors = 0,
-                    Err(_) => {
-                        poll_errors += 1;
-                        if poll_errors >= 3 {
-                            polls_live = false;
-                            println!("      0x0205: unanswered x3 - stream polls off (not fatal)");
-                        }
-                    }
-                }
-                t_last_poll = Instant::now();
-            }
+        'outer: while st.got + attempt_frames < args.frames
+            && t_start.elapsed() < Duration::from_secs(30)
+        {
             // reap one URB (non-blocking) + poll on the fd
             let reaped = match usbfs_iso::wait_reap(fd, 100) {
                 Ok(Some(p)) => p,
@@ -1164,7 +1496,8 @@ mod bench {
             // kept producing; ASAP scheduling then jumps the next URB
             // to the far future and frames are missed on the bus (never
             // visible in any error counter - the payloads simply never
-            // arrive). Copying 8 x 2412 B is microseconds; PNGs are not.
+            // arrive). Copying 8 x 2412 B is microseconds; PNGs are not
+            // - which is why they run on the worker thread now too.
             let mut pkt_bytes: Vec<(usize, Vec<u8>)> = Vec::with_capacity(npackets);
             for (i, (actual, status)) in results.iter().enumerate() {
                 if *status != 0 {
@@ -1201,26 +1534,23 @@ mod bench {
             payloads += pkt_bytes.len() as u64;
             for (_, bytes) in &pkt_bytes {
                 if let Some(frame) = assembler.push_payload(bytes) {
-                    // device-side drop accounting: a PTS jump larger
-                    // than one frame period means the device produced a
-                    // frame that never reached the ring (bus loss), or
-                    // the assembler reset mid-stream.
-                    if let Some(prev) = st.last_pts {
-                        st.drops += idong::protocol::video::count_dropped_frames(
-                            prev,
-                            frame.pts,
-                            idong::protocol::video::PTS_PER_FRAME,
-                            true,
-                        );
-                    }
-                    report_iso_frame(st, &frame, outdir);
-                    if st.got >= args.frames {
+                    let now = Instant::now();
+                    wall_first.get_or_insert(now);
+                    wall_last = Some(now);
+                    sink.send(FrameJob {
+                        no: st.got + attempt_frames,
+                        pts: Some(frame.pts),
+                        seq: None,
+                        ts: None,
+                        bytes: frame.data,
+                    });
+                    attempt_frames += 1;
+                    if st.got + attempt_frames >= args.frames {
                         break 'outer;
                     }
                 }
             }
         }
-        st.wall_end = Some(Instant::now());
 
         // stop the ring before touching the interface state: discard
         // every still-submitted URB and drain the reaps (unlink is
@@ -1240,6 +1570,16 @@ mod bench {
         }
         let _ = usbfs_iso::release_interface(fd, iface);
 
+        // drain the worker and merge its session tally
+        let tally = sink.finish();
+        if attempt_frames > 0 {
+            st.sessions += 1;
+            if let (Some(w0), Some(w1)) = (wall_first, wall_last) {
+                st.wall_active += w1.duration_since(w0);
+            }
+        }
+        merge_tally(st, tally);
+
         println!();
         println!(
             "payloads        : {payloads} ({} errors: {} proto, {} overflow, {} ilseq)",
@@ -1251,39 +1591,146 @@ mod bench {
         AttemptOutcome::Done
     }
 
-    /// Report one closed ISO frame: stats, delta to the previous PTS
-    /// (in 125-ms frame periods - the device clock), PNGs, raw bytes.
-    fn report_iso_frame(st: &mut RunState, frame: &VideoFrame, outdir: &Path) {
-        let (a, b) = split_channels(&frame.data);
-        let sa = plane_stats(&a);
-        let sb = plane_stats(&b);
-        let dt = match st.last_pts {
-            Some(prev) => format!(
-                " (dt {:4.1} fr)",
-                frame.pts.wrapping_sub(prev) as f64 / idong::protocol::video::PTS_PER_FRAME as f64
-            ),
-            None => String::new(),
-        };
-        println!(
-            "      frame {:3}: pts {}{dt} {} B  chA mean {:6.1} sd {:5.1}  chB mean {:6.1} sd {:5.1}",
-            st.got, frame.pts, frame.data.len(), sa.mean, sa.stddev, sb.mean, sb.stddev
-        );
-        if st.got < 3 {
-            let _ = fs::write(outdir.join(format!("frame{:04}.bin", st.got)), &frame.data);
+    /// Pool two OPTIONAL plane stats (turn 47): the worker returns
+    /// per-session Option<PlaneStats>; the run state pools them.
+    fn merge_opt(prev: Option<PlaneStats>, other: Option<PlaneStats>) -> Option<PlaneStats> {
+        match (prev, other) {
+            (None, o) => o,
+            (p, None) => p,
+            (Some(p), Some(o)) => merge(Some(p), o),
         }
-        let pix = pix_for();
-        write_plane_png(&outdir.join(format!("frame{:04}_chA.png", st.got)), &a, &pix);
-        write_plane_png(&outdir.join(format!("frame{:04}_chB.png", st.got)), &b, &pix);
-        if let Some(prev) = st.last_pts {
-            st.pts_deltas_fr.push(
-                frame.pts.wrapping_sub(prev) as f64 / idong::protocol::video::PTS_PER_FRAME as f64,
+    }
+
+    /// Fold one session's worker tally into the run state (turn 47):
+    /// the per-session numbers stay separate from the run totals -
+    /// delivered frames add up, PTS spans and active wall spans sum,
+    /// the deltas append in order. What the tally counted as drops is
+    /// INTRA-session only (the device was off during the reboots - run
+    /// 11's "1675 drops" wrongly included ~1000 reboot-gap frames).
+    fn merge_tally(st: &mut RunState, t: SessionTally) {
+        st.got += t.delivered;
+        st.any_a = merge_opt(st.any_a, t.any_a);
+        st.any_b = merge_opt(st.any_b, t.any_b);
+        st.drops += t.dropped;
+        st.made += t.delivered as u64 + t.dropped;
+        st.pts_deltas_fr.extend_from_slice(&t.pts_deltas_fr);
+        if t.last_report.is_some() {
+            st.last_report = t.last_report;
+        }
+        if let (Some(first), Some(last)) = (t.first_pts, t.last_pts) {
+            if last >= first {
+                st.pts_span_ticks += (last - first) as u64;
+            } else {
+                // a 32-bit PTS wrap inside one session: wrapping span
+                st.pts_span_ticks += last.wrapping_sub(first) as u64;
+            }
+        }
+        if t.pngs_skipped > 0 {
+            println!("      (PNGs skipped for {} frames - the worker fell behind;", t.pngs_skipped);
+            println!("       --rate keeps the ring full for pure measurement)");
+        }
+    }
+
+    /// The offline channel analysis (turn 47): `--analyze DIR` walks the
+    /// frameNNNN.bin files a run left behind and prints the A/B
+    /// structure analysis - the run-11 hand-cover questions (is B an
+    /// image? how does B track the scene?) answered from the bytes, no
+    /// device needed.
+    fn analyze_dir(dir: &Path) {
+        println!("=== idong P2.6a channel analysis (offline, no device) ===");
+        println!("      dir: {}", dir.display());
+        let mut bins: Vec<PathBuf> = match fs::read_dir(dir) {
+            Ok(rd) => rd
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|n| n.starts_with("frame") && n.ends_with(".bin"))
+                        .unwrap_or(false)
+                })
+                .collect(),
+            Err(e) => {
+                println!("      FAIL: read_dir {}: {e}", dir.display());
+                std::process::exit(1);
+            }
+        };
+        bins.sort();
+        if bins.is_empty() {
+            println!("      FAIL: no frameNNNN.bin files in {}", dir.display());
+            println!("      (a capture run writes them for its first 3 frames and");
+            println!("       every --save N frame)");
+            std::process::exit(1);
+        }
+        println!();
+        let mut pooled_a: Option<PlaneStats> = None;
+        let mut pooled_b: Option<PlaneStats> = None;
+        let mut b_image_votes = 0u32;
+        let mut max_b_sd = 0.0f64;
+        for p in &bins {
+            let bytes = match fs::read(p) {
+                Ok(b) => b,
+                Err(e) => {
+                    println!("      (skip {}: {e})", p.display());
+                    continue;
+                }
+            };
+            let r = idong::protocol::video::channel_report(&bytes);
+            println!(
+                "      {}: {} B  chA mean {:6.1} sd {:5.1} rows[{:5.1}..{:5.1}]  chB mean {:6.1} sd {:5.1} rows[{:5.1}..{:5.1}]  corr {:+.3}  B: {}",
+                p.file_name().unwrap_or_default().to_string_lossy(),
+                bytes.len(),
+                r.a.mean,
+                r.a.stddev,
+                r.a_rows.min,
+                r.a_rows.max,
+                r.b.mean,
+                r.b.stddev,
+                r.b_rows.min,
+                r.b_rows.max,
+                r.corr_ab,
+                r.b_verdict()
+            );
+            pooled_a = merge(pooled_a, r.a);
+            pooled_b = merge(pooled_b, r.b);
+            if r.b_is_image() {
+                b_image_votes += 1;
+            }
+            max_b_sd = max_b_sd.max(r.b.stddev);
+        }
+        println!();
+        println!("frames analyzed : {}", bins.len());
+        if let Some(pa) = pooled_a {
+            println!(
+                "channel A      : mean {:.1} sd {:.1} [{},{}] over {} samples",
+                pa.mean, pa.stddev, pa.min, pa.max, pa.n
             );
         }
-        st.first_pts.get_or_insert(frame.pts);
-        st.last_pts = Some(frame.pts);
-        st.any_a = merge(st.any_a, sa);
-        st.any_b = merge(st.any_b, sb);
-        st.got += 1;
+        if let Some(pb) = pooled_b {
+            println!(
+                "channel B      : mean {:.1} sd {:.1} [{},{}] over {} samples",
+                pb.mean, pb.stddev, pb.min, pb.max, pb.n
+            );
+        }
+        println!(
+            "B image votes   : {b_image_votes}/{} (pixel sd >= 12 AND row spread >= 0.4)",
+            bins.len()
+        );
+        if b_image_votes == 0 {
+            println!("verdict         : channel B carries NO image - A is the only image plane.");
+            println!("                  (the marker/3D plane lives on the MI_04 record pair");
+            println!("                  0x83/0x03 per the turn-46 disassembly - records --cmos)");
+        } else {
+            println!(
+                "verdict         : {b_image_votes} frame(s) carry a B image - rerun --save on"
+            );
+            println!("                  those frames and compare with the A PNGs");
+        }
+        if max_b_sd >= 12.0 && b_image_votes == 0 {
+            println!("note            : B sd peaked at {max_b_sd:.1} (scene-coupled noise - the");
+            println!("                  run-11 bright frames read B sd up to ~19; sd alone is not");
+            println!("                  an image without row structure)");
+        }
     }
 
     // ---------------- P2.4b: the self-reboot recovery ----------------
@@ -1344,13 +1791,40 @@ mod bench {
             std::thread::sleep(Duration::from_millis(500));
         }
         println!("      recovery: bootloader landing - re-flashing (the vendor sequence)");
-        let mut t = match idong::UsbTransport::open_bootloader() {
-            Ok(t) => t,
-            Err(e) => {
-                println!("      recovery: open bootloader: {e}");
-                return false;
+        // open the bootloader WITH retry (turn 47): a fresh
+        // re-enumeration can briefly appear before udev applies the
+        // node's permissions - run 11's 9th landing failed the whole
+        // recovery with "Access denied" on the FIRST open; the eight
+        // before it opened fine. Retry while the bootloader is still
+        // on the bus; anything else keeps the old single-attempt fate.
+        let mut t = None;
+        for attempt in 0..5u32 {
+            match idong::UsbTransport::open_bootloader() {
+                Ok(t0) => {
+                    t = Some(t0);
+                    break;
+                }
+                Err(e) => {
+                    let still_bootloader = {
+                        let pids: Vec<u16> = idong::list_devices().iter().map(|d| d.pid).collect();
+                        matches!(idong::bus_state(&pids), idong::BusState::Bootloader)
+                    };
+                    if attempt == 4 || !still_bootloader {
+                        println!("      recovery: open bootloader: {e}");
+                        if !still_bootloader {
+                            println!("      (the bootloader left the bus - unplugged?)");
+                        }
+                        return false;
+                    }
+                    println!(
+                        "      recovery: open bootloader: {e} - retrying ({} of 4, udev settle)",
+                        attempt + 1
+                    );
+                    std::thread::sleep(Duration::from_millis(1000));
+                }
             }
-        };
+        }
+        let Some(mut t) = t else { return false };
         match idong::protocol::runtime::RuntimeSession::new(&mut t).flash_mcu(image) {
             Ok(_) => println!("      recovery: flash ok (readback matched), launched"),
             Err(e) => {
