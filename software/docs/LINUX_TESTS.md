@@ -26,7 +26,7 @@ like the vendor engine does).
 | T8 `flash_mcu` | the 8051 firmware upload (the vendor flash itself) | **yes** (`--confirm`) |
 | T9 `video -- --iso` | T5 + UVC probe/commit + SET_INTERFACE(alt 2) + raw ISO reads on EP 0x85 | **yes** (`--cmos`) |
 | T10 `video -- --recover` | T7/T9 + the automatic self-reboot recovery (re-flash + resume) | **yes** (`--cmos`, `--recover`) |
-| T11 `video -- --rate N` | T7/T9 with the ring never starved by host work + rate/drop reporting | **yes** (`--cmos`) |
+| T11 `video -- --rate N` | T7/T9 with the ring never starved by host work + rate/drop reporting | **yes** (`--cmos`) - **PASS (run 13, turn 48: 48 MHz clock pinned)** |
 
 All writes are the exact observed vendor bytes: T5/T7 send the same
 register tables the vendor engine sends on every session (volatile
@@ -365,6 +365,41 @@ PASS (unchanged): `device drops : 0` (intra-session), every PTS delta
 1.0. Then `--analyze <outdir>` runs the turn-47 channel analysis over
 the saved .bin files (A/B stats, row-mean structure, A/B correlation,
 the channel-B image verdict) with no device attached.
+
+**Turn-48 bench result (run 13, the first clean T11 run):
+PASS.** `--iso --cmos --rate 300 --recover`, 300 frames across 3
+capture sessions, 0 payload errors, honest per-session accounting:
+
+- Session 1 (undisturbed, 111 frames): **110/110 consecutive PTS
+  deltas EXACTLY 1,920,000 ticks** - the flat cadence the run-11
+  table could not show. Device rate 25.0 fps.
+- Sessions 2/3 (disturbed - hand moving in front of the sensor,
+  auto-exposure beats visible): deltas only 1,920,000 / 2,400,000 /
+  2,880,000 ticks (multiset over the run: x246 / x8 / x43) - whole
+  multiples of a **480,000-tick (10 ms) skip quantum**: when the
+  device misses the 40-ms cadence it skips in quarter-frames, never
+  fractional ticks.
+- **The tick-rate question is closed: 48 MHz.** The summed
+  per-session PTS span 615,360,000 ticks over 297 frame deltas vs
+  the measured 12.8 s active wall span: 12.820 s at 48 MHz (0.2%
+  agreement), impossible at 15.36 MHz (that span would take 40.1 s)
+  or 44.1 MHz (13.95 s). The 15.36 MHz constant had been a
+  golden-capture window artifact (546 FID transitions / 68 s read
+  8.0 fps; the golden video window is that same anomaly).
+  `DEVICE_CLOCK_HZ` = 48,000,000 and `PTS_SKIP_QUANTUM` = 480,000
+  since turn 48; the frame period is 40.0 ms = 25 fps nominal, the
+  negotiated 30 fps (interval 333333) is an upper bound only, and
+  alt 2's 2412 B/microframe (19.3 MB/s) is exactly the headroom
+  25 fps x 614,400 B needs (15.36 MB/s).
+- The summary's tick-rate cross-check now divides the ACTUAL summed
+  PTS span by the active wall span (the old (frames-1) x
+  PTS_PER_FRAME form ignored the skip deltas and read a bogus
+  44.85 MHz on this very run).
+- Evidence: the run-13 console log, re-analyzed any time by
+  `research/scripts/analyze_run13_pts.py`.
+
+T11 status: **PASS, closed** (the pre-turn-48 "44.8 MHz" reading was
+the old cross-check formula, not the device).
 
 ## T12 - THE P3a record-plane bench (records --cmos, turn 46)
 

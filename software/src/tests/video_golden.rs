@@ -233,11 +233,33 @@ fn probe_commit_golden() {
 }
 
 #[test]
-fn device_clock_matches_measured_rate() {
-    // 1,920,000 clock units per frame; the measured steady-state rate is
-    // 8.0 fps -> the device clock is 15.36 MHz (a standard crystal).
+fn device_clock_matches_run13_bench() {
+    // Turn 48: the tick question is settled by the run-13 bench
+    // (`--iso --cmos --rate 300 --recover`, 300 frames, 3 sessions):
+    // 1,920,000 clock units per frame at 48 MHz = 40.0 ms = 25 fps.
     let frame_period_s = 1_920_000f64 / idong::protocol::video::DEVICE_CLOCK_HZ as f64;
-    assert!((frame_period_s - 0.125).abs() < 1e-6);
-    // and 8.0 fps is exactly 1 / 0.125.
-    assert!((1.0 / frame_period_s - 8.0).abs() < 1e-3);
+    assert!((frame_period_s - 0.040).abs() < 1e-9, "40 ms frame period");
+    assert!((1.0 / frame_period_s - 25.0).abs() < 1e-6, "25 fps nominal");
+    // The bench cross-check that pinned it: the summed per-session PTS
+    // span (615,360,000 ticks, 297 frame advances incl. the 480,000-tick
+    // skip deltas) over the measured 12.8 s active wall span.
+    let pts_span_ticks: f64 = 615_360_000.0;
+    let wall_active_s = 12.8;
+    let implied = pts_span_ticks / wall_active_s;
+    let assumed = idong::protocol::video::DEVICE_CLOCK_HZ as f64;
+    assert!(
+        (implied - assumed).abs() / assumed < 0.02,
+        "run-13 span implies {implied:.0} Hz, within 2% of {assumed} Hz"
+    );
+    // ...and no other plausible crystal fits: 15.36 MHz would need the
+    // same span to take 40.1 s of wall time (measured 12.8 s).
+    let at_1536 = pts_span_ticks / 15_360_000.0;
+    assert!((39.5..40.5).contains(&at_1536), "15.36 MHz reads {at_1536:.2} s");
+    // The skip quantum: 480,000 ticks = 10 ms at 48 MHz (run 13's
+    // deltas were only 4/5/6 quanta: 1.0/1.25/1.5 frame periods).
+    assert_eq!(idong::protocol::video::PTS_SKIP_QUANTUM, 480_000);
+    assert_eq!(idong::protocol::video::PTS_PER_FRAME % idong::protocol::video::PTS_SKIP_QUANTUM, 0);
+    let skip_s = idong::protocol::video::PTS_SKIP_QUANTUM as f64
+        / idong::protocol::video::DEVICE_CLOCK_HZ as f64;
+    assert!((skip_s - 0.010).abs() < 1e-12, "10 ms skip quantum at 48 MHz");
 }

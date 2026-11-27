@@ -55,6 +55,12 @@ pub mod handle;
 pub mod marker;
 pub mod mock;
 pub mod protocol;
+/// The ROS 2 adapter's pure data layer (P4 turn 48): params model,
+/// lifecycle machine, topic/message shapes, diagnostics aggregation,
+/// node core. Everything the rclrs glue needs that is NOT rclrs - the
+/// glue in `idong-ros2` stays a thin copy layer, and this module
+/// stays testable with plain `cargo test` (hardware- and ROS-free).
+pub mod ros;
 pub mod session;
 pub mod stream;
 pub mod transport;

@@ -30,7 +30,7 @@ deliverables/            PDF reports (+ the turn-13 scaffold, historical)
 
 | Path | Duty | Depends on |
 |---|---|---|
-| `software/src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the V4L2 sysfs matcher (`src/transport/v4l2.rs`) + the V4L2 ioctl engine (`src/transport/v4l2_stream.rs`) + the usbfs ISO engine (`src/transport/usbfs_iso.rs`) + the firmware folder lookup (`src/firmware.rs`) | thiserror, log, crossbeam-channel; rusb + libc only with `--features usb` |
+| `software/src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the V4L2 sysfs matcher (`src/transport/v4l2.rs`) + the V4L2 ioctl engine (`src/transport/v4l2_stream.rs`) + the usbfs ISO engine (`src/transport/usbfs_iso.rs`) + the firmware folder lookup (`src/firmware.rs`) + the ROS 2 adapter's pure data layer (`src/ros/`: params, lifecycle, pubsub shapes, diagnostics, node core - no rclrs, unit-tested) | thiserror, log, crossbeam-channel; rusb + libc only with `--features usb` |
 | `software/src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2 + `--iso` raw + `--recover` self-healing + `--rate` measurement, turns 44-45), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | png (dev-dep, examples only) |
 | `software/src/tests/` | golden replays: mock, runtime, video, plus `firmware_files` (the shipped vendor files) - hardware-free | - |
 | `software/firmware/` | the vendor device files the driver targets: the three pinned images (`ens_code.ldr`, `A_a_v4.4_BG0313.bit`, `app_m8051_2611.hex`), `app_m8051_2500.hex` and the other MCU images, the vendor file map and register tables; `README.md` + `SHA256SUMS` | - |
@@ -64,6 +64,43 @@ cargo run --features usb --example records -- --cmos        # T12: the record-pl
 ```
 
 The bench ladder T2-T12 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+
+## Status (turn 48, 2026-11-27) - the clock pinned at 48 MHz (T11 closed), P4 ROS 2 pure layer done
+
+Two closures. (1) Run 13, the first clean T11 bench
+(`video --iso --cmos --rate 300 --recover`, 300 frames, 3 capture
+sessions, 0 payload errors), settled the PTS tick-rate question that
+turn 44 opened: **the device clock is 48 MHz** - the summed
+per-session PTS span (615,360,000 ticks over 297 frame deltas) vs
+the measured 12.8 s active wall span agrees to 0.2% at 48 MHz and at
+no other plausible crystal (15.36 MHz would take 40.1 s, 44.1 MHz
+13.95 s); 1,920,000 ticks = 40.0 ms = **25 fps nominal** (the
+negotiated 30 fps is an upper bound only; the undisturbed session
+ran 110/110 consecutive deltas EXACTLY 1,920,000 - a flat cadence),
+and skips quantize at 480,000 ticks = 10 ms (the disturbed sessions'
+deltas were only 4/5/6 quanta, never fractional). The old 15.36 MHz
+was a golden-capture window artifact; `DEVICE_CLOCK_HZ` = 48,000,000
+and `PTS_SKIP_QUANTUM` = 480,000 since this turn, and the example's
+tick-rate cross-check now divides the actual summed PTS span by the
+active wall span (the old (frames-1) x PTS_PER_FRAME form read a
+bogus 44.85 MHz on run 13 itself). (2) **P4 began: the ROS 2
+adapter's pure data layer** (`software/src/ros/`, all unit-tested
+with plain `cargo test` - no rclrs, no hardware): the draft-table-5
+parameter model + the params.yaml parser (defaults pinned to the
+launch file by test), the draft-5.3 lifecycle machine (a total
+function over state x transition), the draft-table-4 interface
+surface + the field-for-field message shapes with their converters
+(the live quality gate, the handle-event codes), the diagnostics
+aggregation (the vendor RingSize=200 traffic-light window with the
+Green=20/Yellow=35 thresholds as fractions, the publish_hz_min
+degraded floor over the trailing second, the 500-ms stall timeout),
+and the draft-5.2 node core (drain -> convert -> stamp, TimeRefPair
+for /idong/time_ref, live parameter reapply, the host-assigned event
+sequence). `idong_msgs/Marker.msg` dropped the stale `age` field
+(turn 46 proved record +0x18 is z). What remains for P4 is only the
+rclrs glue in `idong-ros2` (thin copy code) and a ROS 2 install to
+build it against. 149 tests green in both feature states, nightly
+fmt clean, examples warning-free both states.
 
 ## Status (turn 47, 2026-11-27) - the run-11 post-mortem: the video pipeline never starves again, channel B is not an image
 
