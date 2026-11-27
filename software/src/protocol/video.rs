@@ -19,9 +19,14 @@
 //!   form is `EOH|SCR|PTS` (flags `0x8c`/`0x8d`, FID toggling):
 //!   `[len][flags][pts LE u32][scr 6 B]`.
 //! * **PTS is constant across all payloads of one frame** and advances by
-//!   exactly 1,920,000 per frame. With the device clock at 15.36 MHz that
-//!   is 125 ms - the observed steady-state frame rate is **8.0 fps**
-//!   (the negotiated 30 fps is an upper bound only).
+//!   exactly 1,920,000 per frame. The tick rate behind that quantum is
+//!   OPEN (turn 47): the golden capture's 546 FID transitions over 68 s
+//!   read 8.0 fps (=> 15.36 MHz, 125 ms/frame) on Windows, but the
+//!   uvcvideo bench measured ~25 fps device-side (seq 0..26 in ~1.0 s)
+//!   the same hour - and the negotiated 30 fps is an upper bound only.
+//!   The turn-47 clean `--rate` run pairs wall clock with PTS and
+//!   settles the clock; [`PTS_PER_FRAME`] itself (the per-frame PTS
+//!   advance) is bench-solid either way.
 //! * Assembled frame bytes form a **640-pixel, byte-interleaved
 //!   two-channel raster** (row stride 1280 B): channel A (even bytes)
 //!   carries the scene image, channel B (odd bytes) a second,
@@ -71,11 +76,19 @@ pub const RASTER_STRIDE: usize = 1280;
 /// Image bytes per UVC payload (max observed; a frame's final payload may
 /// be shorter - the first transfer of the capture ends with a 1236-B one).
 pub const PAYLOAD_DATA: usize = 2400;
-/// PTS advance per video frame (device clock units at 15.36 MHz → 125 ms;
-/// the observed steady-state frame rate is 8.0 fps).
+/// PTS advance per video frame - 1,920,000 device-clock units, the
+/// bench-solid quantum of the UVC payload headers (constant within a
+/// frame, +1,920,000 per frame, every capture and bench run).
+/// [`DEVICE_CLOCK_HZ`] (the tick rate) is the OPEN part: 15.36 MHz fits
+/// the golden capture's 8.0 fps, but the uvcvideo bench measured ~25
+/// fps - the turn-47 clean `--rate` run decides, and the example prints
+/// the implied tick rate next to this constant.
 pub const PTS_PER_FRAME: u32 = 1_920_000;
-/// Device clock the PTS counts in (deduced: 1,920,000 units per frame at
-/// the measured 8.0 fps → 15.36 MHz, a standard crystal).
+/// Device clock the PTS counts in - the DEDUCED value (1,920,000 units
+/// per frame at the golden capture's 8.0 fps => 15.36 MHz, a standard
+/// crystal). OPEN (turn 47): the uvcvideo bench measured ~25 fps the
+/// same hour, which implies 48 MHz instead; a clean `--rate` run pairs
+/// wall time with PTS and settles it.
 pub const DEVICE_CLOCK_HZ: u32 = 15_360_000;
 /// Nominal (negotiated) frame interval in 100 ns units - 333333 = 30 fps.
 pub const FRAME_INTERVAL_100NS: u32 = 333_333;
@@ -228,6 +241,150 @@ pub fn plane_stats(p: &[u8]) -> PlaneStats {
     let mean = sum as f64 / n;
     let var = (sq as f64 / n - mean * mean).max(0.0);
     PlaneStats { mean, min, max, stddev: var.sqrt(), n: p.len() as u64 }
+}
+
+/// Per-row mean profile of one plane (turn 47): how much of a plane's
+/// contrast is BETWEEN rows (structure: rows differ) versus within
+/// rows (noise). An image has row-mean structure; a filler plane's
+/// rows all sit at the same mean.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RowProfile {
+    /// Smallest per-row mean.
+    pub min: f64,
+    /// Largest per-row mean.
+    pub max: f64,
+    /// Mean of the per-row means (equals the plane mean).
+    pub mean: f64,
+    /// `max - min` relative to the plane's own pixel stddev: pure
+    /// per-pixel noise on 640-wide rows spreads row means by only
+    /// ~4/sqrt(640) = 0.16 sd, so values well above that mean real
+    /// spatial structure (0.0 on a flat or empty plane).
+    pub spread_vs_sd: f64,
+}
+
+impl RowProfile {
+    fn empty() -> RowProfile {
+        RowProfile { min: 0.0, max: 0.0, mean: 0.0, spread_vs_sd: 0.0 }
+    }
+}
+
+/// The A/B structure analysis of one two-channel frame (turn 47) -
+/// the "is channel B an image too?" verdict computed from the bytes,
+/// the answer to the run-11 hand-cover bench: A responded 6..153 to
+/// partial occlusion while B pooled at sd 6.4 (A: 65.9) - now the
+/// verdict is code, not eyeballing PNGs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChannelReport {
+    /// Pooled stats of channel A (even bytes).
+    pub a: PlaneStats,
+    /// Pooled stats of channel B (odd bytes).
+    pub b: PlaneStats,
+    /// Per-row mean profile of channel A.
+    pub a_rows: RowProfile,
+    /// Per-row mean profile of channel B.
+    pub b_rows: RowProfile,
+    /// Pearson correlation of the A/B pixel pairs (-1..1).
+    pub corr_ab: f64,
+    /// Pixel pairs the correlation was computed over.
+    pub corr_n: u64,
+}
+
+/// Provisional verdict threshold: channel-B pixel sd below this is
+/// "no image" (run 11 pooled B at sd 6.4 carrying no image; the
+/// darkest real A scene of the same run still measured sd 12.6).
+pub const B_IMAGE_MIN_SD: f64 = 12.0;
+/// Provisional verdict threshold: channel-B row-mean spread (relative
+/// to its own sd) below this is "no spatial structure" - pure noise on
+/// 640-wide rows spreads row means by ~0.16 sd, real structure reads
+/// far higher.
+pub const B_IMAGE_MIN_ROW_SPREAD: f64 = 0.4;
+
+impl ChannelReport {
+    /// The channel-B image verdict: an image plane needs BOTH pixel
+    /// contrast (sd) AND spatial structure (row means that differ).
+    /// Chroma-like filler (sd small) or scene-coupled noise (sd present,
+    /// rows identical) both fail.
+    pub fn b_is_image(&self) -> bool {
+        self.b.stddev >= B_IMAGE_MIN_SD && self.b_rows.spread_vs_sd >= B_IMAGE_MIN_ROW_SPREAD
+    }
+
+    /// One-line verdict string for console output ("image" /
+    /// "no image").
+    pub fn b_verdict(&self) -> &'static str {
+        if self.b_is_image() {
+            "image"
+        } else {
+            "no image"
+        }
+    }
+}
+
+fn row_profile(plane: &[u8]) -> RowProfile {
+    if plane.is_empty() {
+        return RowProfile::empty();
+    }
+    let width = RASTER_WIDTH.max(1);
+    let rows = plane.len() / width;
+    if rows == 0 {
+        return RowProfile::empty();
+    }
+    let mut min = f64::MAX;
+    let mut max = f64::MIN;
+    let mut sum = 0.0f64;
+    for r in 0..rows {
+        let row = &plane[r * width..(r + 1) * width];
+        let m = row.iter().map(|&v| v as f64).sum::<f64>() / width as f64;
+        min = min.min(m);
+        max = max.max(m);
+        sum += m;
+    }
+    let sd = plane_stats(plane).stddev;
+    let spread = max - min;
+    RowProfile {
+        min,
+        max,
+        mean: sum / rows as f64,
+        spread_vs_sd: if sd > 0.0 { spread / sd } else { 0.0 },
+    }
+}
+
+/// Analyze one two-channel raster (interleaved bytes, channel A =
+/// even, B = odd): pooled stats, per-row mean profiles, and the A/B
+/// pixel correlation - everything the B-channel verdict needs, in one
+/// pass over the data. Empty input yields a defined all-zero report.
+pub fn channel_report(data: &[u8]) -> ChannelReport {
+    let (a, b) = split_channels(data);
+    let a_stats = plane_stats(&a);
+    let b_stats = plane_stats(&b);
+    // Pearson correlation over the pixel pairs (the planes are the
+    // same length by construction).
+    let mut sa = 0.0f64;
+    let mut sb = 0.0f64;
+    let mut saa = 0.0f64;
+    let mut sbb = 0.0f64;
+    let mut sab = 0.0f64;
+    for i in 0..a.len() {
+        let x = a[i] as f64;
+        let y = b[i] as f64;
+        sa += x;
+        sb += y;
+        saa += x * x;
+        sbb += y * y;
+        sab += x * y;
+    }
+    let n = a.len() as f64;
+    let cov = sab / n - (sa / n) * (sb / n);
+    let va = (saa / n - (sa / n) * (sa / n)).max(0.0);
+    let vb = (sbb / n - (sb / n) * (sb / n)).max(0.0);
+    let denom = va.sqrt() * vb.sqrt();
+    ChannelReport {
+        a: a_stats,
+        b: b_stats,
+        a_rows: row_profile(&a),
+        b_rows: row_profile(&b),
+        corr_ab: if denom > 0.0 { cov / denom } else { 0.0 },
+        corr_n: a.len() as u64,
+    }
 }
 
 /// Count the frames the DEVICE produced but the host loop never saw,
@@ -631,5 +788,122 @@ mod tests {
             .expect("the error payload closes the frame");
         assert_eq!(closed.data.len(), 100);
         assert!(closed.data.iter().all(|&v| v == 0x33));
+    }
+
+    // ---- turn 47: the channel-B structure analysis ----
+
+    /// A 2-row x RASTER_WIDTH raster as the interleaved two-channel
+    /// bytes: row 0 all A = `a0` / B = `b0`, row 1 all A = `a1` / B = `b1`.
+    fn two_row_raster(a0: u8, b0: u8, a1: u8, b1: u8) -> Vec<u8> {
+        let mut v = Vec::with_capacity(2 * RASTER_STRIDE);
+        for _ in 0..RASTER_WIDTH {
+            v.extend_from_slice(&[a0, b0]);
+        }
+        for _ in 0..RASTER_WIDTH {
+            v.extend_from_slice(&[a1, b1]);
+        }
+        v
+    }
+
+    #[test]
+    fn channel_report_empty_input_is_defined() {
+        let r = channel_report(&[]);
+        assert_eq!(r.a.n, 0);
+        assert_eq!(r.b.n, 0);
+        assert_eq!(r.corr_ab, 0.0);
+        assert_eq!(r.corr_n, 0);
+        assert_eq!(r.a_rows.spread_vs_sd, 0.0);
+        assert!(!r.b_is_image());
+    }
+
+    #[test]
+    fn channel_report_flat_b_is_no_image() {
+        // The run-11 shape: A a real two-level scene (rows 40 / 160),
+        // B flat-ish chroma filler (127 +- tiny wiggle).
+        let mut data = two_row_raster(40, 127, 160, 127);
+        // a touch of B noise, well under the image threshold
+        for (i, b) in data.iter_mut().enumerate() {
+            if i % 2 == 1 {
+                *b = 127 + (i as u8 % 5) - 2;
+            }
+        }
+        let r = channel_report(&data);
+        assert!(r.a.stddev >= 60.0, "A carries the scene: sd {}", r.a.stddev);
+        assert!(r.b.stddev < 2.0, "B is filler: sd {}", r.b.stddev);
+        assert!(!r.b_is_image(), "B flat => no image, whatever A does");
+        assert_eq!(r.b_verdict(), "no image");
+        // A itself has row structure: its row profile spans the scene
+        assert!(r.a_rows.spread_vs_sd > 0.4, "A rows differ: {}", r.a_rows.spread_vs_sd);
+        // B's row means are identical: no spatial structure
+        assert!(r.b_rows.spread_vs_sd < 0.1, "B rows identical: {}", r.b_rows.spread_vs_sd);
+    }
+
+    #[test]
+    fn channel_report_second_image_in_b_passes() {
+        // The hypothetical pass: B carries its own two-level scene
+        // (rows 20 / 220) => sd ~100, rows differ => structure.
+        let data = two_row_raster(40, 20, 160, 220);
+        let r = channel_report(&data);
+        assert!(r.b.stddev > 90.0, "B sd {}", r.b.stddev);
+        assert!(r.b_rows.spread_vs_sd > 0.9, "B row spread {}", r.b_rows.spread_vs_sd);
+        assert!(r.b_is_image());
+        assert_eq!(r.b_verdict(), "image");
+    }
+
+    #[test]
+    fn channel_report_noisy_b_without_structure_is_no_image() {
+        // Scene-coupled NOISE in B (the run-11 bright-scene edge: B sd
+        // rose to ~13-19 when A was bright): sd alone must not pass the
+        // verdict - identical row means fail it.
+        let mut data = two_row_raster(40, 127, 160, 127);
+        for (i, b) in data.iter_mut().enumerate() {
+            if i % 2 == 1 {
+                // alternating wide swing: sd ~60, but EVERY row has the
+                // same alternation => row means identical
+                *b = if (i / 2) % 2 == 0 { 60 } else { 200 };
+            }
+        }
+        let r = channel_report(&data);
+        assert!(r.b.stddev > 50.0, "B has pixel contrast: sd {}", r.b.stddev);
+        assert!(r.b_rows.spread_vs_sd < 0.01, "but no row structure: {}", r.b_rows.spread_vs_sd);
+        assert!(!r.b_is_image(), "contrast without structure is not an image");
+    }
+
+    #[test]
+    fn channel_report_correlation_signs() {
+        // B == A exactly: corr +1
+        let mut same = Vec::new();
+        for i in 0..RASTER_WIDTH * 2 {
+            let v = (i % 251) as u8;
+            same.extend_from_slice(&[v, v]);
+        }
+        let r = channel_report(&same);
+        assert!((r.corr_ab - 1.0).abs() < 1e-9, "corr {}", r.corr_ab);
+        assert_eq!(r.corr_n, (RASTER_WIDTH * 2) as u64);
+        // B == 255 - A: corr -1
+        let mut inv = Vec::new();
+        for i in 0..RASTER_WIDTH * 2 {
+            let v = (i % 251) as u8;
+            inv.extend_from_slice(&[v, 255 - v]);
+        }
+        let r = channel_report(&inv);
+        assert!((r.corr_ab + 1.0).abs() < 1e-9, "corr {}", r.corr_ab);
+        // flat B (corr undefined): defined 0.0, no NaN
+        let flat = two_row_raster(10, 127, 200, 127);
+        let r = channel_report(&flat);
+        assert_eq!(r.corr_ab, 0.0);
+        assert!(!r.corr_ab.is_nan());
+    }
+
+    #[test]
+    fn row_profile_matches_plane_mean() {
+        let data = two_row_raster(40, 100, 160, 180);
+        let r = channel_report(&data);
+        assert!((r.a_rows.mean - r.a.mean).abs() < 1e-9);
+        assert!((r.b_rows.mean - r.b.mean).abs() < 1e-9);
+        assert_eq!(r.a_rows.min, 40.0);
+        assert_eq!(r.a_rows.max, 160.0);
+        assert_eq!(r.b_rows.min, 100.0);
+        assert_eq!(r.b_rows.max, 180.0);
     }
 }

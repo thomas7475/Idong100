@@ -303,6 +303,69 @@ What the numbers will decide (the A/B matrix):
 | cadence 5.0/4.0 steps WITH drops 0 and packet errors 0 | the device itself paces frames at ~2 fps despite the commit - firmware behavior, documented and lived with |
 | packet errors nonzero (proto/overflow/ilseq) | bus-level signal integrity - try another cable/port before believing any rate |
 
+**Turn-47 bench result (run 11, `--rate 300 --recover`, hand partly
+covering the sensor)**: 255 frames over 9 self-reboots - but the rate
+table itself FAILED the run's own honesty criteria, and the failure
+was diagnostic gold:
+
+- `device drops : 1675` (86.8% of the device's frames never arrived) -
+  the starvation the turn-45 "measure-first" rework promised to remove
+  was STILL THERE: the `--rate` mode parsed its flag but never used
+  it (the PNG- and stats-per-frame work never left the reap thread),
+  and a 4-URB ring is only 4 ms of ISO buffer. Two PNG encodes per
+  frame in a debug build = ~100 ms of ring drought per frame.
+- The run also exposed THREE accounting bugs, all fixed turn 47:
+  `host wall rate 51.5 fps` divided the total frame count by the LAST
+  session's span; `device rate 1.0 fps` divided delivered frames by a
+  PTS span that included ~30 s reboot gaps per recovery; and the
+  `1675 drops` counted the reboot gaps themselves (the device was in
+  its bootloader - nothing was dropped then; the real starvation loss
+  was ~700, still 86.8% of what the device made while streaming).
+- The 9th recovery failed with `open bootloader: Access denied` - a
+  fresh `/dev/bus/usb` node can appear before udev applies its
+  permissions; the first 8 opens won the race, the 9th lost it. The
+  bootloader open now retries (5 x 1 s) while the bootloader is still
+  on the bus; the /dev/video open retries the same way.
+- The hand-cover data itself: channel A is confirmed a real image
+  (mean swept 6..153 with occlusion, sd 4..82; pooled sd 65.9 over
+  78.3 M samples); channel B stayed at 127.3 +- 6.4 (range 65..207) -
+  B sd rises to ~19 when A is bright (weak scene coupling) but that
+  is noise-level contrast, not an image.
+
+The turn-47 loop makes the T11 promise real, and rerunning run 12
+settles everything the run-11 log could not:
+
+```sh
+cargo run --features usb --example video -- --iso --cmos --rate 300 --recover
+```
+
+- ALL per-frame work (channel stats, the console line, .bin + PNG
+  writes, PTS/seq accounting) runs on a frame WORKER thread; the
+  reap loop only copies packet bytes, resubmits, assembles and hands
+  closed frames over (`FrameSink`, bounded channel, 256 frames of
+  headroom).
+- `--ring N` (default 16) instead of the run-11 four URBs = 16 ms of
+  ISO buffer before the bus, drought-proof against OS hiccups.
+- The in-ring ~10 Hz 0x0205 polls are GONE (one pre-flight poll after
+  session init instead): the device never answers 0x0205 while
+  streaming on this bench (every run since turn 42), and each
+  unanswered poll blocked the reap loop ~3 s - run 11 shows exactly
+  that as the dt 4.0/5.0/6.0 staircase right after every recovery.
+- PNGs are written only for the first 3 frames in `--rate` mode
+  (the documented policy, now the actual code), `--save N` keeps any
+  frame's raw .bin, and the summary prints the honest per-session
+  accounting: active-span wall fps, device-made fps (delivered +
+  intra-session gaps), the median/max PTS cadence, and - when the
+  cadence is flat and drops are 0 - the implied PTS tick rate
+  against the assumed 15.36 MHz (the golden capture read 8.0 fps,
+  the uvcvideo bench ~25 fps; a clean run decides which clock is
+  real).
+
+PASS (unchanged): `device drops : 0` (intra-session), every PTS delta
+1.0. Then `--analyze <outdir>` runs the turn-47 channel analysis over
+the saved .bin files (A/B stats, row-mean structure, A/B correlation,
+the channel-B image verdict) with no device attached.
+
 ## T12 - THE P3a record-plane bench (records --cmos, turn 46)
 
 ```

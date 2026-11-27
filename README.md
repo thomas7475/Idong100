@@ -65,6 +65,33 @@ cargo run --features usb --example records -- --cmos        # T12: the record-pl
 
 The bench ladder T2-T12 with PASS criteria: `software/docs/LINUX_TESTS.md`.
 
+## Status (turn 47, 2026-11-27) - the run-11 post-mortem: the video pipeline never starves again, channel B is not an image
+
+The `--rate 300 --recover` hand-cover bench (run 11) delivered 255
+frames across NINE self-reboot recoveries - and its own rate table
+failed honestly, which is exactly what a measurement tool is for:
+`--rate` parsed its flag but never used it (two PNG encodes + two
+plane-stats passes + a console line per frame, all on the ISO reap
+thread; a 4-URB ring is 4 ms of bus buffer), so 86.8% of the
+device's frames never arrived. Three summary bugs fell with it
+(the 51.5-fps host wall rate divided total frames by the last
+session's span; the 1.0-fps device rate mixed delivered frames with
+reboot-gap time; the 1675 "drops" counted reboots), plus a udev
+permission race on the 9th bootloader re-enumeration that ended the
+run at 255/300. The turn-47 loop: ALL per-frame work on a frame
+WORKER thread (both backends), `--ring N` (default 16 URBs), one
+pre-flight 0x0205 poll instead of the in-ring loop (the device
+ignores it while streaming; each unanswered poll starved the ring
+~3 s), honest per-session rate accounting with the implied
+PTS-tick cross-check (15.36 vs 48 MHz - the open clock question),
+`--save N`, and the offline `--analyze DIR` channel analysis. The
+hand-cover verdict: **channel A is a real image (mean swept
+6..153 with occlusion, pooled sd 65.9 over 78.3 M samples); channel
+B is NOT an image (127.3 +- 6.4, weak scene-coupled noise)** - the
+video stream carries one image plane, and the marker/3D data lives
+on the MI_04 record pair (0x83/0x03) per the turn-46 disassembly.
+125 tests green in both feature states, nightly fmt clean.
+
 ## Status (turn 46, 2026-11-27) - P3a: the marker/record plane decoded
 
 The last open plane fell: the marker/record stream, decoded from the
