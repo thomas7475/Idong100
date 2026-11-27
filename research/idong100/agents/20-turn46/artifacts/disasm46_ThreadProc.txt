@@ -1,0 +1,110 @@
+### /tmp/dlls/xEyeClass.dll RVA 0x2c30  ?ThreadProc@xEyeClassManager@@SGIPAX@Z
+00002c30  55                   push ebp
+00002c31  8bec                 mov ebp, esp
+00002c33  81ec94060000         sub esp, 0x694
+00002c39  a170600010           mov eax, dword ptr [0x10006070]
+00002c3e  33c5                 xor eax, ebp
+00002c40  8945f4               mov dword ptr [ebp - 0xc], eax
+00002c43  56                   push esi
+00002c44  57                   push edi
+00002c45  8b4508               mov eax, dword ptr [ebp + 8]
+00002c48  8945fc               mov dword ptr [ebp - 4], eax
+00002c4b  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002c4e  c7814001000000000000 mov dword ptr [ecx + 0x140], 0
+00002c58  8b55fc               mov edx, dword ptr [ebp - 4]
+00002c5b  83ba7c07000001       cmp dword ptr [edx + 0x77c], 1
+00002c62  0f840e010000         je 0x10002d76
+00002c68  8d8568feffff         lea eax, [ebp - 0x198]
+00002c6e  50                   push eax
+00002c6f  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002c72  8b5128               mov edx, dword ptr [ecx + 0x28]
+00002c75  8b45fc               mov eax, dword ptr [ebp - 4]
+00002c78  8b4828               mov ecx, dword ptr [eax + 0x28]
+00002c7b  8b12                 mov edx, dword ptr [edx]
+00002c7d  8b02                 mov eax, dword ptr [edx]
+00002c7f  ffd0                 call eax
+00002c81  85c0                 test eax, eax
+00002c83  7422                 je 0x10002ca7
+00002c85  81ec84010000         sub esp, 0x184
+00002c8b  b961000000           mov ecx, 0x61
+00002c90  8db568feffff         lea esi, [ebp - 0x198]
+00002c96  8bfc                 mov edi, esp
+00002c98  f3a5                 rep movsd dword ptr es:[edi], dword ptr [esi]
+00002c9a  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002c9d  8b11                 mov edx, dword ptr [ecx]
+00002c9f  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002ca2  8b4214               mov eax, dword ptr [edx + 0x14]
+00002ca5  ffd0                 call eax
+00002ca7  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002caa  8b9148010000         mov edx, dword ptr [ecx + 0x148]
+00002cb0  899564feffff         mov dword ptr [ebp - 0x19c], edx
+00002cb6  8d8570faffff         lea eax, [ebp - 0x590]
+00002cbc  50                   push eax
+00002cbd  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002cc0  8b5110               mov edx, dword ptr [ecx + 0x10]
+00002cc3  8b45fc               mov eax, dword ptr [ebp - 4]
+00002cc6  8b4810               mov ecx, dword ptr [eax + 0x10]
+00002cc9  8b12                 mov edx, dword ptr [edx]
+00002ccb  8b02                 mov eax, dword ptr [edx]
+00002ccd  ffd0                 call eax
+00002ccf  85c0                 test eax, eax
+00002cd1  7430                 je 0x10002d03
+00002cd3  8d8d70faffff         lea ecx, [ebp - 0x590]
+00002cd9  51                   push ecx
+00002cda  8b55fc               mov edx, dword ptr [ebp - 4]
+00002cdd  8b02                 mov eax, dword ptr [edx]
+00002cdf  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002ce2  8b501c               mov edx, dword ptr [eax + 0x1c]
+00002ce5  ffd2                 call edx
+00002ce7  8b8564feffff         mov eax, dword ptr [ebp - 0x19c]
+00002ced  83e801               sub eax, 1
+00002cf0  898564feffff         mov dword ptr [ebp - 0x19c], eax
+00002cf6  83bd64feffff00       cmp dword ptr [ebp - 0x19c], 0
+00002cfd  7f02                 jg 0x10002d01
+00002cff  eb02                 jmp 0x10002d03  ; ->0x2d03
+00002d01  ebb3                 jmp 0x10002cb6  ; ->0x2cb6
+00002d03  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002d06  8b11                 mov edx, dword ptr [ecx]
+00002d08  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002d0b  8b4220               mov eax, dword ptr [edx + 0x20]
+00002d0e  ffd0                 call eax
+00002d10  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002d13  8b11                 mov edx, dword ptr [ecx]
+00002d15  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002d18  8b02                 mov eax, dword ptr [edx]
+00002d1a  ffd0                 call eax
+00002d1c  8945f8               mov dword ptr [ebp - 8], eax
+00002d1f  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002d22  83b93c01000000       cmp dword ptr [ecx + 0x13c], 0
+00002d29  7e46                 jle 0x10002d71
+00002d2b  8b55fc               mov edx, dword ptr [ebp - 4]
+00002d2e  8b8238010000         mov eax, dword ptr [edx + 0x138]
+00002d34  2b45f8               sub eax, dword ptr [ebp - 8]
+00002d37  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002d3a  038140010000         add eax, dword ptr [ecx + 0x140]
+00002d40  89856cf9ffff         mov dword ptr [ebp - 0x694], eax
+00002d46  83bd6cf9ffff00       cmp dword ptr [ebp - 0x694], 0
+00002d4d  7e0d                 jle 0x10002d5c
+00002d4f  8b956cf9ffff         mov edx, dword ptr [ebp - 0x694]
+00002d55  52                   push edx
+00002d56  ff1510400010         call dword ptr [0x10004010]  ; KERNEL32.dll!Sleep
+00002d5c  8b45fc               mov eax, dword ptr [ebp - 4]
+00002d5f  8b10                 mov edx, dword ptr [eax]
+00002d61  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002d64  8b02                 mov eax, dword ptr [edx]
+00002d66  ffd0                 call eax
+00002d68  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002d6b  898140010000         mov dword ptr [ecx + 0x140], eax
+00002d71  e9e2feffff           jmp 0x10002c58  ; ->0x2c58
+00002d76  8b55fc               mov edx, dword ptr [ebp - 4]
+00002d79  c7827c07000002000000 mov dword ptr [edx + 0x77c], 2
+00002d83  33c0                 xor eax, eax
+00002d85  5f                   pop edi
+00002d86  5e                   pop esi
+00002d87  8b4df4               mov ecx, dword ptr [ebp - 0xc]
+00002d8a  33cd                 xor ecx, ebp
+00002d8c  e801050000           call 0x10003292  ; ->0x3292
+00002d91  8be5                 mov esp, ebp
+00002d93  5d                   pop ebp
+00002d94  c20400               ret 4
+

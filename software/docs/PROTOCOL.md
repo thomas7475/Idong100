@@ -49,17 +49,23 @@ the executable form of this table. Paths are relative to `software/`
 | keep-alive | RX 0xFFF -> TX 0xFFE within 1 s | xEyeClass reader |
 | link status | type 4; subcode 1/0xF; reply word 0x11 @+0x06 | tx_builder @0x1001028e/0x10010327 |
 
-## Marker record (xEye3Ddata)
+## Marker record (xEye3Ddata) - HOST-side structure (turn 46)
 
-0x3BC B: frame counter u32 @ +0 (overlays slot 0); 10 x 88 B slots;
-quality i32 @ slot+0x24 (>= 50 tracked); gate f64 @ slot+0x18; mode
-flag u32 @ +0x3B8 (== 1 -> pipe-writer skip); pipe form 0x208 B after
-the RVA 0x25e0 transform. Source: xEyeClass.dll GetADataFromUSB @RVA
-0x20f0.
+0x3BC B minimum (host queue element 0x3F0): frame counter u32 @ +0
+(overlays slot 0; HOST-assigned by the usbCom worker, one per record);
+10 x 88 B slots with **x f64 @ slot+0x08, y f64 @ slot+0x10, z f64 @
+slot+0x18, quality i32 @ slot+0x24 (>= 50 tracked)** - pinned turn 46
+by `TransUSB2Pipe` @RVA 0x25e0 (the packer) and the best-marker loop
+of `GetADataFromUSB` @RVA 0x20f0 (smallest z wins - the NEAREST marker
+is the active one). Mode flag u32 @ +0x3B8 (== 1 -> pipe-writer skip);
+pipe form 0x208 B. **The x/y/z values are HOST-computed**: the wire
+record is raw blob data for `classifying.dll!ClassifyAndTrack` (see
+"Runtime record plane" below).
 
 | Item | Value |
 |---|---|
 | slots | 10 x 88 B at +0x000..+0x370 |
+| x/y/z | f64 @ slot+0x08 / +0x10 / +0x18 (mm) |
 | trailer | 72 B (+0x370..+0x3B8) |
 | mode flag | u32 @ +0x3B8 |
 | quality gate | i32 @ slot+0x24 >= 50 |
@@ -110,8 +116,10 @@ The hashes are the turn-12 manifest values
   endianness - the current `blob_crc` is a placeholder)
 - exact count/CRC payload framing
 - DSP-start payload bytes (64-B scratch buffer, open item #3)
-- marker x/y/z offsets inside the 88-B slot (open item #4 - resolve via
-  xEyeClass RVA 0x25e0 disassembly)
+- ~~marker x/y/z offsets inside the 88-B slot (open item #4)~~ RESOLVED
+  turn 46: x f64 @+0x08, y @+0x10, z @+0x18, quality @+0x24
+  (`TransUSB2Pipe` @RVA 0x25e0 + the best-marker loop @0x22a8 - see
+  "Runtime record plane (turn 46)")
 - handle-config blob layout (open item #6)
 
 ## Turn 24: 2600 and 2500, and what a capture has to contain
@@ -515,3 +523,34 @@ The self-reboot the bench saw after every video run (the sensor
 lands on 0471:2600) is the documented 31-157 s cycle, not a teardown
 bug: with `--recover` (P2.4b, turn 44) the driver now re-flashes and
 resumes on every landing, exactly like the vendor engine.
+## Runtime record plane (turn 46: the marker stream, decoded)
+
+Full evidence: `research/idong100/agents/20-turn46/FINDINGS.md` (the
+v2.6.0.6 engine DLLs re-extracted and disassembled: usbCom worker
+@xEyeUSB 0x11770, ens subsystem @0xeb00-0x10900, TransUSB2Pipe @xEyeClass
+0x25e0, ThreadProc/queues @0x1ab0/0x2c30). The "what starts the marker
+stream" question is answered: it is a THIRD protocol layer - the PU/OD
+framing on the second MI_04 bulk pair.
+
+| Item | Value | Source |
+|---|---|---|
+| endpoints | EP 0x83 IN (records), EP 0x03 OUT (ACKs) | pipe calibration: 7F 55 = write pipe 0 / read pipe 1 = EP 0x02/0x82 (USBPcap), usbCom uses read pipe 2 / write pipe 3 |
+| framing | PU/OD magic u32 @+0, u16 type @+4, 64-B command frames | usbCom loop @0x11c41-0x11c95 |
+| record announcement | OD frame type 0xF0, 64 B, on EP 0x83 | loop @0x11c47 (`word@+4 == 0xf0`) |
+| raw record | 640 B (0x280) on EP 0x83, OD magic dword trailer @ +0x27C | read @0x11c7b, trailer check @0x11d13 |
+| ACK | 64-B PU frame type 7 on EP 0x03, payload @ +0xC, first one zeroed | write @0x11cc2, build @0x11d91 |
+| ACK semantics | the ACK for record N carries the type-7 command computed from record N-1 (classifier output) | ClassifyAndTrack receives PU+0xC |
+| startup probe | read 64 B from EP 0x83, 100 ms x <= 10 tries, expect OD type 0xF0 | @0x10640, called @0x11886 |
+| if probe fails | the `ens_code.ldr` upload state machine runs on EP 0x03/0x83 first (7 states, 64-B PU/OD frames) - the PU/OD traffic never seen in captures | @0xf790; the app never reached usbCom (license gates) |
+| record payload | RAW blob data (the classifier input; `SVM_Class_ball/head_*.dat`), status byte u8 @ +0x25C | f660 transform @0xf660 |
+| status byte | bit 7 gates flags = (bit4/5/3 == 0) -> +0x378/+0x37C/+0x380; bit 0 -> mode word @ +0x3B0 | f660 @0xf660 |
+| classification | `classifying.dll!ClassifyAndTrack` runs ON THE HOST: 640-B record -> 10 x 0x48 slots -> remapped into the 10 x 0x58 xEye3Ddata slots | remap loop @0x11de2 |
+| pacing | USBComFPS = 35 (xEyeUsb.ini), Sleep-calculated period | loop tail @0x12379 |
+| frame counter | u32 @ xEye3Ddata+0 is HOST-assigned (one per record) | @0x12249 |
+
+Implemented: `protocol::ens` (StatusFrame / WireRecord / Type7Command,
+all constants above), `transport::usb::{read_bulk_ep, write_bulk_ep}`,
+the T12 bench example `records.rs`
+(`cargo run --features usb --example records -- --cmos`). The ldr
+upload state machine wire bytes stay open (one kit-37 unlocked game
+capture pins them).

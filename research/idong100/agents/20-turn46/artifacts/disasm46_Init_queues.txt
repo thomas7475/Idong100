@@ -1,0 +1,176 @@
+### /tmp/dlls/xEyeClass.dll RVA 0x1ab0  ?Init@xEyeClassManager@@UAEHPAX0000@Z
+00001ab0  55                   push ebp
+00001ab1  8bec                 mov ebp, esp
+00001ab3  81ec98010000         sub esp, 0x198
+00001ab9  a170600010           mov eax, dword ptr [0x10006070]
+00001abe  33c5                 xor eax, ebp
+00001ac0  8945fc               mov dword ptr [ebp - 4], eax
+00001ac3  898d6cfeffff         mov dword ptr [ebp - 0x194], ecx
+00001ac9  8b856cfeffff         mov eax, dword ptr [ebp - 0x194]
+00001acf  8b10                 mov edx, dword ptr [eax]
+00001ad1  8b8d6cfeffff         mov ecx, dword ptr [ebp - 0x194]
+00001ad7  8b4210               mov eax, dword ptr [edx + 0x10]
+00001ada  ffd0                 call eax
+00001adc  68f0030000           push 0x3f0
+00001ae1  8b8d6cfeffff         mov ecx, dword ptr [ebp - 0x194]
+00001ae7  8b5114               mov edx, dword ptr [ecx + 0x14]
+00001aea  52                   push edx
+00001aeb  6840410010           push 0x10004140  ; "Data2Class"
+00001af0  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001af6  8bc8                 mov ecx, eax
+00001af8  ff15d8400010         call dword ptr [0x100040d8]  ; xEyeList.dll!?RegisterList@xEyeListManager@@QAE_NPBDHH@Z
+00001afe  0fb6c0               movzx eax, al
+00001b01  85c0                 test eax, eax
+00001b03  741e                 je 0x10001b23
+00001b05  684c410010           push 0x1000414c  ; "Data2Class"
+00001b0a  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001b10  8bc8                 mov ecx, eax
+00001b12  ff15d4400010         call dword ptr [0x100040d4]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00001b18  8b8d6cfeffff         mov ecx, dword ptr [ebp - 0x194]
+00001b1e  894110               mov dword ptr [ecx + 0x10], eax
+00001b21  eb0a                 jmp 0x10001b2d  ; ->0x1b2d
+00001b23  b804000000           mov eax, 4
+00001b28  e922020000           jmp 0x10001d4f  ; ->0x1d4f
+00001b2d  68a0000000           push 0xa0
+00001b32  8b956cfeffff         mov edx, dword ptr [ebp - 0x194]
+00001b38  8b421c               mov eax, dword ptr [edx + 0x1c]
+00001b3b  50                   push eax
+00001b3c  6858410010           push 0x10004158  ; "Data2USB"
+00001b41  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001b47  8bc8                 mov ecx, eax
+00001b49  ff15d8400010         call dword ptr [0x100040d8]  ; xEyeList.dll!?RegisterList@xEyeListManager@@QAE_NPBDHH@Z
+00001b4f  0fb6c8               movzx ecx, al
+00001b52  85c9                 test ecx, ecx
+00001b54  741e                 je 0x10001b74
+00001b56  6864410010           push 0x10004164  ; "Data2USB"
+00001b5b  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001b61  8bc8                 mov ecx, eax
+00001b63  ff15d4400010         call dword ptr [0x100040d4]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00001b69  8b956cfeffff         mov edx, dword ptr [ebp - 0x194]
+00001b6f  894218               mov dword ptr [edx + 0x18], eax
+00001b72  eb0a                 jmp 0x10001b7e  ; ->0x1b7e
+00001b74  b804000000           mov eax, 4
+00001b79  e9d1010000           jmp 0x10001d4f  ; ->0x1d4f
+00001b7e  68e0030000           push 0x3e0
+00001b83  8b856cfeffff         mov eax, dword ptr [ebp - 0x194]
+00001b89  8b4824               mov ecx, dword ptr [eax + 0x24]
+00001b8c  51                   push ecx
+00001b8d  6870410010           push 0x10004170  ; "Data2Cal"
+00001b92  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001b98  8bc8                 mov ecx, eax
+00001b9a  ff15d8400010         call dword ptr [0x100040d8]  ; xEyeList.dll!?RegisterList@xEyeListManager@@QAE_NPBDHH@Z
+00001ba0  0fb6d0               movzx edx, al
+00001ba3  85d2                 test edx, edx
+00001ba5  741e                 je 0x10001bc5
+00001ba7  687c410010           push 0x1000417c  ; "Data2Cal"
+00001bac  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001bb2  8bc8                 mov ecx, eax
+00001bb4  ff15d4400010         call dword ptr [0x100040d4]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00001bba  8b8d6cfeffff         mov ecx, dword ptr [ebp - 0x194]
+00001bc0  894120               mov dword ptr [ecx + 0x20], eax
+00001bc3  eb0a                 jmp 0x10001bcf  ; ->0x1bcf
+00001bc5  b804000000           mov eax, 4
+00001bca  e980010000           jmp 0x10001d4f  ; ->0x1d4f
+00001bcf  6884010000           push 0x184
+00001bd4  6a14                 push 0x14
+00001bd6  6888410010           push 0x10004188  ; "Main2Class"
+00001bdb  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001be1  8bc8                 mov ecx, eax
+00001be3  ff15d8400010         call dword ptr [0x100040d8]  ; xEyeList.dll!?RegisterList@xEyeListManager@@QAE_NPBDHH@Z
+00001be9  0fb6d0               movzx edx, al
+00001bec  85d2                 test edx, edx
+00001bee  741e                 je 0x10001c0e
+00001bf0  6894410010           push 0x10004194  ; "Main2Class"
+00001bf5  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001bfb  8bc8                 mov ecx, eax
+00001bfd  ff15d4400010         call dword ptr [0x100040d4]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00001c03  8b8d6cfeffff         mov ecx, dword ptr [ebp - 0x194]
+00001c09  894128               mov dword ptr [ecx + 0x28], eax
+00001c0c  eb0a                 jmp 0x10001c18  ; ->0x1c18
+00001c0e  b804000000           mov eax, 4
+00001c13  e937010000           jmp 0x10001d4f  ; ->0x1d4f
+00001c18  6884010000           push 0x184
+00001c1d  6a14                 push 0x14
+00001c1f  68a0410010           push 0x100041a0  ; "Class2USB"
+00001c24  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001c2a  8bc8                 mov ecx, eax
+00001c2c  ff15d8400010         call dword ptr [0x100040d8]  ; xEyeList.dll!?RegisterList@xEyeListManager@@QAE_NPBDHH@Z
+00001c32  0fb6d0               movzx edx, al
+00001c35  85d2                 test edx, edx
+00001c37  741e                 je 0x10001c57
+00001c39  68ac410010           push 0x100041ac  ; "Class2USB"
+00001c3e  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001c44  8bc8                 mov ecx, eax
+00001c46  ff15d4400010         call dword ptr [0x100040d4]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00001c4c  8b8d6cfeffff         mov ecx, dword ptr [ebp - 0x194]
+00001c52  894130               mov dword ptr [ecx + 0x30], eax
+00001c55  eb0a                 jmp 0x10001c61  ; ->0x1c61
+00001c57  b804000000           mov eax, 4
+00001c5c  e9ee000000           jmp 0x10001d4f  ; ->0x1d4f
+00001c61  8b956cfeffff         mov edx, dword ptr [ebp - 0x194]
+00001c67  83c20c               add edx, 0xc
+00001c6a  52                   push edx
+00001c6b  6a00                 push 0
+00001c6d  8b856cfeffff         mov eax, dword ptr [ebp - 0x194]
+00001c73  50                   push eax
+00001c74  68302c0010           push 0x10002c30
+00001c79  6a00                 push 0
+00001c7b  6a00                 push 0
+00001c7d  ff15a8400010         call dword ptr [0x100040a8]  ; MSVCR80.dll!_beginthreadex
+00001c83  83c418               add esp, 0x18
+00001c86  8b8d6cfeffff         mov ecx, dword ptr [ebp - 0x194]
+00001c8c  894108               mov dword ptr [ecx + 8], eax
+00001c8f  8b956cfeffff         mov edx, dword ptr [ebp - 0x194]
+00001c95  837a0800             cmp dword ptr [edx + 8], 0
+00001c99  750c                 jne 0x10001ca7
+00001c9b  b801000000           mov eax, 1
+00001ca0  e9aa000000           jmp 0x10001d4f  ; ->0x1d4f
+00001ca5  eb24                 jmp 0x10001ccb  ; ->0x1ccb
+00001ca7  8b856cfeffff         mov eax, dword ptr [ebp - 0x194]
+00001cad  c7403407000000       mov dword ptr [eax + 0x34], 7
+00001cb4  68b8410010           push 0x100041b8  ; "xEyeClassRunningState_OK"
+00001cb9  8b8d6cfeffff         mov ecx, dword ptr [ebp - 0x194]
+00001cbf  83c138               add ecx, 0x38
+00001cc2  51                   push ecx
+00001cc3  e8da150000           call 0x100032a2  ; ->0x32a2
+00001cc8  83c408               add esp, 8
+00001ccb  8b956cfeffff         mov edx, dword ptr [ebp - 0x194]
+00001cd1  83ba5005000001       cmp dword ptr [edx + 0x550], 1
+00001cd8  7573                 jne 0x10001d4d
+00001cda  6884010000           push 0x184
+00001cdf  6a00                 push 0
+00001ce1  8d8570feffff         lea eax, [ebp - 0x190]
+00001ce7  50                   push eax
+00001ce8  e8bb150000           call 0x100032a8  ; ->0x32a8
+00001ced  83c40c               add esp, 0xc
+00001cf0  68d4410010           push 0x100041d4  ; "SetPipeName"
+00001cf5  8d8d70feffff         lea ecx, [ebp - 0x190]
+00001cfb  51                   push ecx
+00001cfc  e8a1150000           call 0x100032a2  ; ->0x32a2
+00001d01  83c408               add esp, 8
+00001d04  68e0410010           push 0x100041e0  ; "temp3DPipe"
+00001d09  8d95b0feffff         lea edx, [ebp - 0x150]
+00001d0f  52                   push edx
+00001d10  e88d150000           call 0x100032a2  ; ->0x32a2
+00001d15  83c408               add esp, 8
+00001d18  68ec410010           push 0x100041ec  ; "Main2Class"
+00001d1d  ff15dc400010         call dword ptr [0x100040dc]  ; xEyeList.dll!?getSingleton@xEyeListManager@@SAAAV1@XZ
+00001d23  8bc8                 mov ecx, eax
+00001d25  ff15d4400010         call dword ptr [0x100040d4]  ; xEyeList.dll!?QueryListByName@xEyeListManager@@QAEPAVxEyeList@@PBD@Z
+00001d2b  898568feffff         mov dword ptr [ebp - 0x198], eax
+00001d31  6a00                 push 0
+00001d33  8d8570feffff         lea eax, [ebp - 0x190]
+00001d39  50                   push eax
+00001d3a  8b8d68feffff         mov ecx, dword ptr [ebp - 0x198]
+00001d40  8b11                 mov edx, dword ptr [ecx]
+00001d42  8b8d68feffff         mov ecx, dword ptr [ebp - 0x198]
+00001d48  8b4204               mov eax, dword ptr [edx + 4]
+00001d4b  ffd0                 call eax
+00001d4d  33c0                 xor eax, eax
+00001d4f  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00001d52  33cd                 xor ecx, ebp
+00001d54  e839150000           call 0x10003292  ; ->0x3292
+00001d59  8be5                 mov esp, ebp
+00001d5b  5d                   pop ebp
+00001d5c  c21400               ret 0x14
+

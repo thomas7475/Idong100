@@ -1,0 +1,34 @@
+### /tmp/dlls/xEyeUSB.dll RVA 0x10590  
+00010590  55                   push ebp
+00010591  8bec                 mov ebp, esp
+00010593  51                   push ecx
+00010594  8b4508               mov eax, dword ptr [ebp + 8]
+00010597  8945fc               mov dword ptr [ebp - 4], eax
+0001059a  8b4d14               mov ecx, dword ptr [ebp + 0x14]
+0001059d  51                   push ecx
+0001059e  8b5510               mov edx, dword ptr [ebp + 0x10]
+000105a1  52                   push edx
+000105a2  8b4508               mov eax, dword ptr [ebp + 8]
+000105a5  50                   push eax
+000105a6  6a02                 push 2
+000105a8  e811340000           call 0x100139be  ; ->0x139be
+000105ad  83c410               add esp, 0x10
+000105b0  3b4510               cmp eax, dword ptr [ebp + 0x10]
+000105b3  7405                 je 0x100105ba
+000105b5  83c8ff               or eax, 0xffffffff
+000105b8  eb26                 jmp 0x100105e0  ; ->0x105e0
+000105ba  8b4dfc               mov ecx, dword ptr [ebp - 4]
+000105bd  81394f447f7f         cmp dword ptr [ecx], 0x7f7f444f
+000105c3  750f                 jne 0x100105d4
+000105c5  0fb7550c             movzx edx, word ptr [ebp + 0xc]
+000105c9  8b45fc               mov eax, dword ptr [ebp - 4]
+000105cc  0fb74804             movzx ecx, word ptr [eax + 4]
+000105d0  3bd1                 cmp edx, ecx
+000105d2  7407                 je 0x100105db
+000105d4  b8feffffff           mov eax, 0xfffffffe
+000105d9  eb05                 jmp 0x100105e0  ; ->0x105e0
+000105db  b801000000           mov eax, 1
+000105e0  8be5                 mov esp, ebp
+000105e2  5d                   pop ebp
+000105e3  c3                   ret 
+

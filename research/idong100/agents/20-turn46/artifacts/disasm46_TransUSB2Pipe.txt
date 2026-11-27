@@ -1,0 +1,125 @@
+### /tmp/dlls/xEyeClass.dll RVA 0x25e0  ?TransUSB2Pipe@xEyeClassManager@@AAEXPBUxEye3Ddata@@PAUxEyePipeData@@@Z
+000025e0  55                   push ebp
+000025e1  8bec                 mov ebp, esp
+000025e3  83ec0c               sub esp, 0xc
+000025e6  56                   push esi
+000025e7  894df4               mov dword ptr [ebp - 0xc], ecx
+000025ea  8b450c               mov eax, dword ptr [ebp + 0xc]
+000025ed  8b4df4               mov ecx, dword ptr [ebp - 0xc]
+000025f0  8b9144010000         mov edx, dword ptr [ecx + 0x144]
+000025f6  895004               mov dword ptr [eax + 4], edx
+000025f9  c745fc00000000       mov dword ptr [ebp - 4], 0
+00002600  eb09                 jmp 0x1000260b  ; ->0x260b
+00002602  8b45fc               mov eax, dword ptr [ebp - 4]
+00002605  83c001               add eax, 1
+00002608  8945fc               mov dword ptr [ebp - 4], eax
+0000260b  837dfc0a             cmp dword ptr [ebp - 4], 0xa
+0000260f  0f8dbb000000         jge 0x100026d0
+00002615  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002618  6bc958               imul ecx, ecx, 0x58
+0000261b  8b55fc               mov edx, dword ptr [ebp - 4]
+0000261e  6bd228               imul edx, edx, 0x28
+00002621  8b450c               mov eax, dword ptr [ebp + 0xc]
+00002624  8b7508               mov esi, dword ptr [ebp + 8]
+00002627  dd440e08             fld qword ptr [esi + ecx + 8]
+0000262b  dd5c1008             fstp qword ptr [eax + edx + 8]
+0000262f  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002632  6bc958               imul ecx, ecx, 0x58
+00002635  8b55fc               mov edx, dword ptr [ebp - 4]
+00002638  6bd228               imul edx, edx, 0x28
+0000263b  8b450c               mov eax, dword ptr [ebp + 0xc]
+0000263e  8b7508               mov esi, dword ptr [ebp + 8]
+00002641  dd440e10             fld qword ptr [esi + ecx + 0x10]
+00002645  dd5c1010             fstp qword ptr [eax + edx + 0x10]
+00002649  8b4dfc               mov ecx, dword ptr [ebp - 4]
+0000264c  6bc958               imul ecx, ecx, 0x58
+0000264f  8b55fc               mov edx, dword ptr [ebp - 4]
+00002652  6bd228               imul edx, edx, 0x28
+00002655  8b450c               mov eax, dword ptr [ebp + 0xc]
+00002658  8b7508               mov esi, dword ptr [ebp + 8]
+0000265b  dd440e18             fld qword ptr [esi + ecx + 0x18]
+0000265f  dd5c1018             fstp qword ptr [eax + edx + 0x18]
+00002663  8b4dfc               mov ecx, dword ptr [ebp - 4]
+00002666  6bc958               imul ecx, ecx, 0x58
+00002669  8b55fc               mov edx, dword ptr [ebp - 4]
+0000266c  6bd228               imul edx, edx, 0x28
+0000266f  8b450c               mov eax, dword ptr [ebp + 0xc]
+00002672  8b7508               mov esi, dword ptr [ebp + 8]
+00002675  8b4c0e24             mov ecx, dword ptr [esi + ecx + 0x24]
+00002679  894c1024             mov dword ptr [eax + edx + 0x24], ecx
+0000267d  8b55fc               mov edx, dword ptr [ebp - 4]
+00002680  6bd258               imul edx, edx, 0x58
+00002683  8b45fc               mov eax, dword ptr [ebp - 4]
+00002686  6bc028               imul eax, eax, 0x28
+00002689  8b4d0c               mov ecx, dword ptr [ebp + 0xc]
+0000268c  8b7508               mov esi, dword ptr [ebp + 8]
+0000268f  8b541620             mov edx, dword ptr [esi + edx + 0x20]
+00002693  89540120             mov dword ptr [ecx + eax + 0x20], edx
+00002697  8b45fc               mov eax, dword ptr [ebp - 4]
+0000269a  6bc058               imul eax, eax, 0x58
+0000269d  8b4dfc               mov ecx, dword ptr [ebp - 4]
+000026a0  6bc928               imul ecx, ecx, 0x28
+000026a3  8b550c               mov edx, dword ptr [ebp + 0xc]
+000026a6  8b7508               mov esi, dword ptr [ebp + 8]
+000026a9  8b440628             mov eax, dword ptr [esi + eax + 0x28]
+000026ad  89440a28             mov dword ptr [edx + ecx + 0x28], eax
+000026b1  8b4dfc               mov ecx, dword ptr [ebp - 4]
+000026b4  6bc958               imul ecx, ecx, 0x58
+000026b7  8b55fc               mov edx, dword ptr [ebp - 4]
+000026ba  6bd228               imul edx, edx, 0x28
+000026bd  8b450c               mov eax, dword ptr [ebp + 0xc]
+000026c0  8b7508               mov esi, dword ptr [ebp + 8]
+000026c3  8b4c0e2c             mov ecx, dword ptr [esi + ecx + 0x2c]
+000026c7  894c102c             mov dword ptr [eax + edx + 0x2c], ecx
+000026cb  e932ffffff           jmp 0x10002602  ; ->0x2602
+000026d0  8b550c               mov edx, dword ptr [ebp + 0xc]
+000026d3  8b4508               mov eax, dword ptr [ebp + 8]
+000026d6  8b08                 mov ecx, dword ptr [eax]
+000026d8  890a                 mov dword ptr [edx], ecx
+000026da  8b550c               mov edx, dword ptr [ebp + 0xc]
+000026dd  8b4508               mov eax, dword ptr [ebp + 8]
+000026e0  8b8878030000         mov ecx, dword ptr [eax + 0x378]
+000026e6  898a98010000         mov dword ptr [edx + 0x198], ecx
+000026ec  8b550c               mov edx, dword ptr [ebp + 0xc]
+000026ef  8b4508               mov eax, dword ptr [ebp + 8]
+000026f2  8b887c030000         mov ecx, dword ptr [eax + 0x37c]
+000026f8  898a9c010000         mov dword ptr [edx + 0x19c], ecx
+000026fe  8b550c               mov edx, dword ptr [ebp + 0xc]
+00002701  8b4508               mov eax, dword ptr [ebp + 8]
+00002704  8b8880030000         mov ecx, dword ptr [eax + 0x380]
+0000270a  898aa0010000         mov dword ptr [edx + 0x1a0], ecx
+00002710  8b550c               mov edx, dword ptr [ebp + 0xc]
+00002713  8b4508               mov eax, dword ptr [ebp + 8]
+00002716  8b8884030000         mov ecx, dword ptr [eax + 0x384]
+0000271c  898aa4010000         mov dword ptr [edx + 0x1a4], ecx
+00002722  c745f800000000       mov dword ptr [ebp - 8], 0
+00002729  eb09                 jmp 0x10002734  ; ->0x2734
+0000272b  8b55f8               mov edx, dword ptr [ebp - 8]
+0000272e  83c201               add edx, 1
+00002731  8955f8               mov dword ptr [ebp - 8], edx
+00002734  837df80a             cmp dword ptr [ebp - 8], 0xa
+00002738  7d1c                 jge 0x10002756
+0000273a  8b45f8               mov eax, dword ptr [ebp - 8]
+0000273d  8b4d0c               mov ecx, dword ptr [ebp + 0xc]
+00002740  8b55f8               mov edx, dword ptr [ebp - 8]
+00002743  8b7508               mov esi, dword ptr [ebp + 8]
+00002746  8b949688030000       mov edx, dword ptr [esi + edx*4 + 0x388]
+0000274d  899481a8010000       mov dword ptr [ecx + eax*4 + 0x1a8], edx
+00002754  ebd5                 jmp 0x1000272b  ; ->0x272b
+00002756  8b450c               mov eax, dword ptr [ebp + 0xc]
+00002759  8b4d08               mov ecx, dword ptr [ebp + 8]
+0000275c  8b91b0030000         mov edx, dword ptr [ecx + 0x3b0]
+00002762  8990d0010000         mov dword ptr [eax + 0x1d0], edx
+00002768  8b450c               mov eax, dword ptr [ebp + 0xc]
+0000276b  8b4d08               mov ecx, dword ptr [ebp + 8]
+0000276e  8b91b4030000         mov edx, dword ptr [ecx + 0x3b4]
+00002774  8990d4010000         mov dword ptr [eax + 0x1d4], edx
+0000277a  8b450c               mov eax, dword ptr [ebp + 0xc]
+0000277d  8b4d08               mov ecx, dword ptr [ebp + 8]
+00002780  dd81c0030000         fld qword ptr [ecx + 0x3c0]
+00002786  dd98d8010000         fstp qword ptr [eax + 0x1d8]
+0000278c  5e                   pop esi
+0000278d  8be5                 mov esp, ebp
+0000278f  5d                   pop ebp
+00002790  c20800               ret 8
+
