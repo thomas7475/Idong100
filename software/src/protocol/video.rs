@@ -230,6 +230,35 @@ pub fn plane_stats(p: &[u8]) -> PlaneStats {
     PlaneStats { mean, min, max, stddev: var.sqrt(), n: p.len() as u64 }
 }
 
+/// Count the frames the DEVICE produced but the host loop never saw,
+/// from consecutive delivered frame markers - the P2.6 drop accounting
+/// (turn 45). Shared by both backends' summary lines.
+///
+/// * V4L2: `markers` are the driver's per-buffer sequence numbers
+///   (uvcvideo counts every completed buffer). A gap of `k` between
+///   consecutive delivered seqs means `k - 1` frames were produced but
+///   our loop was too slow to see them (host-side drop, not device
+///   stall). Wraparound (u32) counts as no gap.
+/// * ISO: `markers` are the frame PTS values in device-clock units; a
+///   gap larger than [`PTS_PER_FRAME`] means whole frames never reached
+///   the ring. Converting: `lost = gap / PTS_PER_FRAME - 1`.
+///
+/// A decreasing marker (device reboot, recovery re-arm) resets the
+/// accounting: the count restarts from there, no negative drops.
+pub fn count_dropped_frames(prev: u32, next: u32, per_step: u32, marker_is_pts: bool) -> u64 {
+    if next <= prev {
+        return 0; // reset/reboot: no drop can be inferred
+    }
+    let gap = next.wrapping_sub(prev);
+    if marker_is_pts {
+        // PTS in device-clock units: whole frame periods lost.
+        gap.checked_div(per_step).map(|whole| whole.saturating_sub(1) as u64).unwrap_or(0)
+    } else {
+        // seq counters: consecutive integers, one frame per count.
+        gap.checked_sub(1).map(|g| g as u64).unwrap_or(0)
+    }
+}
+
 /// Incremental frame assembler over UVC payloads. A frame closes when
 /// the PTS advances (the vendor's own boundary rule) or on an
 /// EOF-flagged payload - and an EOF payload's data belongs to the
@@ -486,6 +515,50 @@ mod tests {
     fn plane_stats_empty_plane_is_defined() {
         let s = plane_stats(&[]);
         assert_eq!((s.mean, s.min, s.max, s.stddev, s.n), (0.0, 0, 0, 0.0, 0));
+    }
+
+    #[test]
+    fn drop_accounting_v4l2_seq_gaps() {
+        use super::count_dropped_frames;
+        // consecutive deliveries: no drop
+        assert_eq!(count_dropped_frames(0, 1, 1, false), 0);
+        assert_eq!(count_dropped_frames(5, 6, 1, false), 0);
+        // the turn-44 run6 shape: +3 seq steps = 2 frames missed per step
+        assert_eq!(count_dropped_frames(4, 7, 1, false), 2);
+        assert_eq!(count_dropped_frames(100, 106, 1, false), 5);
+        // wraparound: u32 seq wrapping is not a drop
+        assert_eq!(count_dropped_frames(u32::MAX - 2, 1, 1, false), 0);
+        // a restart/reset (seq going backwards) resets accounting
+        assert_eq!(count_dropped_frames(50, 3, 1, false), 0);
+    }
+
+    #[test]
+    fn drop_accounting_iso_pts_gaps() {
+        use super::count_dropped_frames;
+        let per = PTS_PER_FRAME; // 1_920_000 device-clock units / frame
+                                 // one frame period exactly: normal cadence, no drop
+        assert_eq!(count_dropped_frames(1000 * per, 1001 * per, per, true), 0);
+        // the turn-44 run4 cadence: 1/5/5/4/4... frame-period deltas -
+        // the 5-period steps each hid 4 device frames that our starved
+        // ring never delivered (that is the whole P2.6 finding)
+        assert_eq!(count_dropped_frames(0, 5 * per, per, true), 4);
+        assert_eq!(count_dropped_frames(0, 4 * per, per, true), 3);
+        assert_eq!(count_dropped_frames(0, 1 * per, per, true), 0);
+        // a sub-frame PTS jitter is not a drop either
+        assert_eq!(count_dropped_frames(0, per - 1, per, true), 0);
+        // PTS going backwards (assembler reset / recovery): no drop
+        assert_eq!(count_dropped_frames(9 * per, per, per, true), 0);
+    }
+
+    #[test]
+    fn drop_accounting_mixed_run6_scenario() {
+        use super::count_dropped_frames;
+        // run6's delivered seq list: 0..4, then 7,10,13,... - simulate
+        // the sum the example now computes inline
+        let seqs = [0u32, 1, 2, 3, 4, 7, 10, 13, 16, 19, 22, 25, 28, 30, 33];
+        let drops: u64 = seqs.windows(2).map(|w| count_dropped_frames(w[0], w[1], 1, false)).sum();
+        // 4->7..33 steps: nine +2 gaps and one +1 gap (28->30) = 19
+        assert_eq!(drops, 19);
     }
 
     #[test]

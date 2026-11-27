@@ -31,7 +31,7 @@ deliverables/            PDF reports (+ the turn-13 scaffold, historical)
 | Path | Duty | Depends on |
 |---|---|---|
 | `software/src/` | the whole driver: protocol core + session lifecycle + (feature `usb`) the rusb transport + the V4L2 sysfs matcher (`src/transport/v4l2.rs`) + the V4L2 ioctl engine (`src/transport/v4l2_stream.rs`) + the usbfs ISO engine (`src/transport/usbfs_iso.rs`) + the firmware folder lookup (`src/firmware.rs`) | thiserror, log, crossbeam-channel; rusb + libc only with `--features usb` |
-| `software/src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2 + `--iso` raw + `--recover` self-healing, turn 44), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | png (dev-dep, examples only) |
+| `software/src/examples/` | ALL example binaries (turn 39): `list`, `probe_bootloader`, `bringup` (P2.2), `session_full` (P2.4), `video` (P2.5: V4L2 + `--iso` raw + `--recover` self-healing + `--rate` measurement, turns 44-45), `flash_mcu` (P2.3: the 8051 firmware upload, two-key consent gate), `mcu_image`, `dump_frames` | png (dev-dep, examples only) |
 | `software/src/tests/` | golden replays: mock, runtime, video, plus `firmware_files` (the shipped vendor files) - hardware-free | - |
 | `software/firmware/` | the vendor device files the driver targets: the three pinned images (`ens_code.ldr`, `A_a_v4.4_BG0313.bit`, `app_m8051_2611.hex`), `app_m8051_2500.hex` and the other MCU images, the vendor file map and register tables; `README.md` + `SHA256SUMS` | - |
 | `software/docs/` | PROTOCOL (wire facts), BRINGUP, LINUX_TESTS, DRIVER_STATUS, CAPTURE_KIT, SOLVE_DIALOG | - |
@@ -55,7 +55,7 @@ next to the crate.
 
 ```
 cd software
-cargo test                                   # 108 tests, hardware-free
+cargo test                                   # 111 tests, hardware-free
 cargo test --features usb                    # the same + the rusb transport + the ioctl engines
 cargo +nightly fmt --check
 cargo run --features usb --example flash_mcu                # T8 dry run: pins only, no device
@@ -63,6 +63,26 @@ cargo run --features usb --example flash_mcu -- --confirm   # T8: the controlled
 ```
 
 The bench ladder T2-T10 with PASS criteria: `software/docs/LINUX_TESTS.md`.
+
+## Status (turn 45, 2026-11-27) - P2.6: the rate question, one command
+
+The turn-44 rate mystery (2.1 fps delivered on the raw ISO path vs
+~25 fps produced through uvcvideo, same device, same hour) had the
+answer hiding in our own loops: per-frame host work (PNG encode,
+plane stats) sat between a reaped URB and its resubmission, so the
+ring ran dry during our own processing and ASAP scheduling hopped
+the next URB to a distant microframe - frames the device produced
+never arrived, invisible to every error counter (the 1/5/5/4/4 PTS
+cadence of the turn-44 runs is exactly that starvation signature).
+Both capture loops are now measure-first (requeue/resubmit BEFORE
+any per-frame work), drop accounting counts frames the device made
+but our loop missed (V4L2 buffer-seq gaps / ISO PTS gaps - pure,
+unit-tested), the ISO ring classifies its packet errors
+(proto/overflow/ilseq), `--rate N` measures N frames with the ring
+never starved and prints the full rate table, and a GET_CUR(probe)
+after the ISO negotiation reports what the firmware actually settled
+on. 111 tests green in both feature states. The verdict matrix for
+the next bench run lives in `docs/LINUX_TESTS.md` (T11).
 
 ## Status (turn 44, 2026-11-27) - the bench ladder completes: T9 + T7 PASS, the backends are in the crate, the run self-heals
 
@@ -90,13 +110,12 @@ The turn-44 bench day decided everything the ladder had left:
   saw after every video run): wait for the bootloader landing,
   re-flash the pinned image (the ungated `FLASH_CONFIRMED` path),
   wait for the renum, re-init, RESUME - up to 12 landings per run.
-  108 tests green in both feature states (the 2 new ones pin the
+  111 tests green in both feature states (the 3 new ones pin the
   EOF/error payload semantics).
 
-Next: the frame-rate A/B (the raw path produced ~1.8 fps under the
-  golden probe/commit vs ~25 fps device-side on uvcvideo's own
-  negotiation - see `docs/LINUX_TESTS.md`), the marker/3D record
-  capture (needs a running game), then P4 ROS 2 -
+Next: run T11 (`video -- --iso --cmos --rate 300 --recover`) - the
+  clean rate measurement that closes the frame-rate question, the
+  marker/3D record capture (needs a running game), then P4 ROS 2 -
   `software/docs/DRIVER_STATUS.md`.
 
 ## Status (turn 43, 2026-11-27) - P2.5b ISO: the first bench run decides the alt question

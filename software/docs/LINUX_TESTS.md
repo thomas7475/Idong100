@@ -26,6 +26,7 @@ like the vendor engine does).
 | T8 `flash_mcu` | the 8051 firmware upload (the vendor flash itself) | **yes** (`--confirm`) |
 | T9 `video -- --iso` | T5 + UVC probe/commit + SET_INTERFACE(alt 2) + raw ISO reads on EP 0x85 | **yes** (`--cmos`) |
 | T10 `video -- --recover` | T7/T9 + the automatic self-reboot recovery (re-flash + resume) | **yes** (`--cmos`, `--recover`) |
+| T11 `video -- --rate N` | T7/T9 with the ring never starved by host work + rate/drop reporting | **yes** (`--cmos`) |
 
 All writes are the exact observed vendor bytes: T5/T7 send the same
 register tables the vendor engine sends on every session (volatile
@@ -251,6 +252,56 @@ FAIL notes: a recovery that never finds the bootloader within 180 s
 = collect `lsusb -v -d 0471:2600` + the output. Without `--recover`
 the run still ends exactly like the old one (a gone device = the
 "self-reboots every 31-157 s - just rerun" note).
+
+## T11 - THE P2.6 rate measurement (video --rate N)
+
+```sh
+# the raw ISO backend, 300 frames, never starved, self-healing:
+cargo run --features usb --example video -- --iso --cmos --rate 300 --recover
+# the V4L2 backend for the A/B:
+cargo run --features usb --example video -- --cmos --rate 300 --recover
+```
+
+The one open video question (turn 44): the same device measured 2.1
+fps delivered on the ISO path vs ~25 fps produced through uvcvideo,
+same hour. The suspect was never the device - it was our own loops:
+per-frame host work (PNG encode, plane stats) sat between a reaped
+URB and its resubmission, the ring ran dry during our processing,
+and ASAP scheduling hopped the next URB to a distant microframe.
+Frames the device produced simply never arrived - invisible to
+every error counter. The PTS cadence 1/5/5/4/4... of the turn-44
+runs is exactly that starvation signature.
+
+T11 is the clean measurement: `--rate N` captures N frames with the
+loop NEVER doing per-frame host work beyond a byte copy (requeue /
+resubmit first, stats + PNGs only for the first 3 frames), and
+prints the full rate table:
+
+- `host wall rate` - what our loop actually received (wall clock),
+- `device rate` - the PTS cadence over the captured span,
+- `device drops` - gap accounting (V4L2 buffer seq gaps / ISO PTS
+  gaps): frames the DEVICE made that our loop never saw,
+- `payloads ... errors: N proto, N overflow, N ilseq` - the ISO
+  ring's own per-packet health (babble / CRC classes),
+- and on the ISO path a `GET_CUR(probe)` reply - what the firmware
+  ACTUALLY settled on after the negotiation (the one control read
+  that decides the interval question).
+
+PASS criteria: `device drops : 0` with a flat PTS cadence (every
+delta 1.0 frame period) - that is the device's true production rate,
+whatever the number is. A cadence still showing 5.0/4.0 steps WITH
+zero drops and zero packet errors means the device itself spaces
+frames (its own pacing) - the 30-fps interval is then nominal only,
+and the marker plane work can rely on the measured number.
+
+What the numbers will decide (the A/B matrix):
+
+| observation | verdict |
+| --- | --- |
+| ISO wall rate ≈ PTS rate ≈ 25 fps, drops 0 | the device produces 25 fps; the old 2.1 fps was pure host starvation - question closed |
+| PTS cadence 1.0 flat, wall rate lower | our loop still drops (PNG path, poll cadence) - keep tightening, not a device issue |
+| cadence 5.0/4.0 steps WITH drops 0 and packet errors 0 | the device itself paces frames at ~2 fps despite the commit - firmware behavior, documented and lived with |
+| packet errors nonzero (proto/overflow/ilseq) | bus-level signal integrity - try another cable/port before believing any rate |
 
 ## T8 - THE P2.3 8051 firmware upload (controlled flash replay)
 
