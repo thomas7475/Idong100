@@ -244,33 +244,31 @@ mod tests {
 
     #[test]
     fn connect_on_bootloader_flashes_then_signals_reenum() {
-        // The flash script shape (one block image, from the golden
-        // test in runtime_replay): begin ack, echo block, verify ack,
-        // echo readback, key ack, launch ack.
+        // FLASH_CONFIRMED = true since the turn-41 bench run (T8 PASS
+        // x2): connect on a bootloader now flashes for real and signals
+        // the re-enumeration. The script is the golden cap3 shape
+        // (begin ack 00 02, verify ack 00 04, the echo readback blocks,
+        // key ack, launch ack - the same order the replay test walks).
         let image = [0xA5u8; IMAGE_SIZE as usize];
-        let mut script = vec![reply(version_reply("2600"))];
+        // no version reply first: connect's Bootloader branch calls
+        // flash_mcu directly (the phase is the caller's knowledge)
+        let mut script: Vec<crate::mock::Scripted> = Vec::new();
         script.push(reply(vec![0x7F, 0x55, 0x01, 0x01, 0x01, 0x00, 0x00, 0x02]));
+        script.push(reply(vec![0x7F, 0x55, 0x01, 0x02, 0x01, 0x00, 0x00, 0x04]));
         for b in image.chunks(64) {
             script.push(reply(b.to_vec()));
         }
-        script.push(reply(vec![0x7F, 0x55, 0x02, 0x01, 0x01, 0x00, 0x00, 0x04]));
-        for b in image.chunks(64) {
-            script.push(reply(b.to_vec()));
-        }
-        script.push(reply(vec![0x7F, 0x55, 0x03, 0x01, 0x01, 0x00]));
-        script.push(reply(vec![0x7F, 0x55, 0x04, 0x01, 0x01, 0x00]));
+        script.push(reply(vec![0x7F, 0x55, 0x01, 0x03, 0x01, 0x00, 0x00, 0x08]));
+        script.push(reply(vec![0x7F, 0x55, 0x01, 0x04, 0x01, 0x00, 0x00, 0x00]));
         let mut m = MockTransport::new(script);
         let err = Session::connect(&mut m, Phase::Bootloader, &image, true);
-        // The gate is intentionally still closed (P2.3 hardware
-        // replay); the signal shape is what matters here.
         match err {
-            Err(IdongError::BootUnconfirmed) => {}
-            Err(e) => panic!("expected the flash gate, got {e:?}"),
-            Ok(_) => panic!("expected the flash gate, got Ok"),
+            Err(e) => assert!(
+                Session::is_reenumeration_signal(&e),
+                "expected the re-enumeration signal, got {e}"
+            ),
+            Ok(_) => panic!("expected the re-enumeration signal, got Ok"),
         }
-        // The gate refuses BEFORE a single byte goes out (the
-        // flash_is_gated test in runtime.rs pins the same rule).
-        assert!(m.writes.is_empty(), "gate must not write a single byte");
     }
 
     #[test]

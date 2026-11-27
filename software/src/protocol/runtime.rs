@@ -163,12 +163,12 @@ pub const EEPROM_DEVICE_ID_LEN: u16 = 33;
 /// engine close the device and retry the whole connect every 10 s.
 pub const EDITION_LETTERS: [u8; 4] = [b'D', b'S', b'H', 0x00];
 
-/// P2.3-style gate: the flash sequence is capture-verified but has not
-/// yet been replayed against real hardware by this driver. Flips to
-/// `true` after the FIRST successful controlled hardware replay via
-/// [`RuntimeSession::flash_mcu_permitted`] (the bench consent path,
-/// turn 39) - that replay IS the acceptance test.
-pub const FLASH_CONFIRMED: bool = false;
+/// P2.3 gate - CONFIRMED. The turn-41 bench run replayed the controlled
+/// flash TWICE on real hardware (T8: both readback-matched, launched,
+/// re-enumerated as 0471:2500, version "2619", identity + calibration
+/// intact). The ungated [`RuntimeSession::flash_mcu`] is open; the
+/// two-key [`FlashPermit`] consent path stays for interactive use.
+pub const FLASH_CONFIRMED: bool = true;
 
 /// The exact consent phrase behind [`FlashPermit`] (turn 39): the
 /// controlled hardware flash replay is a TWO-key gate - the caller must
@@ -763,15 +763,16 @@ mod tests {
     }
 
     #[test]
-    fn flash_is_gated() {
+    fn flash_ungated_entry_needs_the_full_script() {
+        // FLASH_CONFIRMED = true since the turn-41 bench run (T8 PASS
+        // x2). The ungated entry no longer refuses at a compile-time
+        // gate - on an UNSCRIPTED mock it errors in the sequence itself
+        // (the first reply never arrives), and the safety shape that
+        // still holds: only byte-exact scripted replays succeed.
         let mut m = MockTransport::new(vec![]);
         let mut s = RuntimeSession::new(&mut m);
         let image = vec![0u8; IMAGE_SIZE as usize];
-        match s.flash_mcu(&image) {
-            Err(IdongError::BootUnconfirmed) => {}
-            other => panic!("gate must refuse: {other:?}"),
-        }
-        assert!(m.writes.is_empty(), "gate must not write a single byte");
+        assert!(s.flash_mcu(&image).is_err(), "unscripted transport must fail");
     }
 
     #[test]

@@ -1,19 +1,21 @@
 # DRIVER_STATUS.md - how far the Rust driver is, what is missing
 
-Turn 40, 2026-11-26. The one-file answer to "how far are we, what is
+Turn 42, 2026-11-27. The one-file answer to "how far are we, what is
 left". Status line: **the protocol is fully decoded (every plane
 captured), the driver lives under `software/` of the repository (turn
 40: the crate with the vendor device files in `firmware/`, the ROS 2
 packages and `docs/` next to it; all code under `src/` since turn 39),
-100 tests green, and the bench ladder
-T1-T8 passed its first LIVE run on Linux: T1-T5 PASS (identity, session,
-CMOS writes, polls), the video probe (T6) listed the UVC nodes - the
-turn-39 fixes (sysfs hex parse, calibration payload parser) clear the
-two reported FAILs - and the 8051 firmware upload ships as the T8
-controlled replay (`src/examples/flash_mcu.rs`, two-key consent gate),
-now reading the hex that ships with the crate.
-Next: rerun T6/T7 for the video plane, run T8 for the P2.3 flip. No
-protocol blocker remains.**
+105 tests green, and the turn-41 bench run settled the ladder:
+T1-T5 PASS again, T8 (the 8051 flash) PASS TWICE -> P2.3 accepted,
+`FLASH_CONFIRMED` = true (the ungated flash path is open; the
+consent-gated example stays for interactive use), T6 PASS (uvcvideo
+binds 640x480 YUYV) - but T7 failed at STREAMON with EIO: uvcvideo
+cannot stream this firmware. The active frontier is T9: the P2.5b raw
+usbfs-ISO backend (`cargo run --features usb --example video -- --iso
+--cmos --frames 10`), implemented turn 42 (DISCONNECT_CLAIM of MI_01 +
+the observed probe/commit + ISO URBs on EP 0x85 - the exact
+no-SET_INTERFACE shape the vendor capture shows). No protocol blocker
+remains.**
 
 ## The short version
 
@@ -24,7 +26,7 @@ protocol blocker remains.**
 | All-code-in-src/ layout (lib + src/examples/ + src/tests/ - turn 39) | DONE - explicit `[[example]]`/`[[test]]` path targets, commands unchanged |
 | Repository layout (turn 40: `software/` = crate + `firmware/` + `idong-ros2` + `idong_msgs` + `docs/`) | DONE - the 24 vendor device files ship in `firmware/`, pinned by the `firmware_files` test; `flash_mcu` needs no `--hex` |
 | Live bench run T1-T5 (turn 39: list/bringup/session_full --cmos) | PASS on the real sensor (Linux, rusb) |
-| Live V4L2 probe T6 (turn 39) | uvcvideo binds 640x480 YUYV on MI_01 - sensor-match fix ships this turn (sysfs hex parse) |
+| Live V4L2 probe T6 (turn 39) | uvcvideo binds 640x480 YUYV on MI_01 - sensor-match fix (sysfs hex parse) + the turn-41 run confirmed it live |
 | Live calibration parse (T3) | fix ships this turn (payload vs wire-record parser - the "need 121, have 120" FAIL) |
 | Session lifecycle incl. self-reboot recovery (`src/session.rs`) | DONE (core) |
 | Reply-timeout fail-fast (`REPLY_EMPTY_BUDGET`, turn 38) | DONE - no more 17-min silent spins |
@@ -32,8 +34,9 @@ protocol blocker remains.**
 | Re-enumeration handling (`src/transport/reenum.rs`) | DECISION CORE DONE + unit-tested; rusb loop coded, untested on hardware |
 | P2.2 live read-only bring-up (`src/examples/bringup.rs`) | LIVE PASS (T3, turn 39) - version 2619, device ID, codes read |
 | P2.4 full-session test (`src/examples/session_full.rs`, turn 38) | LIVE PASS (T5 `--cmos`, turn 39) - register init + 6/6 polls |
-| P2.5 Linux video bring-up (`src/examples/video.rs` + `src/transport/v4l2.rs`) | T6 probe ran: uvcvideo sees 640x480 YUYV; the sensor cross-match fix (sysfs hex ids) ships turn 39 - rerun T6/T7 |
-| P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | CODE DONE - two-key consent gate (SHA-256 pins + `--confirm` + `FlashPermit`), waits for the bootloader window, readback abort, reenum proof; `FLASH_CONFIRMED` stays closed until the first T8 PASS |
+| P2.5 Linux video bring-up (`src/examples/video.rs` + `src/transport/v4l2.rs`) | T6 PASS (turn 41: capture node video0, 640x480 YUYV); T7 FAIL at STREAMON EIO - uvcvideo cannot stream this firmware (the documented decision point) |
+| P2.5b raw usbfs-ISO backend (`--iso`, `src/transport/usbfs.rs`) | CODE DONE (turn 42) - pure walker + UVC builders unit-tested, ioctl engine ABI-pinned; T9 is the first bench run |
+| P2.3 8051 firmware upload (`src/examples/flash_mcu.rs`, turn 39) | ACCEPTED - T8 PASS x2 on the turn-41 bench (readback matched, launched, identity intact); `FLASH_CONFIRMED` = true since turn 42 |
 | Marker/3D record decoding (xEye3Ddata 10-slot records) | PARSER DONE - never seen on the wire in ANY capture (open) |
 | P4 ROS 2 node (idong-ros2, idong_msgs) | NOT STARTED (needs a ROS install) |
 
@@ -152,8 +155,10 @@ failure collection: `docs/LINUX_TESTS.md` (turn 38/39, T8 updated turn
    from `src/examples/video.rs` into the crate behind a feature (and
    wire `VideoSource`/`VideoAssembler` if payload-level access is
    ever needed). If T6/T7 FAIL on the uvcvideo side, the fallback is
-   P2.5b: raw usbfs ISO on EP 0x85 (rusb has no ISO support - needs
-   the libusb1-sys async API or raw usbfs URB ioctls).
+   P2.5b: raw usbfs ISO on EP 0x85 - IMPLEMENTED (turn 42, the
+   `--iso` mode: raw usbfs URB ioctls, since rusb has no ISO support;
+   pure helpers in `src/transport/usbfs.rs`, ioctl engine in the
+   example, ABI-pinned).
 4. **P2.4b auto-recovery**: `session_full`/`video` currently tell you
    to rerun after a self-reboot; wire the existing
    `transport::reenum` waiter into the examples' error path.

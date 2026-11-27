@@ -40,9 +40,10 @@
 //!    pin (`FirmwareSet::mcu_image`);
 //! 2. consent token - `FlashPermit` exists ONLY via the exact crate
 //!    phrase `FLASH_CONSENT_PHRASE`, and this example builds it only
-//!    after the human passed `--confirm`. The compile-time
-//!    `FLASH_CONFIRMED` gate stays closed until THIS example passes
-//!    once on real hardware (that PASS is the P2.3 acceptance).
+//!    after the human passed `--confirm`. `FLASH_CONFIRMED` is true
+//!    since the turn-41 bench run (T8 PASS x2) - this example remains
+//!    the RECOMMENDED path (the consent gate keeps a human in the loop
+//!    even though the compile-time gate is open).
 
 #[cfg(feature = "usb")]
 fn main() {
@@ -76,7 +77,7 @@ fn main() {
         println!("        -> re-enumerates as 0471:2500, version \"2619\"");
         println!("      a mismatched readback ABORTS before the key+launch (no commit).");
         println!();
-        println!("PASS: dry run complete (firmware verified, gate closed).");
+        println!("PASS: dry run complete (firmware verified, consent gate closed).");
         println!("Rerun with --confirm to flash the sensor.");
         return;
     }
@@ -187,9 +188,9 @@ fn main() {
 
     println!();
     println!("PASS: the 8051 firmware upload (P2.3 controlled replay) is complete.");
-    println!("Send this output: one clean PASS here flips FLASH_CONFIRMED in the");
-    println!("crate and opens the ungated flash_mcu path - from then on the");
-    println!("driver can bring the sensor up from ANY bootloader landing.");
+    println!("(P2.3 acceptance reached on the turn-41 bench: FLASH_CONFIRMED = true");
+    println!(" - the driver can bring the sensor up from ANY bootloader landing,)");
+    println!(" through the ungated flash_mcu path or this consent-gated example.");
 }
 
 #[cfg(feature = "usb")]

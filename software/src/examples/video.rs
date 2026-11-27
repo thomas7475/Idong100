@@ -4,6 +4,7 @@
 //! ```sh
 //! cargo run --features usb --example video -- --probe
 //! cargo run --features usb --example video -- --cmos --frames 10
+//! cargo run --features usb --example video -- --iso --cmos --frames 10
 //! ```
 //!
 //! Modes and flags:
@@ -17,8 +18,13 @@
 //!                    as src/examples/session_full.rs). Without it the stream
 //!                    is attempted without any session - still a valid
 //!                    experiment (the result is informative either way).
+//! * `--iso`          the P2.5b raw usbfs-ISO backend (turn 42): take
+//!                    the VS interface from uvcvideo, run the observed
+//!                    probe/commit, stream EP 0x85 directly. Use this
+//!                    when V4L2 STREAMON fails (T7 bench, EIO).
 //! * `--device PATH`  use this /dev/videoN instead of the sysfs
-//!                    auto-match (src/transport/v4l2.rs).
+//!                    auto-match (src/transport/v4l2.rs). Ignored with
+//!                    --iso.
 //! * `--frames N`    stop after N frames (default 10).
 //! * `--outdir PATH` output folder (default: video_runN - the first
 //!                    nonexistent or EMPTY one, the kit-37 runN rule).
@@ -28,6 +34,18 @@
 //! itself; the vendor interface MI_04 stays free for the session transport
 //! - so ONE process can run the session (rusb) and the video (V4L2)
 //! side by side, exactly like the vendor engine on Windows.
+//!
+//! Why --iso (P2.5b): the turn-41 bench run showed uvcvideo cannot
+//! STREAMON this firmware (EIO at VIDIOC_STREAMON, both formats and
+//! formats fine, node + 640x480 YUYV negotiated). The vendor app itself
+//! never issues SET_INTERFACE alt>0 - video flows on EP 0x85 with the
+//! interface untouched (turn-35 capture) - so the hypothesis is the
+//! firmware streams whenever ISO URBs are posted. The --iso path opens
+//! /dev/bus/usb/<bus>/<addr>, DISCONNECT_CLAIMs the VS interface from
+//! uvcvideo, runs the observed probe/commit SET_CURs, and submits ISO
+//! URBs on EP 0x85 with ASAP scheduling - no kernel UVC driver in the
+//! way. If THAT streams, P2.5 is accepted and the backend is promoted
+//! into the crate; if it fails, dmesg + the errno decide the next move.
 //!
 //! What PASS looks like (the turn-35 capture predicts): 640x480 frames,
 //! 614400 B each, ~8 fps, a two-channel byte-interleaved raster - channel
@@ -296,6 +314,7 @@ mod bench {
     pub struct Args {
         probe: bool,
         cmos: bool,
+        iso: bool,
         frames: u32,
         device: Option<String>,
         outdir: Option<String>,
@@ -304,13 +323,20 @@ mod bench {
     impl Args {
         fn parse() -> Args {
             let a: Vec<String> = std::env::args().skip(1).collect();
-            let mut args =
-                Args { probe: false, cmos: false, frames: 10, device: None, outdir: None };
+            let mut args = Args {
+                probe: false,
+                cmos: false,
+                iso: false,
+                frames: 10,
+                device: None,
+                outdir: None,
+            };
             let mut i = 0;
             while i < a.len() {
                 match a[i].as_str() {
                     "--probe" => args.probe = true,
                     "--cmos" => args.cmos = true,
+                    "--iso" => args.iso = true,
                     "--frames" | "--device" | "--outdir" => {
                         let val = a.get(i + 1).cloned();
                         match (a[i].as_str(), val) {
@@ -513,6 +539,8 @@ mod bench {
         let args = Args::parse();
         if args.probe {
             probe(&args);
+        } else if args.iso {
+            iso_stream_test(&args);
         } else {
             stream_test(&args);
         }
@@ -993,6 +1021,607 @@ mod bench {
                 stddev: (p.stddev + s.stddev) / 2.0,
             },
         })
+    }
+
+    // ---------------- the --iso (P2.5b) engine ----------------
+
+    /// The usbfs UAPI mirror (mirrors the V4L2 one: ABI-pinned against
+    /// /usr/include/linux/usbdevice_fs.h, gcc-verified turn 42).
+    mod usbfs_api {
+        use core::mem::{offset_of, size_of};
+        use std::io;
+
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        pub struct IsoPacketDesc {
+            pub length: u32,
+            pub actual_length: u32,
+            pub status: u32,
+        }
+
+        #[repr(C)]
+        pub struct CtrlTransfer {
+            pub bm_request_type: u8,
+            pub b_request: u8,
+            pub w_value: u16,
+            pub w_index: u16,
+            pub w_length: u16,
+            pub timeout: u32, // ms
+            pub data: *mut u8,
+        }
+
+        #[repr(C)]
+        pub struct SetInterface {
+            pub interface: u32,
+            pub altsetting: u32,
+        }
+
+        #[repr(C)]
+        pub struct DisconnectClaim {
+            pub interface: u32,
+            pub flags: u32,
+            pub driver: [u8; 256],
+        }
+
+        /// The URB header (the kernel's flexible-array member starts at
+        /// offset 56 - the header size; the packet descs follow).
+        #[repr(C)]
+        pub struct UrbHeader {
+            pub urb_type: u8,
+            pub endpoint: u8,
+            pub status: i32,
+            pub flags: u32,
+            pub buffer: *mut u8,
+            pub buffer_length: i32,
+            pub actual_length: i32,
+            pub start_frame: i32,
+            /// number_of_packets (ISO) | stream_id (bulk) - the union.
+            pub number_of_packets: i32,
+            pub error_count: i32,
+            pub signr: u32,
+            pub usercontext: *mut u8,
+        }
+
+        // The full request-number set is pinned for documentation; the
+        // --iso path uses CONTROL / DISCONNECT_CLAIM / SUBMITURB /
+        // REAPURBNDELAY (and RELEASEINTERFACE on drop - wired below).
+        #[allow(dead_code)]
+        pub const USBDEVFS_CONTROL: u32 = 0xc018_5500;
+        #[allow(dead_code)]
+        pub const USBDEVFS_SETINTERFACE: u32 = 0x8008_5504;
+        #[allow(dead_code)]
+        pub const USBDEVFS_CLAIMINTERFACE: u32 = 0x8004_550f;
+        pub const USBDEVFS_RELEASEINTERFACE: u32 = 0x8004_5510;
+        pub const USBDEVFS_SUBMITURB: u32 = 0x8038_550a;
+        pub const USBDEVFS_REAPURBNDELAY: u32 = 0x4008_550d;
+        #[allow(dead_code)]
+        pub const USBDEVFS_DISCARDURB: u32 = 0x0000_550b;
+        pub const USBDEVFS_DISCONNECT_CLAIM: u32 = 0x8108_551b;
+
+        pub const URB_TYPE_ISO: u8 = 0;
+        pub const URB_ISO_ASAP: u32 = 0x02;
+        /// `USBDEVFS_DISCONNECT_CLAIM_IF_DRIVER` - disconnect only if the
+        /// named driver is bound.
+        pub const DISC_CLAIM_IF_DRIVER: u32 = 0x01;
+
+        // ---- ABI pins (gcc-verified against the kernel header) ----
+        const _: () = assert!(size_of::<IsoPacketDesc>() == 12);
+        const _: () = assert!(size_of::<CtrlTransfer>() == 24);
+        const _: () = assert!(size_of::<SetInterface>() == 8);
+        const _: () = assert!(size_of::<DisconnectClaim>() == 264);
+        const _: () = assert!(size_of::<UrbHeader>() == 56);
+        const _: () = assert!(offset_of!(UrbHeader, buffer) == 16);
+        const _: () = assert!(offset_of!(UrbHeader, buffer_length) == 24);
+        const _: () = assert!(offset_of!(UrbHeader, actual_length) == 28);
+        const _: () = assert!(offset_of!(UrbHeader, number_of_packets) == 36);
+        const _: () = assert!(offset_of!(UrbHeader, signr) == 44);
+        const _: () = assert!(USBDEVFS_CONTROL == 0xc018_5500);
+        const _: () = assert!(USBDEVFS_SUBMITURB == 0x8038_550a);
+        const _: () = assert!(USBDEVFS_REAPURBNDELAY == 0x4008_550d);
+        const _: () = assert!(USBDEVFS_DISCARDURB == 0x550b);
+        const _: () = assert!(USBDEVFS_DISCONNECT_CLAIM == 0x8108_551b);
+
+        /// One ioctl call; errno on failure.
+        pub unsafe fn ioctl(fd: i32, req: u32, arg: *mut u8) -> io::Result<i32> {
+            let r = libc::ioctl(fd, req as libc::c_ulong, arg.cast::<libc::c_void>());
+            if r < 0 {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(r)
+            }
+        }
+    }
+
+    /// One in-flight ISO URB: header + packet descs + data buffer, as one
+    /// malloc'd blob; re-submitted until the ring drains.
+    struct IsoUrb {
+        ptr: *mut usbfs_api::UrbHeader,
+        layout: std::alloc::Layout,
+        buf: *mut u8,
+        buf_layout: std::alloc::Layout,
+        packet_size: usize,
+    }
+
+    // SAFETY: the URB blob is owned exclusively by this struct; the ioctl
+    // kernel calls read/write it while submitted, but only this thread
+    // touches it between submit and reap.
+    unsafe impl Send for IsoUrb {}
+
+    impl IsoUrb {
+        /// Allocate one URB of `npackets` slots x `packet_size` B.
+        fn new(ep: u8, npackets: usize, packet_size: usize) -> io::Result<IsoUrb> {
+            use std::alloc::{alloc, Layout};
+            let desc_off = size_of::<usbfs_api::UrbHeader>();
+            let total = desc_off + npackets * size_of::<usbfs_api::IsoPacketDesc>();
+            let layout = Layout::from_size_align(total, 8).map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
+            })?;
+            let ptr = unsafe { alloc(layout) } as *mut usbfs_api::UrbHeader;
+            let buf_layout =
+                Layout::from_size_align(npackets * packet_size, 8).map_err(|e| {
+                    io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
+                })?;
+            let buf = unsafe { alloc(buf_layout) };
+            if ptr.is_null() || buf.is_null() {
+                return Err(io::Error::new(io::ErrorKind::OutOfMemory, "URB alloc"));
+            }
+            // zero the descs and fill the static fields once
+            unsafe {
+                std::ptr::write_bytes(ptr as *mut u8, 0, total);
+                let h = &mut *ptr;
+                h.urb_type = usbfs_api::URB_TYPE_ISO;
+                h.endpoint = ep;
+                h.flags = usbfs_api::URB_ISO_ASAP;
+                h.buffer = buf;
+                h.buffer_length = (npackets * packet_size) as i32;
+                h.number_of_packets = npackets as i32;
+                let descs = std::slice::from_raw_parts_mut(
+                    (ptr as *mut u8).add(desc_off) as *mut usbfs_api::IsoPacketDesc,
+                    npackets,
+                );
+                for d in descs.iter_mut() {
+                    d.length = packet_size as u32;
+                }
+            }
+            Ok(IsoUrb { ptr, layout, buf, buf_layout, packet_size })
+        }
+
+        /// (Re-)submit this URB.
+        unsafe fn submit(&mut self, fd: i32) -> io::Result<()> {
+            usbfs_api::ioctl(fd, usbfs_api::USBDEVFS_SUBMITURB, self.ptr as *mut u8).map(|_| ())
+        }
+
+        /// The per-packet results of a reaped URB: (actual_length, status).
+        unsafe fn packet_results(&self) -> Vec<(u32, i32)> {
+            let h = &*self.ptr;
+            let n = h.number_of_packets.max(0) as usize;
+            let descs = std::slice::from_raw_parts(
+                (self.ptr as *const u8).add(size_of::<usbfs_api::UrbHeader>())
+                    as *const usbfs_api::IsoPacketDesc,
+                n,
+            );
+            descs.iter().map(|d| (d.actual_length, d.status as i32)).collect()
+        }
+
+        /// One packet's received bytes: packet `i` lives at
+        /// `i * packet_size` in the data buffer, length `actual`.
+        unsafe fn packet_bytes(&self, i: usize, actual: u32) -> &[u8] {
+            let off = i * self.packet_size + 0;
+            let n = (actual as usize).min(self.packet_size);
+            std::slice::from_raw_parts(self.buf.add(off), n)
+        }
+    }
+
+    impl Drop for IsoUrb {
+        fn drop(&mut self) {
+            unsafe { std::alloc::dealloc(self.ptr as *mut u8, self.layout) };
+            unsafe { std::alloc::dealloc(self.buf, self.buf_layout) };
+        }
+    }
+
+    /// The --iso stream test (P2.5b raw usbfs ISO on EP 0x85).
+    fn iso_stream_test(args: &Args) {
+        use idong::protocol::video::{ProbeCommit, VideoAssembler};
+        use idong::transport::usbfs as pure;
+
+        println!("=== idong P2.5b raw usbfs-ISO bring-up ===");
+        println!();
+
+        // [1/4] session init on MI_04 (same as the V4L2 path, --cmos)
+        // the transport slot is kept alive to the end: dropping it frees
+        // MI_04 AFTER the stream stops (the session owns no resource)
+        #[allow(unused_assignments)]
+        let mut transport: Option<UsbTransport> = None;
+        let mut session: Option<Session> = None;
+        if args.cmos {
+            println!("[1/4] session init on MI_04 (--cmos: EEPROM reads + CMOS registers)");
+            let t = match UsbTransport::open_runtime() {
+                Ok(t) => t,
+                Err(e) => {
+                    println!("      FAIL: cannot open MI_04: {e}");
+                    std::process::exit(1);
+                }
+            };
+            transport = Some(t);
+            let t = transport.as_mut().unwrap();
+            match Session::probe(&mut *t) {
+                Ok(idong::Phase::Runtime) => {}
+                Ok(_) => {
+                    println!("      FAIL: device not in runtime phase");
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    println!("      FAIL: version probe: {e}");
+                    std::process::exit(1);
+                }
+            }
+            let s = match Session::connect(&mut *t, idong::Phase::Runtime, &[], false) {
+                Ok(s) => s,
+                Err(e) => {
+                    println!("      FAIL: session init: {e}");
+                    println!("      (the sensor self-reboots every 31-157 s - just rerun)");
+                    std::process::exit(1);
+                }
+            };
+            println!("      device ID {}", s.info().device_id);
+            println!("      PASS: session init complete");
+            session = Some(s);
+        } else {
+            println!("[1/4] session init SKIPPED (no --cmos)");
+            println!("      the vendor flow always inits the sensor registers before");
+            println!("      video; without it the stream may stay empty (still a valid");
+            println!("      experiment - a FAIL here does not reject the backend).");
+        }
+
+        // [2/4] the raw device node + descriptors
+        println!("[2/4] raw device node (/dev/bus/usb)");
+        // rusb discovery finds bus/addr; the session transport holds MI_04
+        // on the SAME node - the usbfs fd must be a SECOND open of it.
+        let devices = idong::transport::usb::list_devices();
+        let runtime = devices.iter().find(|d| d.state == idong::DeviceState::Runtime);
+        let Some(dev) = runtime else {
+            println!("      FAIL: no 0471:2500 runtime device on the bus");
+            std::process::exit(1);
+        };
+        let node_path = format!("/dev/bus/usb/{:03}/{:03}", dev.bus, dev.address);
+        println!("      opening {node_path} (runtime, bus {} addr {})", dev.bus, dev.address);
+        let node = match fs::OpenOptions::new().read(true).write(true).open(&node_path) {
+            Ok(f) => f,
+            Err(e) => {
+                println!("      FAIL: open {node_path}: {e}");
+                if e.kind() == io::ErrorKind::PermissionDenied {
+                    println!("      permissions: the 42-idong.rules udev rule covers the");
+                    println!("      /dev/bus/usb node too - is it installed? (replug after)");
+                }
+                std::process::exit(1);
+            }
+        };
+        // The raw config descriptor: a standard GET_DESCRIPTOR(config)
+        // control transfer on ep 0 needs no interface claim.
+        let cfg_blob = match read_config_descriptor(node.as_raw_fd()) {
+            Ok(b) => b,
+            Err(e) => {
+                println!("      FAIL: GET_DESCRIPTOR(config): {e}");
+                std::process::exit(1);
+            }
+        };
+        let alts = pure::walk_config(&cfg_blob);
+        let vs = match pure::video_streaming_iface(&alts) {
+            Some(vs) => vs,
+            None => {
+                println!("      FAIL: no UVC VideoStreaming interface in the config");
+                std::process::exit(1);
+            }
+        };
+        let iface = vs[0].number;
+        println!("      config walked: {} interface alts", alts.len());
+        for a in &vs {
+            if let Some(e) = a.iso_in() {
+                println!(
+                    "      VS iface {} alt {} : ISO IN 0x{:02x} = {} B/microframe",
+                    iface, a.alt, e.address, e.wmax_total
+                );
+            } else {
+                println!("      VS iface {} alt {} : no endpoint", iface, a.alt);
+            }
+        }
+        let best = pure::best_streaming_alt(&vs).expect("an ISO alt exists");
+        let packet_size = best.iso_in().map(|e| e.wmax_total).unwrap_or(0) as usize;
+        println!("      streaming alt {} -> {} B per microframe", best.alt, packet_size);
+
+        // [3/4] claim the VS interface + UVC negotiation
+        println!("[3/4] DISCONNECT_CLAIM MI_{:02} + UVC probe/commit", iface);
+        let fd = node.as_raw_fd();
+        let mut dc = usbfs_api::DisconnectClaim {
+            interface: iface as u32,
+            flags: usbfs_api::DISC_CLAIM_IF_DRIVER,
+            driver: [0u8; 256],
+        };
+        dc.driver[.."uvcvideo".len()].copy_from_slice(b"uvcvideo");
+        if let Err(e) = unsafe {
+            usbfs_api::ioctl(
+                fd,
+                usbfs_api::USBDEVFS_DISCONNECT_CLAIM,
+                &mut dc as *mut usbfs_api::DisconnectClaim as *mut u8,
+            )
+        } {
+            println!("      FAIL: DISCONNECT_CLAIM: {e}");
+            println!("      (is uvcvideo bound? try: ls /sys/class/video4linux)");
+            std::process::exit(1);
+        }
+        println!("      PASS: MI_{:02} claimed away from uvcvideo (reversible on exit)", iface);
+        let golden = ProbeCommit::GOLDEN;
+        let probe_body = pure::probe_commit_body(&golden);
+        for (cs, label) in [(pure::UVC_CS_PROBE, "probe"), (pure::UVC_CS_COMMIT, "commit")] {
+            let req = pure::uvc_set_cur(iface, cs, &probe_body);
+            let mut ctrl = usbfs_api::CtrlTransfer {
+                bm_request_type: req.request_type,
+                b_request: req.request,
+                w_value: req.value,
+                w_index: req.index,
+                w_length: req.length,
+                timeout: 5000,
+                data: req.data.as_ptr() as *mut u8,
+            };
+            let r = unsafe {
+                usbfs_api::ioctl(
+                    fd,
+                    usbfs_api::USBDEVFS_CONTROL,
+                    &mut ctrl as *mut usbfs_api::CtrlTransfer as *mut u8,
+                )
+            };
+            match r {
+                Ok(_) => println!("      PASS: {label} SET_CUR sent ({} B)", req.length),
+                Err(e) => {
+                    println!("      FAIL: {label} SET_CUR: {e}");
+                    println!("      (the firmware may reject the negotiation without a");
+                    println!("      session - rerun with --cmos)");
+                    std::process::exit(1);
+                }
+            }
+        }
+        // restore alt 0 then raise to the streaming alt (alt 1) - the
+        // observed vendor state (they never left alt 0 on the wire, but
+        // the ISO endpoint only exists in alt >= 1 - the kernel needs to
+        // route ISO packets to the endpoint... no: usbfs ISO URBs are
+        // endpoint-addressed, not interface-routed. The capture's truth:
+        // video flowed with NO alt change. We mirror the capture: no
+        // SET_INTERFACE at all.)
+        println!("      (no SET_INTERFACE - mirroring the vendor capture: video");
+        println!("      flowed on EP 0x85 with the interface at alt 0)");
+
+        // [4/4] the ISO URB ring
+        println!("[4/4] ISO URB ring on EP 0x85 ({} frames)", args.frames);
+        let npackets = 8usize; // 8 microframes per URB = 1 ms per re-submission
+        let ring = 4usize; // four URBs in flight
+        let mut urbs: Vec<IsoUrb> = Vec::new();
+        for _ in 0..ring {
+            match IsoUrb::new(0x85, npackets, packet_size) {
+                Ok(u) => urbs.push(u),
+                Err(e) => {
+                    println!("      FAIL: URB alloc: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        for u in urbs.iter_mut() {
+            if let Err(e) = unsafe { u.submit(fd) } {
+                println!("      FAIL: SUBMITURB: {e}");
+                println!("      collect dmesg | tail -50 - this decides P2.5b");
+                std::process::exit(1);
+            }
+        }
+        println!("      PASS: {ring} URBs x {npackets} microframes submitted (ASAP)");
+
+        let outdir = match &args.outdir {
+            Some(d) => PathBuf::from(d),
+            None => next_run_dir(),
+        };
+        fs::create_dir_all(&outdir).expect("create output dir");
+        println!("      output dir: {}", outdir.display());
+
+        let mut assembler = VideoAssembler::new();
+        let mut got = 0u32;
+        let mut payloads = 0u64;
+        let mut errs = 0u64;
+        let mut any_a = None;
+        let mut any_b = None;
+        let t_start = Instant::now();
+        let mut t_last_poll = Instant::now() - Duration::from_secs(1);
+        let mut poll_errors = 0u32;
+        let mut polls_live = true;
+        'outer: while got < args.frames && t_start.elapsed() < Duration::from_secs(30) {
+            // keep the 0x0205 stream poll alive (~10 Hz) as in the V4L2 run
+            if polls_live
+                && session.is_some()
+                && t_last_poll.elapsed() >= Duration::from_millis(100)
+            {
+                match session.as_mut().unwrap().poll_stream() {
+                    Ok(st) => {
+                        poll_errors = 0;
+                        let _ = st;
+                    }
+                    Err(_) => {
+                        poll_errors += 1;
+                        if poll_errors >= 3 {
+                            polls_live = false;
+                            println!("      0x0205: unanswered x3 - stream polls off (not fatal)");
+                        }
+                    }
+                }
+                t_last_poll = Instant::now();
+            }
+            // reap one URB (non-blocking) + poll on the fd
+            let mut pfd = libc::pollfd { fd, events: libc::POLLOUT, revents: 0 };
+            // usbfs signals a reaped URB as POLLOUT (writable)
+            let r = unsafe { libc::poll(&mut pfd, 1, 100) };
+            if r < 0 {
+                println!("      poll: {}", io::Error::last_os_error());
+                break;
+            }
+            if r == 0 {
+                continue; // nothing reaped yet
+            }
+            // REAPURBNDELAY
+            let mut reaped: *mut usbfs_api::UrbHeader = std::ptr::null_mut();
+            let rr = unsafe {
+                usbfs_api::ioctl(
+                    fd,
+                    usbfs_api::USBDEVFS_REAPURBNDELAY,
+                    &mut reaped as *mut *mut usbfs_api::UrbHeader as *mut u8,
+                )
+            };
+            match rr {
+                Ok(_) => {}
+                Err(e) if e.raw_os_error() == Some(libc::EAGAIN) => continue,
+                Err(e) => {
+                    println!("      REAPURB: {e}");
+                    break;
+                }
+            }
+            // find which of our URBs was reaped (the returned pointer)
+            let idx = urbs
+                .iter()
+                .position(|u| std::ptr::eq(u.ptr as *mut u8, reaped as *mut u8))
+                .expect("reaped URB belongs to the ring");
+            let results = unsafe { urbs[idx].packet_results() };
+            // feed each packet as one UVC payload: the URB layout gives
+            // per-packet boundaries directly (the capture's ISO-record
+            // walk needed the 2412-B stride because USBPcap flattens all
+            // packets of one URB; usbfs hands them to us separated)
+            for (i, (actual, status)) in results.iter().enumerate() {
+                if *status != 0 {
+                    errs += 1;
+                    continue;
+                }
+                if *actual == 0 {
+                    continue;
+                }
+                let bytes = unsafe { urbs[idx].packet_bytes(i, *actual) };
+                payloads += 1;
+                if let Some(frame) = assembler.push_payload(bytes) {
+                    let (a, b) = idong::protocol::video::split_channels(&frame.data);
+                    let sa = plane_stats(&a);
+                    let sb = plane_stats(&b);
+                    println!(
+                        "      frame {:3}: pts {} {} B  chA mean {:6.1} sd {:5.1}  chB mean {:6.1} sd {:5.1}",
+                        got, frame.pts, frame.data.len(), sa.mean, sa.stddev, sb.mean, sb.stddev
+                    );
+                    if got < 3 {
+                        let _ = fs::write(outdir.join(format!("frame{got:04}.bin")), &frame.data);
+                    }
+                    write_plane_png(&outdir.join(format!("frame{got:04}_chA.png")), &a, &pix_for(&frame));
+                    write_plane_png(&outdir.join(format!("frame{got:04}_chB.png")), &b, &pix_for(&frame));
+                    any_a = merge(any_a, sa);
+                    any_b = merge(any_b, sb);
+                    got += 1;
+                    if got >= args.frames {
+                        break 'outer;
+                    }
+                }
+            }
+            // re-submit the reaped URB
+            if let Err(e) = unsafe { urbs[idx].submit(fd) } {
+                println!("      re-submit failed: {e}");
+                break;
+            }
+        }
+
+        // release the VS claim so uvcvideo can rebind (the kernel
+        // re-probes on the next open of /dev/video*)
+        let mut ifn = iface as u32;
+        let _ = unsafe {
+            usbfs_api::ioctl(
+                fd,
+                usbfs_api::USBDEVFS_RELEASEINTERFACE,
+                &mut ifn as *mut u32 as *mut u8,
+            )
+        };
+
+        println!();
+        println!("payloads        : {payloads} ({} errors)", errs);
+        println!("frames          : {got}");
+        if got == 0 {
+            println!("FAIL: no frames within 30 s via the raw ISO path.");
+            println!("      collect: dmesg | tail -50, lsusb -v -d 0471:2500,");
+            println!("      rerun with --cmos if it was absent above.");
+            std::process::exit(1);
+        }
+        if let Some(a) = any_a {
+            if a.has_contrast() {
+                println!("PASS: channel A carries a real image (contrast present).");
+            } else {
+                println!("WARN: channel A flat - registers not initialized? (--cmos)");
+            }
+        }
+        println!("channel A stats : {:?}", any_a);
+        println!("channel B stats : {:?}", any_b);
+        println!("output: {}", outdir.display());
+    }
+
+    /// Read the device's raw configuration descriptor over usbfs:
+    /// GET_DESCRIPTOR(config) on ep 0 - no interface claim needed.
+    /// Two steps (the classic USB dance): read 8 B for wTotalLength,
+    /// then the whole descriptor.
+    fn read_config_descriptor(fd: i32) -> io::Result<Vec<u8>> {
+        let mut total_len = 0usize;
+        for max in [8usize, 512usize] {
+            let mut buf = vec![0u8; max];
+            let mut ctrl = usbfs_api::CtrlTransfer {
+                bm_request_type: 0x80,
+                b_request: 0x06, // GET_DESCRIPTOR
+                w_value: 0x0200, // config descriptor
+                w_index: 0,
+                w_length: max as u16,
+                timeout: 5000,
+                data: buf.as_mut_ptr(),
+            };
+            unsafe {
+                usbfs_api::ioctl(
+                    fd,
+                    usbfs_api::USBDEVFS_CONTROL,
+                    &mut ctrl as *mut usbfs_api::CtrlTransfer as *mut u8,
+                )?
+            };
+            if max == 8 {
+                if buf[0] != 9 || buf[1] != 2 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "not a config descriptor",
+                    ));
+                }
+                total_len = u16::from_le_bytes([buf[2], buf[3]]) as usize;
+                if total_len < 9 || total_len > 4096 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("implausible wTotalLength {total_len}"),
+                    ));
+                }
+                buf.truncate(8);
+            } else {
+                buf.truncate(total_len.min(max));
+                return Ok(buf);
+            }
+        }
+        unreachable!("loop runs the second pass")
+    }
+
+    /// A minimal PixFormat for the PNG writer (640x480, stride 1280).
+    fn pix_for(_frame: &idong::protocol::video::VideoFrame) -> uapi::PixFormat {
+        uapi::PixFormat {
+            width: idong::protocol::video::RASTER_WIDTH as u32,
+            height: 480,
+            pixelformat: 0,
+            field: 0,
+            bytesperline: idong::protocol::video::RASTER_STRIDE as u32,
+            sizeimage: 614400,
+            colorspace: 0,
+            priv_: 0,
+            flags: 0,
+            ycbcr_enc: 0,
+            quantization: 0,
+            xfer_func: 0,
+        }
     }
 
     /// The kit-37 runN rule: first nonexistent or EMPTY folder.

@@ -45,3 +45,9 @@ pub mod udev;
 /// V4L2 video-node discovery - the pure sysfs matcher for the P2.5
 /// Linux video backend (which /dev/videoN is the sensor).
 pub mod v4l2;
+
+/// usbfs (the /dev/bus/usb device node) - the pure half of the P2.5b
+/// raw ISO backend: config-descriptor walk, wMaxPacketSize decode, UVC
+/// control builders. The ioctl engine lives in src/examples/video.rs
+/// (`--iso`) until its first bench PASS promotes it into the crate.
+pub mod usbfs;

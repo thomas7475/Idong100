@@ -188,10 +188,12 @@ Runtime commands (0471:2500): 0x0701 request-frame (raw replies: version
 0x0500 flush; 0x0800 version -> "2619"; 0x0d00 and 0x0f04 polls.
 
 The 2500 configuration descriptor: 5 interfaces; endpoints bulk 0x02/0x82/
-0x03/0x83 (maxpkt 512), isochronous IN 0x85 (alt 1: 812 B, alt 2: 4900 B),
-interrupt IN 0x84 (32 B). Vendor control requests on ep 0 with bmRequestType
-0xA1: req 0x82/0x84 register TLV access, req 0x83/0x86/0x87 return
-descriptors.
+0x03/0x83 (maxpkt 512), isochronous IN 0x85 (alt 1: 812 B, alt 2: raw
+wMaxPacketSize 0x1324 = base 804 x 3 = 2412 B per microframe - the exact
+capture packet stride; the earlier "4900" here was the raw field read as
+decimal), interrupt IN 0x84 (32 B). Vendor control requests on ep 0 with
+bmRequestType 0xA1: req 0x82/0x84 register TLV access, req 0x83/0x86/0x87
+return descriptors.
 
 Still unobserved on the wire: the DSP upload, the FPGA upload, and any
 traffic on ep 0x85/0x84 (the camera stream). These need the "full vendor
@@ -391,3 +393,52 @@ bulk interface (ep 0x02/0x82) carries the control/poll protocol. The
 Rust driver's `VideoSource` seam models this: one `read_payload` =
 one ISO packet (header + data); `VideoAssembler` closes frames on PTS
 advances exactly like the vendor's DirectShow filter.
+
+
+## Turn 42: the turn-41 bench settles P2.3/P2.4, T7 FAILS at STREAMON -> P2.5b
+
+The full bench ladder run (turn 41, the user's Linux box):
+
+- T1 (100 tests), T2-T5: PASS - the same state as turn 39, plus
+  `session_full --cmos` completing register init + 6/6 polls.
+- **T8: PASS TWICE** - both controlled flash replays readback-matched
+  21,411 B, launched, re-enumerated as 0471:2500, version "2619",
+  identity + calibration intact (device ID
+  AB460DC8BA12C6840B49CD5786C329DD, baseline 100.0 mm, focal 432.3 px).
+  `FLASH_CONFIRMED` = true since this turn: the ungated `flash_mcu` is
+  open; the consent-gated example remains the interactive path.
+- T6: PASS inside the stream run - the sensor's capture node is
+  /dev/video0 (uvcvideo, "UVC Camera (0471:2500)"), 640x480 YUYV
+  negotiated.
+- **T7: FAIL at VIDIOC_STREAMON with EIO** - the documented alt-setting
+  decision point. uvcvideo cannot stream this firmware.
+
+The response (turn 42, this turn): the P2.5b raw usbfs-ISO backend.
+
+- `src/transport/usbfs.rs` (pure, 5 tests): the configuration
+  descriptor walker, the wMaxPacketSize decode (bits 10..0 base, bits
+  12..11 additional transactions - 0x1324 -> 2412 B/microframe,
+  exactly the capture stride), and the UVC control builders
+  (SET_CUR/GET_CUR probe/commit, GET_DESCRIPTOR).
+- `src/examples/video.rs --iso`: DISCONNECT_CLAIM of the UVC
+  VideoStreaming interface away from uvcvideo (reversible), the
+  observed probe/commit SET_CURs (golden bodies), then ISO URBs on
+  EP 0x85 with ASAP scheduling - a 4-URB x 8-microframe ring, reaped
+  and re-submitted. No SET_INTERFACE at all, mirroring the capture
+  (the vendor app never raised the alt; video flowed with the
+  interface at alt 0).
+- The UAPI mirror is ABI-pinned (urb header 56 B, iso packet desc 12 B,
+  ioctl request numbers gcc-verified against
+  /usr/include/linux/usbdevice_fs.h).
+
+Doc fixes shipped with it: the `sha256sum -c` command in
+LINUX_TESTS.md (the SUMS paths are relative to `firmware/`, so the
+check must run from `software/firmware` - the turn-41 bench hit
+exactly that), and the alt-2 "4900 B" misread above (0x1324 read as
+decimal; the true capacity is 2412 B/microframe).
+
+The next hardware question T9 answers: does the firmware stream
+whenever ISO URBs are posted on EP 0x85 (the hypothesis) or does the
+alt-setting matter after all (then a SET_INTERFACE alt 1/2 precedes
+the URBs). A FAIL plus dmesg decides the fallback (ep 0x03/0x83 bulk,
+never observed on the wire).

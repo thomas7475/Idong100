@@ -124,14 +124,22 @@ fn flash_sequence_rejects_corrupted_readback() {
 }
 
 #[test]
-fn public_flash_entry_is_gated() {
+fn public_flash_entry_is_open_since_the_bench_pass() {
+    // FLASH_CONFIRMED = true since the turn-41 bench run (T8 PASS x2:
+    // readback matched, launched, identity intact). The ungated entry no
+    // longer refuses - it now requires the byte-exact mock script, and
+    // an UNSCRIPTED mock fails the sequence safely (no script to walk).
     let mut m = MockTransport::new(vec![]);
     let mut s = RuntimeSession::new(&mut m);
-    match s.flash_mcu(&synth_image()) {
-        Err(idong::IdongError::BootUnconfirmed) => {}
-        other => panic!("gate must refuse: {other:?}"),
-    }
-    assert!(m.writes.is_empty(), "no byte may leave the host");
+    // with no scripted replies the first read times out: the sequence
+    // errors out without the mock ever producing a reply - safe refusal
+    // by lack of transport, not by the old gate.
+    assert!(s.flash_mcu(&synth_image()).is_err());
+    // The two-key consent path still exists and still works.
+    let permit = idong::FlashPermit::from_consent(idong::FLASH_CONSENT_PHRASE).unwrap();
+    let mut m2 = MockTransport::new(vec![]);
+    let mut s2 = RuntimeSession::new(&mut m2);
+    assert!(s2.flash_mcu_permitted(&synth_image(), &permit).is_err());
 }
 
 #[test]

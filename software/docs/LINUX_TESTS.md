@@ -21,6 +21,7 @@ interface - one box, one cable, no USBPcap needed. A live USB with
 | T6 `video --probe` | nothing (V4L2 queries only) | no |
 | T7 `video` | T5 + V4L2 streaming | **yes** (`--cmos`) |
 | T8 `flash_mcu` | the 8051 firmware upload (the vendor flash itself) | **yes** (`--confirm`) |
+| T9 `video -- --iso` | T5 + UVC probe/commit + raw ISO reads on EP 0x85 | **yes** (`--cmos`) |
 
 All writes are the exact observed vendor bytes: T5/T7 send the same
 register tables the vendor engine sends on every session (volatile
@@ -61,7 +62,7 @@ sudo usermod -aG video $USER    # then log out and back in
 cargo test && cargo test --features usb
 ```
 
-Expected: `69 passed` in the lib (both runs, 100 with the integration
+Expected: `74 passed` in the lib (both runs, 105 with the integration
 tests + doc-test), all green.
 
 ## T2 - discovery (read-only)
@@ -130,6 +131,12 @@ here decides the P2.5b fallback (raw usbfs ISO on EP 0x85).
 cargo run --features usb --example video -- --cmos --frames 10
 ```
 
+Turn-41 bench result: the node + format negotiation PASS (640x480 YUYV,
+uvcvideo), then `STREAMON: Input/output error (os error 5)` - the
+documented decision point. uvcvideo cannot stream this firmware; the
+fallback is T9 (the raw usbfs-ISO backend on EP 0x85), which is the
+ACTIVE test now.
+
 Runs the full session init (as T5), picks the sensor's video node
 (`--device /dev/videoN` to override), negotiates 640x480, streams
 mmap buffers while polling 0x0205 at ~10 Hz, and writes per-channel
@@ -146,6 +153,29 @@ Anything else is still valuable: a FAIL with its console output + the
 generated PNGs decides the next move (V4L2 promotion into the crate vs
 the usbfs-ISO backend).
 
+## T9 - THE P2.5b raw usbfs-ISO stream test (the active frontier)
+
+```sh
+cargo run --features usb --example video -- --iso --cmos --frames 10
+```
+
+The P2.5b backend (turn 42): takes the UVC VideoStreaming interface
+from uvcvideo (`USBDEVFS_DISCONNECT_CLAIM` - reversible, uvcvideo
+re-binds after exit), runs the observed probe/commit SET_CURs
+(golden bodies), then submits ISO URBs on EP 0x85 directly (no kernel
+UVC driver in the path). This mirrors the vendor capture exactly: the
+vendor app never issued a SET_INTERFACE alt>0 either - video flowed
+with the interface at alt 0.
+
+PASS: frames arrive at ~8 fps, 614400 B per frame (640x480x2), channel
+A shows real contrast. The config walk prints the per-alt ISO capacity
+(alt 1 = 812 B/microframe, alt 2 = 2412 B - the capture's exact packet
+stride).
+
+FAIL with output + `dmesg | tail -50`: the next decision is either the
+alt-setting question (a SET_INTERFACE to alt 1/2 before the URBs) or
+the ep 0x03/0x83 bulk path (never observed on the wire).
+
 ## T8 - THE P2.3 8051 firmware upload (controlled flash replay)
 
 ```sh
@@ -153,8 +183,11 @@ the usbfs-ISO backend).
 cargo run --features usb --example flash_mcu
 # the flash itself (two-key gate: pins + --confirm):
 cargo run --features usb --example flash_mcu -- --confirm
-# the files arrive with the clone - check them once (24 x OK):
-sha256sum -c firmware/SHA256SUMS
+# the files arrive with the clone - check them once (24 x OK).
+# NOTE: the paths inside SHA256SUMS are relative to firmware/, so run
+# the check FROM software/firmware (from software/ it would miss every
+# file - the turn-41 bench hit exactly that):
+cd firmware && sha256sum -c SHA256SUMS && cd ..
 ```
 
 `app_m8051_2611.hex` ships with the crate as
@@ -174,6 +207,12 @@ the four EEPROM reads).
 PASS criteria (all printed): firmware pins hold; bootloader answered
 "2600"; readback matched 21,411 B; re-enumerated as 0471:2500; version
 "2619"; identity + calibration parse.
+
+Turn-41 bench result: PASS - TWICE (addr 54->55 and 56->57, both
+flashes readback-matched, launched, identity + calibration intact).
+`FLASH_CONFIRMED` is flipped in the crate since turn 42: the ungated
+`flash_mcu` path is open; the consent-gated example stays the
+recommended interactive path.
 
 A mismatched readback ABORTS before key+launch - a partial download is
 never committed, and the bootloader ROM is never at risk. Send the full
